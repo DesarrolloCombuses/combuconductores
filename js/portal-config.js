@@ -12,7 +12,7 @@ window.PORTAL_CONFIG = {
   // una nueva no se edita a mano, se corre (desde la carpeta portal):
   //   powershell -ExecutionPolicy Bypass -File .\nueva-version.ps1 1.6.1
   // que la cambia aquí, en sw.js y en index.html a la vez.
-  APP_VERSION: "v1.6.1",
+  APP_VERSION: "v1.6.2",
 
   // Cada cuánto se pregunta al servidor si hay una versión nueva, con el
   // portal a la vista. También se pregunta al abrirlo y al volver a él.
@@ -69,6 +69,12 @@ window.PORTAL_CONFIG = {
   INTERNET_VERIFICAR_MS: 30 * 1000,      // con conexión: cada cuánto se comprueba
   INTERNET_REINTENTO_MS: 5 * 1000,       // sin conexión: cada cuánto se reintenta
   INTERNET_TIEMPO_LIMITE_MS: 10 * 1000,  // sin respuesta en este tiempo = sin internet
+
+  // Ubicación obligatoria: sin permiso de ubicación, o con la del teléfono
+  // apagada, el portal se bloquea igual que sin internet. Un túnel no bloquea:
+  // solo cuenta como apagada si pasa este tiempo sin ninguna posición.
+  UBICACION_SIN_POSICION_MS: 2 * 60 * 1000,
+  UBICACION_REINTENTO_MS: 10 * 1000,     // bloqueado: cada cuánto se reintenta solo
 
   // Nómina de conductores publicada como CSV desde Google Sheets.
   // Columnas: dr_id, cedula, fleet, nombre, status, email, celular

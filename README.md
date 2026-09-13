@@ -230,6 +230,30 @@ Lo guardado en el teléfono (turno, viajes, confirmaciones) se conserva, pero ya
 no sirve para usar el portal sin red: solo cubre los segundos que tarda en
 confirmarse una caída.
 
+### Ubicación obligatoria
+
+Igual que sin internet, el portal se bloquea sin la ubicación del teléfono, en
+Android, iPhone y computador, desde la pantalla de login:
+
+| Situación | Qué ve el conductor |
+|---|---|
+| Nunca se le ha pedido | "Comparta su ubicación" y **Permitir ubicación**, que lanza la pregunta del sistema |
+| La negó | Los pasos para activarla en su teléfono (iPhone, Android o computador) y **Reintentar** |
+| Ubicación del teléfono apagada | Pasos para encenderla; se reintenta sola cada `UBICACION_REINTENTO_MS` |
+| Navegador sin ubicación | Pide abrir el portal en Chrome o Safari |
+
+Con permiso, la posición se sigue mientras el portal está abierto
+(`watchPosition`) y en Perfil se ve su estado. Un túnel o un sótano no
+bloquean: solo cuenta como apagada si pasa `UBICACION_SIN_POSICION_MS` (2 min)
+sin ninguna posición y los intentos fallan. Si Chrome avisa que el permiso
+cambió, el portal se bloquea o desbloquea al instante.
+
+**Límite de una aplicación web:** no puede seguir la ubicación con el portal
+cerrado o en segundo plano, ni pedir "Permitir siempre". En iPhone la app
+instalada puede volver a preguntar el permiso al abrirse. Seguir la ubicación
+todo el tiempo, con la app cerrada, exige una app nativa (por ejemplo,
+empaquetar el portal con Capacitor).
+
 ### Service worker
 
 Manda uno solo, el del portal, con scope sobre todo el sitio. Los service

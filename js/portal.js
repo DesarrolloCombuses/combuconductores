@@ -1855,6 +1855,7 @@
       (state.turno && state.turno.base) ||
       (state.conductor && (state.conductor.fleet || state.conductor.base)) || "—";
     $("perfilEmail").textContent = (state.user && state.user.email) || "—";
+    $("perfilUbicacion").textContent = textoUbicacionPerfil();
   }
 
   function abrirPerfil() {
@@ -2000,6 +2001,315 @@
     verificarInternet();
   }
 
+  // --------------------------------------------------- ubicación obligatoria
+  // El portal no se usa sin la ubicación del teléfono, igual que sin internet:
+  // una pantalla bloquea todo (login incluido) hasta que el conductor la
+  // permita y llegue una posición.
+  //  - Nunca se le pidió: se explica, y "Permitir ubicación" lanza la pregunta
+  //    del sistema con un toque del conductor (así Chrome y Safari la muestran
+  //    en vez de esconderla).
+  //  - La negó: pasos para activarla en su teléfono.
+  //  - Ubicación del teléfono apagada: bloquea si pasa UBICACION_SIN_POSICION_MS
+  //    sin ninguna posición y los intentos fallan. Un túnel o un sótano no
+  //    bloquean porque hace poco hubo posición.
+  // Con permiso, la posición se sigue mientras el portal está abierto. Una
+  // aplicación web no puede seguirla con el portal cerrado ni pedir "Permitir
+  // siempre": eso solo lo hace una app nativa.
+  var ubicacion = {
+    motivo: null,       // null = activa | "pedir" | "bloqueada" | "apagada" | "sin-soporte"
+    watchId: null,
+    inicioWatchMs: 0,
+    ultimaMs: 0,        // cuándo llegó la última posición
+    posicion: null,     // { lat, lng, precision }
+    fallos: 0,
+    pidiendo: false,
+    timer: null,
+  };
+
+  var TEXTOS_UBICACION = {
+    pedir: {
+      titulo: "Comparta su ubicación",
+      texto: "Para usar el portal es obligatorio compartir la ubicación del teléfono.",
+      boton: "Permitir ubicación",
+      nota: "Cuando el teléfono pregunte, elija Permitir.",
+    },
+    bloqueada: {
+      titulo: "La ubicación está bloqueada",
+      texto: "El portal no funciona sin la ubicación. Actívela así:",
+      boton: "Reintentar",
+      nota: "Al activarla, el portal se desbloquea.",
+    },
+    apagada: {
+      titulo: "No encontramos su ubicación",
+      texto: "La ubicación del teléfono parece apagada.",
+      boton: "Reintentar",
+      nota: "Se vuelve a intentar sola cada pocos segundos.",
+    },
+    "sin-soporte": {
+      titulo: "Este navegador no sirve",
+      texto: "No permite compartir la ubicación. Abra el portal en Chrome (Android) o Safari (iPhone).",
+      boton: "",
+      nota: "",
+    },
+  };
+
+  function geolocalizacionDisponible() {
+    return !!(navigator.geolocation && typeof navigator.geolocation.watchPosition === "function");
+  }
+
+  // Estado del permiso sin preguntarle al conductor. null si el navegador no
+  // lo dice: entonces deciden los errores de la propia ubicación.
+  function obtenerPermisoUbicacion() {
+    try {
+      if (!navigator.permissions || !navigator.permissions.query) return Promise.resolve(null);
+      return navigator.permissions.query({ name: "geolocation" }).catch(function () { return null; });
+    } catch (_) {
+      return Promise.resolve(null);
+    }
+  }
+
+  function alRecibirPosicion(pos) {
+    ubicacion.ultimaMs = Date.now();
+    ubicacion.fallos = 0;
+    ubicacion.posicion = {
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude,
+      precision: Math.round(pos.coords.accuracy || 0),
+    };
+    if (ubicacion.motivo) desbloquearUbicacion();
+  }
+
+  function alFallarPosicion(err) {
+    var codigo = err && err.code;
+    if (codigo === 1) { // permiso negado
+      detenerSeguimiento();
+      bloquearUbicacion("bloqueada");
+      return;
+    }
+    ubicacion.fallos += 1;
+    // Sin señal de GPS: se intenta con la ubicación por red (Wi-Fi y
+    // antenas), que sí llega bajo techo.
+    if (codigo === 3 && ubicacion.fallos === 1) {
+      navigator.geolocation.getCurrentPosition(alRecibirPosicion, alFallarPosicion,
+        { enableHighAccuracy: false, maximumAge: 5 * 60 * 1000, timeout: 20 * 1000 });
+      return;
+    }
+    var sinPosicion = Date.now() - ubicacion.ultimaMs > (cfg.UBICACION_SIN_POSICION_MS || 120000);
+    if (ubicacion.fallos >= 2 && sinPosicion) bloquearUbicacion("apagada");
+  }
+
+  function iniciarSeguimiento() {
+    if (ubicacion.watchId != null || !geolocalizacionDisponible()) return;
+    ubicacion.inicioWatchMs = Date.now();
+    try {
+      ubicacion.watchId = navigator.geolocation.watchPosition(alRecibirPosicion, alFallarPosicion,
+        { enableHighAccuracy: true, maximumAge: 30 * 1000, timeout: 30 * 1000 });
+    } catch (_) {
+      bloquearUbicacion("sin-soporte");
+    }
+  }
+
+  function detenerSeguimiento() {
+    if (ubicacion.watchId == null) return;
+    try { navigator.geolocation.clearWatch(ubicacion.watchId); } catch (_) {}
+    ubicacion.watchId = null;
+  }
+
+  function reiniciarSeguimiento() {
+    detenerSeguimiento();
+    iniciarSeguimiento();
+  }
+
+  // La pregunta del sistema, lanzada por el toque del conductor.
+  function solicitarUbicacion() {
+    if (!geolocalizacionDisponible()) { bloquearUbicacion("sin-soporte"); return; }
+    if (ubicacion.pidiendo) return;
+    ubicacion.pidiendo = true;
+    pintarUbicacion();
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      ubicacion.pidiendo = false;
+      alRecibirPosicion(pos);
+      reiniciarSeguimiento();
+    }, function (err) {
+      ubicacion.pidiendo = false;
+      if (err && err.code === 1) {
+        detenerSeguimiento();
+        bloquearUbicacion("bloqueada");
+        return;
+      }
+      if (Date.now() - ubicacion.ultimaMs > (cfg.UBICACION_SIN_POSICION_MS || 120000)) {
+        bloquearUbicacion("apagada");
+      } else {
+        pintarUbicacion();
+      }
+      reiniciarSeguimiento();
+    }, { enableHighAccuracy: true, maximumAge: 60 * 1000, timeout: 20 * 1000 });
+  }
+
+  function bloquearUbicacion(motivo) {
+    var yaBloqueado = !!ubicacion.motivo;
+    ubicacion.motivo = motivo;
+    pintarUbicacion();
+    show($("sinUbicacion"), true);
+    if (!yaBloqueado) {
+      try { $("btnPermitirUbicacion").focus(); } catch (_) {}
+    }
+    programarReintentoUbicacion();
+  }
+
+  function desbloquearUbicacion() {
+    ubicacion.motivo = null;
+    clearTimeout(ubicacion.timer);
+    ubicacion.timer = null;
+    show($("sinUbicacion"), false);
+    setTimeout(pedirInstalacion, 1500); // la hoja de instalación esperaba a este bloqueo
+  }
+
+  // Bloqueado por permiso negado o ubicación apagada: se reintenta solo, sin
+  // volver a lanzar la pregunta del sistema (eso solo con un toque).
+  function programarReintentoUbicacion() {
+    clearTimeout(ubicacion.timer);
+    if (ubicacion.motivo !== "bloqueada" && ubicacion.motivo !== "apagada") return;
+    ubicacion.timer = setTimeout(function () {
+      ubicacion.timer = null;
+      if (!document.hidden) reintentarUbicacionSola();
+      programarReintentoUbicacion();
+    }, cfg.UBICACION_REINTENTO_MS || 10000);
+  }
+
+  function reintentarUbicacionSola() {
+    if (ubicacion.pidiendo) return;
+    if (ubicacion.motivo === "apagada") {
+      // Un GPS en frío tarda: no se reinicia antes de darle su tiempo.
+      if (Date.now() - ubicacion.inicioWatchMs > 35 * 1000) reiniciarSeguimiento();
+      return;
+    }
+    if (ubicacion.motivo === "bloqueada") {
+      obtenerPermisoUbicacion().then(function (permiso) {
+        if (!permiso || ubicacion.motivo !== "bloqueada") return;
+        if (permiso.state === "granted") reiniciarSeguimiento();
+        else if (permiso.state === "prompt") bloquearUbicacion("pedir");
+      });
+    }
+  }
+
+  function alCambiarPermisoUbicacion(estado) {
+    if (estado === "granted") {
+      reiniciarSeguimiento(); // desbloquea en cuanto llega la posición
+    } else {
+      detenerSeguimiento();
+      bloquearUbicacion(estado === "denied" ? "bloqueada" : "pedir");
+    }
+  }
+
+  function pasosUbicacion(motivo) {
+    var sitio = "<strong>" + escapeHtml(location.host) + "</strong>";
+    if (esNavegadorDeApp()) {
+      return [
+        "Este navegador (dentro de WhatsApp, Facebook…) no comparte la ubicación.",
+        "Abra el enlace en <strong>Safari</strong> (iPhone) o <strong>Chrome</strong> (Android).",
+      ];
+    }
+    if (esIos()) {
+      return motivo === "apagada" ? [
+        "Abra <strong>Ajustes</strong> → <strong>Privacidad y seguridad</strong> → <strong>Localización</strong> y actívela.",
+        "Si está bajo techo, acérquese a una ventana o salga a cielo abierto.",
+      ] : [
+        "Abra <strong>Ajustes</strong> → <strong>Privacidad y seguridad</strong> → <strong>Localización</strong> y actívela.",
+        "En esa misma lista, toque <strong>Sitios web de Safari</strong> y elija <strong>Mientras se usa la app</strong>.",
+        "En <strong>Ajustes</strong> → <strong>Safari</strong> → <strong>Ubicación</strong>, elija <strong>Permitir</strong> (en iOS 18, Safari está dentro de <strong>Apps</strong>).",
+        "Vuelva al portal y toque <strong>Reintentar</strong>.",
+      ];
+    }
+    if (/android/i.test(navigator.userAgent || "")) {
+      return motivo === "apagada" ? [
+        "Baje la barra de notificaciones y encienda <strong>Ubicación</strong>.",
+        "Si está bajo techo, acérquese a una ventana.",
+      ] : [
+        "Abra <strong>Chrome</strong> → menú <strong>⋮</strong> → <strong>Configuración</strong> → <strong>Configuración de sitios</strong> → <strong>Ubicación</strong>.",
+        "Busque " + sitio + " y elija <strong>Permitir</strong>.",
+        "Si sigue bloqueada: <strong>Ajustes</strong> del teléfono → <strong>Aplicaciones</strong> → <strong>Chrome</strong> → <strong>Permisos</strong> → <strong>Ubicación</strong> → <strong>Permitir</strong>.",
+        "Encienda la <strong>Ubicación</strong> en la barra de notificaciones y vuelva al portal.",
+      ];
+    }
+    return motivo === "apagada" ? [
+      "Encienda la ubicación del equipo. En Windows: <strong>Configuración</strong> → <strong>Privacidad y seguridad</strong> → <strong>Ubicación</strong>.",
+      "Toque <strong>Reintentar</strong>.",
+    ] : [
+      "Haga clic en el icono que está a la izquierda de la dirección " + sitio + ".",
+      "En <strong>Ubicación</strong>, elija <strong>Permitir</strong>.",
+      "Toque <strong>Reintentar</strong> o recargue la página.",
+    ];
+  }
+
+  function pintarUbicacion() {
+    var motivo = ubicacion.motivo || "pedir";
+    var t = TEXTOS_UBICACION[motivo];
+    $("sinUbicacionTitulo").textContent = t.titulo;
+    $("sinUbicacionTexto").textContent = t.texto;
+
+    var pasos = motivo === "bloqueada" || motivo === "apagada" ? pasosUbicacion(motivo) : [];
+    $("ubicacionPasos").innerHTML = pasos.map(function (paso, i) {
+      return '<li><span class="instalar-num">' + (i + 1) + "</span><span>" + paso + "</span></li>";
+    }).join("");
+    show($("ubicacionPasos"), pasos.length > 0);
+
+    var btn = $("btnPermitirUbicacion");
+    show(btn, !!t.boton);
+    btn.disabled = ubicacion.pidiendo;
+    btn.textContent = !ubicacion.pidiendo ? t.boton
+      : motivo === "pedir" ? "Esperando permiso…" : "Buscando…";
+
+    $("sinUbicacionNota").textContent = t.nota;
+    show($("sinUbicacionNota"), !!t.nota);
+  }
+
+  function textoUbicacionPerfil() {
+    if (ubicacion.motivo) return "Desactivada";
+    if (!ubicacion.posicion) return "Buscando…";
+    return "Activa · ±" + ubicacion.posicion.precision + " m";
+  }
+
+  function initUbicacion() {
+    $("btnPermitirUbicacion").addEventListener("click", solicitarUbicacion);
+
+    if (!geolocalizacionDisponible() || window.isSecureContext === false) {
+      bloquearUbicacion("sin-soporte");
+      return;
+    }
+
+    obtenerPermisoUbicacion().then(function (permiso) {
+      if (permiso) {
+        var alCambiar = function () { alCambiarPermisoUbicacion(permiso.state); };
+        try {
+          if (permiso.addEventListener) permiso.addEventListener("change", alCambiar);
+          else permiso.onchange = alCambiar;
+        } catch (_) {}
+      }
+      var estado = permiso ? permiso.state : null;
+      if (estado === "prompt") bloquearUbicacion("pedir");
+      else if (estado === "denied") bloquearUbicacion("bloqueada");
+      else iniciarSeguimiento(); // concedido, o el navegador no lo dice
+    });
+
+    // De fondo el teléfono puede quitar el permiso o apagar la ubicación, e
+    // iOS suele cortar el seguimiento: al volver se comprueba de nuevo.
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden || ubicacion.pidiendo) return;
+      if (ubicacion.motivo === "bloqueada" || ubicacion.motivo === "apagada") reintentarUbicacionSola();
+      else if (!ubicacion.motivo) reiniciarSeguimiento();
+    });
+
+    // Seguimiento que se quedó mudo (ni posición ni error): se reinicia.
+    setInterval(function () {
+      if (document.hidden || ubicacion.motivo || ubicacion.pidiendo) return;
+      var limite = cfg.UBICACION_SIN_POSICION_MS || 120000;
+      if (Date.now() - ubicacion.ultimaMs > limite && Date.now() - ubicacion.inicioWatchMs > 35 * 1000) {
+        reiniciarSeguimiento();
+      }
+    }, 30 * 1000);
+  }
+
   // ---------------------------------------------------------- PWA / etc.
 
   // ------------------------------------------------------------ instalación
@@ -2076,7 +2386,7 @@
   // asistencia o validar tiquetes).
   function pedirInstalacion() {
     if (instalarYaPedido || instalacionPospuesta() || !modoInstalacion()) return;
-    var ocupado = ["bootOverlay", "perfilSheet", "tiquetesSheet", "sinInternet", "instalarSheet"]
+    var ocupado = ["bootOverlay", "perfilSheet", "tiquetesSheet", "sinInternet", "sinUbicacion", "instalarSheet"]
       .some(function (id) { return $(id) && !$(id).hidden; });
     if (ocupado) return;
     if (!$("appView").hidden && state.vista !== "inicio") return;
@@ -2421,6 +2731,7 @@
     initNav();
     initPerfil();
     initRed();
+    initUbicacion();
     initPwa();
     initActualizaciones();
     initMensajesModulos();

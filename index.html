@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="./css/portal.css?v=1.6.1">
+  <link rel="stylesheet" href="./css/portal.css?v=1.6.2">
 </head>
 <body>
 
@@ -284,6 +284,7 @@
         <div><dt>Turno</dt><dd id="perfilTurno">—</dd></div>
         <div><dt>Base</dt><dd id="perfilBase">—</dd></div>
         <div><dt>Usuario</dt><dd id="perfilEmail">—</dd></div>
+        <div><dt>Ubicación</dt><dd id="perfilUbicacion">—</dd></div>
         <div><dt>Versión</dt><dd data-version>—</dd></div>
       </dl>
       <button id="btnInstalarPerfil" class="btn btn-primary btn-block" type="button" hidden>Instalar aplicación</button>
@@ -401,6 +402,23 @@
   </div>
 </div>
 
+<!-- ============ Ubicación obligatoria: el portal exige la ubicación ============ -->
+<!-- Textos y pasos los pone portal.js según el caso (pedir, bloqueada, apagada)
+     y el teléfono (iPhone, Android o computador). -->
+<div id="sinUbicacion" class="sin-internet sin-ubicacion" role="alertdialog" aria-modal="true"
+     aria-labelledby="sinUbicacionTitulo" aria-describedby="sinUbicacionTexto" hidden>
+  <div class="sin-internet-card">
+    <div class="sin-internet-icono" aria-hidden="true">
+      <svg viewBox="0 0 24 24" class="ico"><path d="M12 22s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+    </div>
+    <h2 id="sinUbicacionTitulo">Comparta su ubicación</h2>
+    <p id="sinUbicacionTexto">Para usar el portal es obligatorio compartir la ubicación del teléfono.</p>
+    <ol id="ubicacionPasos" class="instalar-pasos ubicacion-pasos" hidden></ol>
+    <button id="btnPermitirUbicacion" class="btn btn-primary btn-block" type="button">Permitir ubicación</button>
+    <p id="sinUbicacionNota" class="sin-internet-nota">Cuando el teléfono pregunte, elija Permitir.</p>
+  </div>
+</div>
+
 <!-- ============ Cargando ============ -->
 <div id="bootOverlay" class="boot-overlay">
   <img class="boot-logo" src="./assets/logo-combuses.webp" alt="Combuses">
@@ -409,7 +427,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./js/portal-config.js?v=1.6.1"></script>
-<script src="./js/portal.js?v=1.6.1"></script>
+<script src="./js/portal-config.js?v=1.6.2"></script>
+<script src="./js/portal.js?v=1.6.2"></script>
 </body>
 </html>

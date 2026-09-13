@@ -901,6 +901,15 @@ button, a, [role="button"], .quick-action, .nav-item {
 .sin-internet p { margin: 0; font-size: 15px; color: var(--ink-2); }
 .sin-internet .sin-internet-nota { font-size: 12.5px; color: var(--muted); }
 
+/* Ubicación obligatoria: el mismo bloqueo, justo por debajo del de internet
+   (si faltan los dos, se resuelve primero la conexión). Con los pasos puede
+   no caber en un teléfono pequeño: la tarjeta se desplaza por dentro. */
+.sin-ubicacion { z-index: 85; }
+.sin-ubicacion .sin-internet-card { max-height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.sin-ubicacion .sin-internet-icono { background: var(--soft); color: var(--primary); }
+.ubicacion-pasos { text-align: left; }
+.ubicacion-pasos li { align-items: flex-start; font-size: 14px; }
+
 .boot-overlay {
   position: fixed;
   inset: 0;
