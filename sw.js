@@ -15,7 +15,7 @@
      - Nómina en Google Sheets (CSV) ...... network-first, cae a caché
    ========================================================================== */
 
-const VERSION = "v1.7.6";
+const VERSION = "v1.7.7";
 const CACHE_APP = "portal-app-" + VERSION;
 const CACHE_CDN = "portal-cdn-" + VERSION;
 const CACHE_TILES = "portal-tiles-" + VERSION;

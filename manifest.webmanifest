@@ -45,6 +45,12 @@
       "short_name": "Fila",
       "url": "./index.html#/aeropuerto",
       "icons": [{ "src": "./assets/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Validar tiquetes",
+      "short_name": "Tiquetes",
+      "url": "./index.html#/tiquetes",
+      "icons": [{ "src": "./assets/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }

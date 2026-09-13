@@ -197,7 +197,43 @@
     return true;
   }
 
+  /* ------------------------------------------------------------------
+     Nombres pensados para el conductor
+
+     "Listas" y "Turnos" son palabras del despachador. Para el conductor la
+     primera es la lista de enturnamiento del aeropuerto y la segunda, la
+     programación. Solo cambia el texto visible: data-tab y los ids quedan
+     igual, así main.js sigue funcionando sin enterarse.
+     ------------------------------------------------------------------ */
+  var NOMBRE_LISTA = "Lista de enturnamiento aeropuerto";
+  var NOMBRE_PROGRAMACION = "Programación";
+
+  function renombrarSecciones() {
+    [["listas", NOMBRE_LISTA], ["turnos", NOMBRE_PROGRAMACION]].forEach(function (par) {
+      var boton = document.querySelector('.tab[data-tab="' + par[0] + '"]');
+      if (!boton) return;
+      var etiqueta = boton.querySelector("span:not(.tab-badge)");
+      if (etiqueta) etiqueta.textContent = par[1];
+      boton.setAttribute("title", par[1]);
+    });
+
+    var tituloProgramacion = document.querySelector("#paneTurnos .despachos-titles h2");
+    if (tituloProgramacion) tituloProgramacion.textContent = NOMBRE_PROGRAMACION;
+
+    // Título propio de la lista, entre la línea de turno y el contador.
+    var stats = document.querySelector("#paneListas .stats");
+    if (stats && !document.querySelector(".lista-enturnamiento-titulo")) {
+      var titulo = document.createElement("h2");
+      titulo.className = "lista-enturnamiento-titulo";
+      titulo.textContent = NOMBRE_LISTA;
+      stats.parentNode.insertBefore(titulo, stats);
+    }
+  }
+
   function alEstarListo() {
+    // Las pestañas y los títulos vienen en el HTML: se renombran de una vez.
+    renombrarSecciones();
+
     // main.js arranca la interfaz después de autenticar, así que al cargar el
     // documento puede que las pestañas y la tabla todavía no existan.
     // Reintentamos un rato corto hasta que las dos cosas estén enganchadas.

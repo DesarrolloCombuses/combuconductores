@@ -119,6 +119,40 @@ html[data-modo="conductor"] .turno-heading {
   html[data-modo="conductor"] .lista-espera th { padding: 8px 10px; }
 }
 
+/* --- Nombres del conductor ---
+   modo-conductor.js cambia "Listas" por "Lista de enturnamiento aeropuerto" y
+   "Turnos" por "Programación". La barra de pestañas no parte líneas y se
+   desplaza a lo ancho: el nombre largo se deja en dos renglones, y en
+   teléfono se quitan los iconos para que las tres pestañas quepan sin
+   desplazar. */
+html[data-modo="conductor"] .tab[data-tab="listas"] > span:not(.tab-badge) {
+  white-space: normal;
+  max-width: 11.5em;
+  line-height: 1.15;
+  text-align: left;
+}
+
+html[data-modo="conductor"] .lista-enturnamiento-titulo {
+  /* Sin margen lateral propio: el panel ya lo da, igual que a "Línea de turno". */
+  margin: 6px 0 8px;
+  padding: 0;
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+@media (max-width: 480px) {
+  html[data-modo="conductor"] .tab {
+    margin-right: 14px;
+  }
+  html[data-modo="conductor"] .tab svg {
+    display: none;
+  }
+  html[data-modo="conductor"] .lista-enturnamiento-titulo {
+    font-size: 15px;
+  }
+}
+
 /* --- El portal ya trae su propia cabecera --- */
 /* La barra del módulo repetiría logo, título y botón de cerrar sesión que el
    portal ya muestra arriba. Dejamos solo el estado de conexión y la hora de

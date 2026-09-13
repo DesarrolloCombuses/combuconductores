@@ -8,7 +8,7 @@
 // OJO: los módulos embebidos declaran su propio window.APP_CONFIG dentro de su
 // iframe. Como cada iframe es un documento aparte, no chocan con este objeto.
 window.PORTAL_CONFIG = {
-  APP_VERSION: "v1.5.6",
+  APP_VERSION: "v1.5.7",
 
   SUPABASE_URL: "https://cbplebkmxrkaafqdhiyi.supabase.co",
   SUPABASE_ANON_KEY: "sb_publishable_DZCceNTENY4ViP17-eZrGg_bdMElZ9X",

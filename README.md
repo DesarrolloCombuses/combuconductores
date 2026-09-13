@@ -163,7 +163,7 @@ modificar el código original:
 | Módulo | Activa | Archivos | Oculta |
 |---|---|---|---|
 | Asistencia | `?embed=portal` | `modo-portal.css`, `modo-portal.js` | Cabecera duplicada, pestañas Fichos Base 3, Administración y Salida incapacidad |
-| Aeropuerto | `?modo=conductor` | `css/modo-conductor.css`, `js/modo-conductor.js` | Cabecera duplicada, pestañas Realizados, Despachos, Vuelos y Subida, y todas las acciones de despacho |
+| Aeropuerto | `?modo=conductor` | `css/modo-conductor.css`, `js/modo-conductor.js` | Cabecera duplicada, pestañas Realizados, Despachos, Vuelos y Subida, y todas las acciones de despacho. Renombra **Listas** → "Lista de enturnamiento aeropuerto" y **Turnos** → "Programación" |
 
 Abiertos fuera del portal, ambos módulos funcionan exactamente como antes: las
 reglas cuelgan de un atributo que solo se pone con esos parámetros.
@@ -172,6 +172,36 @@ reglas cuelgan de un atributo que solo se pone con esos parámetros.
 > escribir de verdad lo deciden las políticas Row Level Security de Supabase. Si
 > se quiere impedir que un conductor despache, hay que asegurarlo en la base de
 > datos, no solo aquí.
+
+### Instalación y iPhone
+
+El portal **pide instalarse** desde la primera visita, antes del login (en
+iPhone la app instalada no comparte sesión con Safari, así que conviene
+instalar antes de entrar):
+
+| Dónde | Qué ve el conductor |
+|---|---|
+| Android / computador | Hoja "Instale la aplicación" con **Instalar aplicación**: abre el aviso del navegador (`beforeinstallprompt`) |
+| iPhone / iPad | Los 3 pasos: **Compartir** → **Agregar a pantalla de inicio** → **Agregar** |
+| Navegador de WhatsApp, Facebook… | Aviso de abrir el enlace en Safari o Chrome, porque ahí no se puede instalar |
+
+"Ahora no" lo calla 3 días. Instalada, no vuelve a salir. Mientras no esté
+instalada queda el botón de descarga en la cabecera y **Instalar aplicación** en
+Perfil. Dentro de la app no interrumpe: solo sale en el inicio y sin otra hoja
+abierta.
+
+Ajustes para iOS:
+
+- Barra de estado `default`: con `black-translucent` la hora y la batería
+  salían en blanco sobre la cabecera blanca.
+- `apple-touch-icon.png` de 180 px y opaco: iOS rellena de negro la
+  transparencia de los bordes del icono.
+- `format-detection: telephone=no`: iOS convertía cédulas y números de bus en
+  enlaces de llamada.
+- Márgenes de muesca (`safe-area-inset-*`) arriba, abajo y a los lados en
+  horizontal; `100vh` de respaldo para iOS anterior a 15.4.
+- Los paneles de módulo no hacen scroll propio (lo hace el iframe): así iOS no
+  encadena dos rebotes. Sin recuadro gris ni zoom por doble toque en botones.
 
 ### Internet obligatorio
 

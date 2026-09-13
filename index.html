@@ -9,16 +9,21 @@
   <meta name="theme-color" content="#0b6b3a">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- "default": barra de estado propia, con hora y batería en negro. Con
+       "black-translucent" iOS las pinta en blanco sobre la cabecera blanca. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Portal Conductor">
-  <link rel="apple-touch-icon" href="./assets/icon-192.png">
+  <!-- Sin esto iOS convierte cédulas y números en enlaces de llamada. -->
+  <meta name="format-detection" content="telephone=no">
+  <!-- 180 px y opaco: iOS rellena de negro cualquier transparencia del icono. -->
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./assets/icon-192.png">
 
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="./css/portal.css?v=1.5.6">
+  <link rel="stylesheet" href="./css/portal.css?v=1.5.7">
 </head>
 <body>
 
@@ -269,6 +274,7 @@
         <div><dt>Base</dt><dd id="perfilBase">—</dd></div>
         <div><dt>Usuario</dt><dd id="perfilEmail">—</dd></div>
       </dl>
+      <button id="btnInstalarPerfil" class="btn btn-primary btn-block" type="button" hidden>Instalar aplicación</button>
       <button id="btnCambiarSeleccion" class="btn btn-ghost btn-block" type="button">Cambiar de conductor</button>
       <button id="btnLogoutSheet" class="btn btn-danger btn-block" type="button">Cerrar sesión</button>
     </div>
@@ -311,6 +317,62 @@
   </div>
 </div>
 
+<!-- ============ Instalar la aplicación ============ -->
+<div id="instalarSheet" class="sheet-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="instalarTitulo">
+    <header class="sheet-head">
+      <h3 id="instalarTitulo">Instale la aplicación</h3>
+      <button id="instalarCerrar" class="icon-btn" type="button" aria-label="Ahora no">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <div class="instalar-app">
+        <img class="instalar-icono" src="./assets/apple-touch-icon.png" alt="" width="64" height="64">
+        <div>
+          <strong>Portal del Conductor</strong>
+          <span>Ábralo desde la pantalla de inicio, a pantalla completa, como cualquier aplicación.</span>
+        </div>
+      </div>
+
+      <!-- Android y computador: el navegador instala con un toque -->
+      <div id="instalarDirecto" class="confirma-bloque" hidden>
+        <button id="btnInstalarAhora" class="btn btn-primary btn-block" type="button">Instalar aplicación</button>
+      </div>
+
+      <!-- iPhone y iPad: Safari no instala solo, se explica el paso a paso -->
+      <div id="instalarIos" class="confirma-bloque" hidden>
+        <ol class="instalar-pasos">
+          <li>
+            <span class="instalar-num">1</span>
+            <span>Toque el botón <strong>Compartir</strong>
+              <svg viewBox="0 0 24 24" class="ico" aria-label="(cuadro con flecha hacia arriba)"><path d="M12 3v12"/><path d="m8 7 4-4 4 4"/><path d="M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8"/></svg>
+              en la barra del navegador.</span>
+          </li>
+          <li>
+            <span class="instalar-num">2</span>
+            <span>Deslice hacia abajo y elija <strong>Agregar a pantalla de inicio</strong>
+              <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg></span>
+          </li>
+          <li>
+            <span class="instalar-num">3</span>
+            <span>Toque <strong>Agregar</strong>, arriba a la derecha.</span>
+          </li>
+        </ol>
+        <p class="confirma-nota">Después abra el portal desde el icono nuevo e ingrese allí: la aplicación instalada no comparte la sesión con Safari.</p>
+      </div>
+
+      <!-- Navegador dentro de otra app (WhatsApp, Facebook...): no puede instalar -->
+      <div id="instalarOtraApp" class="confirma-recordatorio" hidden>
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 9v4m0 4h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+        <span>Este navegador no puede instalar aplicaciones. Abra el enlace en <strong>Safari</strong> (iPhone) o <strong>Chrome</strong> (Android).</span>
+      </div>
+
+      <button id="btnInstalarLuego" class="btn btn-ghost btn-block" type="button">Ahora no</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ Sin internet: el portal exige conexión ============ -->
 <div id="sinInternet" class="sin-internet" role="alertdialog" aria-modal="true"
      aria-labelledby="sinInternetTitulo" aria-describedby="sinInternetTexto" hidden>
@@ -333,7 +395,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./js/portal-config.js?v=1.5.6"></script>
-<script src="./js/portal.js?v=1.5.6"></script>
+<script src="./js/portal-config.js?v=1.5.7"></script>
+<script src="./js/portal.js?v=1.5.7"></script>
 </body>
 </html>

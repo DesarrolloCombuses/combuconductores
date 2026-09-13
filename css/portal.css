@@ -69,6 +69,12 @@ body {
 
 [hidden] { display: none !important; }
 
+/* iOS: sin recuadro gris al tocar y sin zoom por doble toque en los botones. */
+button, a, [role="button"], .quick-action, .nav-item {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
 .ico {
   width: 22px;
   height: 22px;
@@ -183,7 +189,7 @@ body {
 }
 
 /* ------------------------------------------------------ login e identidad */
-.view { min-height: 100dvh; }
+.view { min-height: 100vh; min-height: 100dvh; } /* 100vh: iOS anterior a 15.4 */
 
 .login-view,
 .identify-view {
@@ -221,8 +227,12 @@ body {
   display: grid;
   grid-template-rows: auto 1fr auto;   /* cabecera · contenido · navegación */
   grid-template-columns: 100%;
+  height: 100vh;
   height: 100dvh;
   overflow: hidden;
+  /* iPhone en horizontal: que la muesca no tape la navegación ni el contenido. */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 /* ---------------------------------------------------------------- cabecera */
@@ -292,6 +302,10 @@ body {
   overflow: auto;
   -webkit-overflow-scrolling: touch;
 }
+
+/* Los módulos se desplazan dentro de su propio iframe. Si el panel también
+   tuviera scroll, iOS encadena los dos rebotes y el contenido se "pega". */
+.module-panel:not([data-panel="inicio"]) { overflow: hidden; }
 
 .module-panel > iframe {
   display: block;
@@ -699,6 +713,7 @@ body {
 .sheet {
   width: 100%;
   max-width: 480px;
+  max-height: 86vh;
   max-height: 86dvh;
   overflow: auto;
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
@@ -765,6 +780,38 @@ body {
 .perfil-list dd { margin: 0; font-size: 15px; font-weight: 700; text-align: right; overflow-wrap: anywhere; }
 
 /* ---------------------------------------------------------------- arranque */
+/* Hoja de instalación */
+.instalar-app { display: flex; align-items: center; gap: 14px; }
+.instalar-icono { width: 64px; height: 64px; border-radius: 15px; box-shadow: var(--shadow); flex: none; }
+.instalar-app strong { display: block; font-size: 17px; font-weight: 750; }
+.instalar-app span { font-size: 14px; color: var(--ink-2); }
+
+.instalar-pasos { display: flex; flex-direction: column; gap: 9px; margin: 0; padding: 0; list-style: none; }
+.instalar-pasos li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  font-size: 15px;
+  line-height: 1.4;
+}
+.instalar-num {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  flex: none;
+}
+.instalar-pasos .ico { width: 20px; height: 20px; vertical-align: -4px; color: #007aff; }
+
 /* Sin internet: bloquea todo (login, módulos, hojas y hasta la pantalla de
    carga) mientras no haya conexión, porque el portal no se usa sin internet. */
 .sin-internet {

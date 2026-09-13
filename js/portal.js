@@ -899,6 +899,7 @@
     // (puede venir del hash de un acceso directo del instalador PWA). Si es
     // "inicio", irA() ya se encarga de refrescar sus tarjetas.
     irA(state.vista);
+    setTimeout(pedirInstalacion, 2000);
   }
 
   // ------------------------------------------------------- router de vistas
@@ -930,7 +931,7 @@
   var TITULOS = {
     inicio: { titulo: "Inicio", sub: "" },
     asistencia: { titulo: "Asistencia", sub: "Registra tu entrada y salida" },
-    aeropuerto: { titulo: "Aeropuerto", sub: "Fila y mapa en vivo" },
+    aeropuerto: { titulo: "Aeropuerto", sub: "Enturnamiento y mapa en vivo" },
     tiquetes: { titulo: "Tiquetes", sub: "Validación en Distribusion" },
   };
 
@@ -1957,25 +1958,126 @@
 
   // ---------------------------------------------------------- PWA / etc.
 
+  // ------------------------------------------------------------ instalación
+  // El portal pide instalarse: desde la pantalla de inicio abre a pantalla
+  // completa, sin barra del navegador, y el conductor lo encuentra como a
+  // cualquier aplicación.
+  //  - Android y computador: el navegador avisa (beforeinstallprompt) y se
+  //    instala con un toque.
+  //  - iPhone y iPad: Safari no avisa ni instala solo; se muestran los pasos.
+  //  - Navegadores dentro de otra app (WhatsApp, Facebook): no pueden
+  //    instalar; se pide abrir el enlace en Safari o Chrome.
+  // Se pide desde la primera visita, antes del login: en iPhone la app
+  // instalada no comparte sesión con Safari. "Ahora no" lo calla 3 días.
+  var LS_INSTALAR_POSPUESTO = "portal_instalar_pospuesto";
+  var INSTALAR_POSPONER_MS = 3 * DIA_MS;
+  var instalarYaPedido = false;
+
+  function esInstalada() {
+    try {
+      if (window.matchMedia("(display-mode: standalone)").matches) return true;
+      if (window.matchMedia("(display-mode: fullscreen)").matches) return true;
+    } catch (_) { /* navegador sin matchMedia */ }
+    return window.navigator.standalone === true; // Safari de iOS
+  }
+
+  function esIos() {
+    var ua = navigator.userAgent || "";
+    // iPadOS se presenta como Mac, pero con pantalla táctil.
+    return /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  }
+
+  function esNavegadorDeApp() {
+    return /FBAN|FBAV|Instagram|Line\/|WhatsApp|GSA\/|; wv\)/i.test(navigator.userAgent || "");
+  }
+
+  function modoInstalacion() {
+    if (esInstalada()) return null;
+    if (state.deferredInstall) return "directo";
+    if (esNavegadorDeApp()) return "otra-app";
+    if (esIos()) return "ios";
+    return null; // navegador que aún no avisa o que no instala
+  }
+
+  function instalacionPospuesta() {
+    try {
+      return Date.now() - Number(localStorage.getItem(LS_INSTALAR_POSPUESTO) || 0) < INSTALAR_POSPONER_MS;
+    } catch (_) { return false; }
+  }
+
+  function pintarBotonInstalar() {
+    var disponible = !!modoInstalacion();
+    show($("btnInstall"), disponible);
+    show($("btnInstalarPerfil"), disponible);
+  }
+
+  function abrirInstalar() {
+    var modo = modoInstalacion();
+    if (!modo) return false;
+    show($("instalarDirecto"), modo === "directo");
+    show($("instalarIos"), modo === "ios");
+    show($("instalarOtraApp"), modo === "otra-app");
+    show($("instalarSheet"), true);
+    return true;
+  }
+
+  function cerrarInstalar(posponer) {
+    show($("instalarSheet"), false);
+    if (!posponer) return;
+    try { localStorage.setItem(LS_INSTALAR_POSPUESTO, String(Date.now())); } catch (_) {}
+  }
+
+  // Aviso automático, una vez por apertura y solo con la pantalla despejada:
+  // nada encima y, dentro de la app, mirando el inicio (no a mitad de marcar
+  // asistencia o validar tiquetes).
+  function pedirInstalacion() {
+    if (instalarYaPedido || instalacionPospuesta() || !modoInstalacion()) return;
+    var ocupado = ["bootOverlay", "perfilSheet", "tiquetesSheet", "sinInternet", "instalarSheet"]
+      .some(function (id) { return $(id) && !$(id).hidden; });
+    if (ocupado) return;
+    if (!$("appView").hidden && state.vista !== "inicio") return;
+
+    if (abrirInstalar()) instalarYaPedido = true;
+  }
+
   function initPwa() {
     window.addEventListener("beforeinstallprompt", function (ev) {
       ev.preventDefault();
       state.deferredInstall = ev;
-      show($("btnInstall"), true);
+      pintarBotonInstalar();
+      setTimeout(pedirInstalacion, 1500);
     });
 
-    $("btnInstall").addEventListener("click", async function () {
-      if (!state.deferredInstall) return;
-      state.deferredInstall.prompt();
-      try { await state.deferredInstall.userChoice; } catch (_) {}
-      state.deferredInstall = null;
-      show($("btnInstall"), false);
+    $("btnInstall").addEventListener("click", function () { abrirInstalar(); });
+    $("btnInstalarPerfil").addEventListener("click", function () {
+      show($("perfilSheet"), false);
+      abrirInstalar();
+    });
+
+    $("btnInstalarAhora").addEventListener("click", async function () {
+      var aviso = state.deferredInstall;
+      if (!aviso) { cerrarInstalar(false); return; }
+      aviso.prompt();
+      var eleccion = null;
+      try { eleccion = await aviso.userChoice; } catch (_) {}
+      state.deferredInstall = null; // el aviso del navegador sirve una sola vez
+      cerrarInstalar(!(eleccion && eleccion.outcome === "accepted"));
+      pintarBotonInstalar();
+    });
+
+    $("btnInstalarLuego").addEventListener("click", function () { cerrarInstalar(true); });
+    $("instalarCerrar").addEventListener("click", function () { cerrarInstalar(true); });
+    $("instalarSheet").addEventListener("click", function (ev) {
+      if (ev.target === $("instalarSheet")) cerrarInstalar(true);
     });
 
     window.addEventListener("appinstalled", function () {
       state.deferredInstall = null;
-      show($("btnInstall"), false);
+      cerrarInstalar(false);
+      pintarBotonInstalar();
     });
+
+    pintarBotonInstalar();
 
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
@@ -2020,6 +2122,9 @@
     }).catch(function () {
       mostrarLogin();
     });
+
+    // Primera visita: pedir la instalación desde ya, antes del login.
+    setTimeout(pedirInstalacion, 2500);
   }
 
   if (document.readyState === "loading") {
