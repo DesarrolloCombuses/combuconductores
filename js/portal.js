@@ -1297,7 +1297,6 @@
     var nombre = primerNombre(completo);
     $("homeGreeting").textContent = nombre ? "Hola, " + nombre : "Hola";
     $("homeDate").textContent = fechaLarga();
-    $("versionLabel").textContent = cfg.APP_VERSION || "";
   }
 
   // Esqueletos mientras llegan los datos: con una conexión lenta, un bloque
@@ -1817,6 +1816,8 @@
 
   function abrirPerfil() {
     pintarPerfil();
+    // El resultado de una búsqueda anterior ya no vale, salvo si sigue descargando.
+    if (!actualizacion.pedidaPorConductor) decirEnPerfil("");
     show($("perfilSheet"), true);
   }
 
@@ -2078,14 +2079,296 @@
     });
 
     pintarBotonInstalar();
+  }
 
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", function () {
-        navigator.serviceWorker
-          .register("./sw.js", { scope: "./", updateViaCache: "none" })
-          .catch(function (err) { console.warn("[portal] SW no registrado:", err); });
-      });
+  // --------------------------------------------------------- actualizaciones
+  // Cada versión publicada llega sola a los teléfonos, sin reinstalar nada:
+  //  1. Se pregunta al servidor por un sw.js nuevo al abrir el portal, al
+  //     volver a él y cada ACTUALIZACION_VERIFICAR_MS con la pantalla a la vista.
+  //  2. El service worker nuevo descarga la versión completa y queda en espera.
+  //  3. El portal lo activa y recarga en un momento seguro: con el inicio, la
+  //     fila del aeropuerto, el login o la cédula a la vista, sin hojas
+  //     abiertas ni un campo a medio escribir, tras 5 s de aviso.
+  //  4. Marcando asistencia o validando tiquetes solo se avisa. Se instala al
+  //     volver al inicio, con "Actualizar", o si el conductor regresa a la app
+  //     tras 10 minutos fuera (lo que tuviera a medias ya no sirve).
+  // Si la página ya llegó en la versión nueva y no hay módulos abiertos, se
+  // activa sin recargar: no hay nada viejo en pantalla.
+  var ACTUALIZAR_AVISO_S = 5;
+  var ACTUALIZAR_TRAS_AUSENCIA_MS = 10 * 60 * 1000;
+  var ACTUALIZAR_VENTANA_REGRESO_MS = 30 * 1000;
+  var VISTAS_SIN_TRABAJO_EN_CURSO = { inicio: true, aeropuerto: true };
+  var actualizacion = {
+    reg: null,
+    nuevo: null,              // service worker instalado, en espera
+    version: "",              // versión que trae, si respondió
+    recargar: false,          // otra pestaña ya activó la nueva: basta recargar
+    silenciosa: false,        // activación sin recarga en curso
+    aplicando: false,
+    pedidaPorConductor: false, // tocó "Buscar actualización" en Perfil
+    cuenta: ACTUALIZAR_AVISO_S,
+    timer: null,
+    ocultoDesde: 0,
+    volvioEn: 0,              // regresó a la app tras una ausencia larga
+  };
+
+  function pintarVersion() {
+    document.querySelectorAll("[data-version]").forEach(function (el) {
+      el.textContent = cfg.APP_VERSION || "";
+    });
+  }
+
+  function hayActualizacion() {
+    return !!(actualizacion.nuevo || actualizacion.recargar);
+  }
+
+  function versionNueva() {
+    var v = actualizacion.version;
+    return v && v !== cfg.APP_VERSION ? v : "";
+  }
+
+  // Pregunta al service worker qué versión trae. Uno anterior a este
+  // mecanismo no sabe responder: a los 2 s se sigue sin el dato.
+  function versionDe(worker) {
+    return new Promise(function (resolve) {
+      if (!worker || typeof MessageChannel === "undefined") { resolve(""); return; }
+      var canal = new MessageChannel();
+      var listo = false;
+      function fin(v) {
+        if (listo) return;
+        listo = true;
+        resolve(typeof v === "string" ? v : "");
+      }
+      canal.port1.onmessage = function (ev) { fin(ev.data); };
+      setTimeout(fin, 2000);
+      try { worker.postMessage({ type: "VERSION" }, [canal.port2]); } catch (_) { fin(""); }
+    });
+  }
+
+  async function nuevaVersionLista(worker) {
+    if (actualizacion.aplicando || actualizacion.nuevo === worker) return;
+    actualizacion.nuevo = worker;
+    actualizacion.version = await versionDe(worker);
+    if (actualizacion.nuevo !== worker || actualizacion.aplicando) return;
+
+    // La pidió desde Perfil y sigue ahí esperando: se instala ya.
+    if (actualizacion.pedidaPorConductor && !$("perfilSheet").hidden) {
+      aplicarActualizacion();
+      return;
     }
+
+    if (actualizacion.version === cfg.APP_VERSION && !Object.keys(state.iframes).length) {
+      actualizacion.nuevo = null;
+      actualizacion.recargar = false;
+      detenerAvisoActualizacion(); // pudo quedar el de una versión intermedia
+      actualizacion.silenciosa = true;
+      try { worker.postMessage({ type: "SKIP_WAITING" }); } catch (_) { actualizacion.silenciosa = false; }
+      return;
+    }
+    vigilarActualizacion();
+  }
+
+  function seguirInstalacion(worker) {
+    if (!worker) return;
+    function revisar() {
+      // Sin controlador es la primera instalación: no hay versión vieja que cambiar.
+      if (worker.state === "installed" && navigator.serviceWorker.controller) {
+        nuevaVersionLista(worker);
+      } else if (worker.state === "redundant" && actualizacion.pedidaPorConductor &&
+                 actualizacion.nuevo !== worker) {
+        actualizacion.pedidaPorConductor = false;
+        decirEnPerfil("No se pudo descargar la versión nueva. Intente de nuevo.");
+      }
+    }
+    worker.addEventListener("statechange", revisar);
+    revisar();
+  }
+
+  function buscarActualizacion() {
+    var reg = actualizacion.reg;
+    if (!reg || actualizacion.aplicando || !navigator.onLine) return Promise.resolve();
+    return reg.update().catch(function () { /* sin red o servidor caído: se reintenta luego */ });
+  }
+
+  function volvioTrasAusencia() {
+    return !!actualizacion.volvioEn && Date.now() - actualizacion.volvioEn < ACTUALIZAR_VENTANA_REGRESO_MS;
+  }
+
+  function momentoSeguroParaActualizar() {
+    // Recargar sin red dejaría el portal a medio cargar.
+    if (!internet.ok || !navigator.onLine) return false;
+    var hojaAbierta = ["perfilSheet", "tiquetesSheet", "instalarSheet"].some(function (id) {
+      return $(id) && !$(id).hidden;
+    });
+    if (hojaAbierta) return false;
+    var activo = document.activeElement;
+    if (activo && /^(INPUT|TEXTAREA|SELECT)$/.test(activo.tagName) && activo.value) return false;
+    if ($("appView").hidden) return true; // login, cédula o cargando
+    return !!VISTAS_SIN_TRABAJO_EN_CURSO[state.vista] || volvioTrasAusencia();
+  }
+
+  function vigilarActualizacion() {
+    if (!hayActualizacion() || actualizacion.aplicando || actualizacion.timer) return;
+    actualizacion.cuenta = ACTUALIZAR_AVISO_S;
+    actualizacion.timer = setInterval(tickActualizacion, 1000);
+    tickActualizacion();
+  }
+
+  function detenerAvisoActualizacion() {
+    clearInterval(actualizacion.timer);
+    actualizacion.timer = null;
+    show($("avisoActualizacion"), false);
+  }
+
+  function tickActualizacion() {
+    if (actualizacion.aplicando || document.hidden) return;
+    if (!hayActualizacion()) { detenerAvisoActualizacion(); return; }
+    if (!momentoSeguroParaActualizar()) {
+      actualizacion.cuenta = ACTUALIZAR_AVISO_S;
+      pintarAvisoActualizacion(false);
+      return;
+    }
+    // Tras una ausencia larga no hay cuenta atrás: en 5 s podría empezar
+    // algo nuevo que la recarga cortaría.
+    if (actualizacion.cuenta <= 0 || volvioTrasAusencia()) {
+      aplicarActualizacion();
+      return;
+    }
+    pintarAvisoActualizacion(true);
+    actualizacion.cuenta -= 1;
+  }
+
+  function pintarAvisoActualizacion(enCuenta) {
+    var nueva = versionNueva();
+    var titulo = "Versión nueva" + (nueva ? " " + nueva : "");
+    var texto;
+    if (enCuenta) {
+      texto = titulo + " · se instala en " + actualizacion.cuenta + " s";
+    } else if ($("appView").hidden) {
+      texto = titulo + " lista. Se instala en un momento.";
+    } else {
+      texto = titulo + " lista. Se instala al volver al inicio.";
+    }
+    $("avisoActualizacionTexto").textContent = texto;
+    $("btnActualizarAhora").textContent = enCuenta ? "Ahora" : "Actualizar";
+    show($("avisoActualizacion"), true);
+  }
+
+  function aplicarActualizacion() {
+    if (actualizacion.aplicando || !hayActualizacion()) return;
+    actualizacion.aplicando = true;
+    clearInterval(actualizacion.timer);
+    actualizacion.timer = null;
+
+    var nueva = versionNueva();
+    show($("avisoActualizacion"), false);
+    show($("perfilSheet"), false);
+    $("bootTexto").textContent = nueva ? "Instalando la versión " + nueva + "…" : "Instalando la versión nueva…";
+    show($("bootOverlay"), true);
+
+    var worker = actualizacion.nuevo;
+    if (worker && worker.state === "installed") {
+      try { worker.postMessage({ type: "SKIP_WAITING" }); } catch (_) { recargarPagina(); return; }
+      // Lo normal es que controllerchange recargue; esto cubre al navegador
+      // que no lo avise.
+      setTimeout(recargarPagina, 6000);
+    } else {
+      recargarPagina(); // ya activa (otra pestaña) o reemplazada por una más nueva
+    }
+  }
+
+  var recargandoPagina = false;
+  function recargarPagina() {
+    if (recargandoPagina) return;
+    recargandoPagina = true;
+    location.reload();
+  }
+
+  function decirEnPerfil(texto) {
+    $("actualizacionEstado").textContent = texto;
+    show($("actualizacionEstado"), !!texto);
+  }
+
+  async function buscarActualizacionDesdePerfil() {
+    if (hayActualizacion()) { aplicarActualizacion(); return; }
+    if (!actualizacion.reg) {
+      decirEnPerfil("Este navegador no se actualiza solo. Cierre el portal y vuelva a abrirlo.");
+      return;
+    }
+    if (!navigator.onLine || !internet.ok) {
+      decirEnPerfil("Sin conexión: no se puede buscar ahora.");
+      return;
+    }
+
+    var boton = $("btnBuscarActualizacion");
+    var reg = actualizacion.reg;
+    boton.disabled = true;
+    decirEnPerfil("Buscando…");
+    actualizacion.pedidaPorConductor = true;
+    await buscarActualizacion();
+
+    if (reg.installing) {
+      // Al terminar de descargar, nuevaVersionLista la instala.
+      decirEnPerfil("Descargando la versión nueva…");
+    } else if (reg.waiting && navigator.serviceWorker.controller) {
+      nuevaVersionLista(reg.waiting);
+    } else if (!actualizacion.aplicando) {
+      actualizacion.pedidaPorConductor = false;
+      decirEnPerfil("Tiene la última versión (" + (cfg.APP_VERSION || "") + ").");
+    }
+    boton.disabled = false;
+  }
+
+  function initActualizaciones() {
+    pintarVersion();
+    $("btnActualizarAhora").addEventListener("click", aplicarActualizacion);
+    $("btnBuscarActualizacion").addEventListener("click", buscarActualizacionDesdePerfil);
+
+    if (!("serviceWorker" in navigator)) return;
+    var sw = navigator.serviceWorker;
+    var teniaControlador = !!sw.controller;
+
+    sw.addEventListener("controllerchange", function () {
+      if (actualizacion.aplicando) { recargarPagina(); return; }
+      if (actualizacion.silenciosa || !teniaControlador) {
+        // Activación sin recarga o primera instalación: la página ya está al día.
+        actualizacion.silenciosa = false;
+        teniaControlador = true;
+        return;
+      }
+      // Otra pestaña del portal activó la versión nueva; esta sigue con la
+      // vieja hasta recargar.
+      actualizacion.recargar = true;
+      vigilarActualizacion();
+    });
+
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) {
+        actualizacion.ocultoDesde = Date.now();
+        return;
+      }
+      if (actualizacion.ocultoDesde && Date.now() - actualizacion.ocultoDesde >= ACTUALIZAR_TRAS_AUSENCIA_MS) {
+        actualizacion.volvioEn = Date.now();
+      }
+      actualizacion.ocultoDesde = 0;
+      buscarActualizacion();
+    });
+
+    function registrar() {
+      sw.register("./sw.js", { scope: "./", updateViaCache: "none" })
+        .then(function (reg) {
+          actualizacion.reg = reg;
+          if (reg.waiting && sw.controller) nuevaVersionLista(reg.waiting);
+          seguirInstalacion(reg.installing); // revisión que el navegador ya había empezado
+          reg.addEventListener("updatefound", function () { seguirInstalacion(reg.installing); });
+          setInterval(function () {
+            if (!document.hidden) buscarActualizacion();
+          }, cfg.ACTUALIZACION_VERIFICAR_MS || 10 * 60 * 1000);
+        })
+        .catch(function (err) { console.warn("[portal] SW no registrado:", err); });
+    }
+    if (document.readyState === "complete") registrar();
+    else window.addEventListener("load", registrar, { once: true });
   }
 
   // ------------------------------------------------------------------ boot
@@ -2096,6 +2379,7 @@
     initPerfil();
     initRed();
     initPwa();
+    initActualizaciones();
     initMensajesModulos();
     initViajes();
     initConfirmacionTiquetes();

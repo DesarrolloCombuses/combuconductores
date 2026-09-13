@@ -240,11 +240,50 @@ Estrategias de caché:
 
 | Recurso | Estrategia |
 |---|---|
+| Páginas (navegación) | Network-first sin caché HTTP, cae al shell guardado |
 | App shell (HTML/CSS/JS/iconos) | Cache-first con revalidación de fondo |
 | Librerías de CDN y tipografías | Cache-first (van versionadas) |
 | Tiles del mapa | Network-first, cae a caché, tope de 300 |
 | API Supabase | Network-only, nunca se cachea |
 | Nómina en Google Sheets | Network-first, cae a caché |
+
+### Versión y actualizaciones
+
+La versión se ve en el login, en la pantalla de la cédula, al pie del inicio y
+en Perfil. Los teléfonos se actualizan solos: nadie tiene que reinstalar ni
+borrar datos.
+
+Cómo llega una versión nueva:
+
+1. El portal pregunta si hay un `sw.js` nuevo al abrirse, al volver a primer
+   plano y cada `ACTUALIZACION_VERIFICAR_MS` (10 min) con la pantalla a la
+   vista.
+2. El service worker nuevo descarga la versión completa y **queda en espera**.
+   No se activa solo: la página vieja terminaría pidiendo archivos de la
+   versión nueva.
+3. El portal lo activa y recarga en un **momento seguro**: con el inicio, la
+   fila del aeropuerto, el login o la cédula a la vista, sin hojas abiertas ni
+   un campo a medio escribir, después de un aviso de 5 segundos.
+4. Marcando asistencia o validando tiquetes solo avisa abajo. Se instala al
+   volver al inicio, al tocar **Actualizar**, o cuando el conductor regresa a
+   la app después de 10 minutos fuera.
+5. Si la página ya llegó en la versión nueva y no hay módulos abiertos, se
+   activa sin recargar.
+
+En Perfil, **Buscar actualización** revisa en el momento.
+
+**Publicar una versión**, desde la carpeta `portal`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\nueva-version.ps1 1.6.1
+git commit -am "Descripción del cambio"
+git push
+```
+
+El script cambia la versión en los tres sitios donde vive: `APP_VERSION` en
+`js/portal-config.js`, `VERSION` en `sw.js` y los `?v=` de `index.html`. Si
+`sw.js` no cambia, los teléfonos no se enteran de que hay algo nuevo, así que
+**todo cambio que se publique debe pasar por el script**.
 
 ## Configuración
 

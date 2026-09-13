@@ -8,14 +8,22 @@
    el mismo scope se pisan las cachés y dejan versiones viejas pegadas.
 
    Estrategias por tipo de recurso:
+     - Páginas (navegación) ............... network-first sin caché HTTP, cae al shell
      - App shell (HTML/CSS/JS/iconos) ..... cache-first + revalidación de fondo
      - Librerías de CDN y tipografías ..... cache-first (están versionadas)
      - Tiles del mapa (OpenStreetMap) ..... network-first, cae a caché
      - API Supabase (REST/Auth/Storage) ... network-only, nunca se cachea
      - Nómina en Google Sheets (CSV) ...... network-first, cae a caché
+
+   Actualizaciones: una versión nueva se descarga completa y queda en espera.
+   La activa el portal (js/portal.js, bloque "actualizaciones") cuando el
+   conductor no está a mitad de algo.
    ========================================================================== */
 
-const VERSION = "v1.7.7";
+// Igual a APP_VERSION de js/portal-config.js. No se cambia a mano: lo hace
+// nueva-version.ps1 en todos los sitios a la vez. Que este archivo cambie es
+// lo que avisa a los teléfonos de que hay una versión nueva.
+const VERSION = "v1.6.0";
 const CACHE_APP = "portal-app-" + VERSION;
 const CACHE_CDN = "portal-cdn-" + VERSION;
 const CACHE_TILES = "portal-tiles-" + VERSION;
@@ -85,7 +93,11 @@ self.addEventListener("install", (event) => {
       )
     );
 
-    await self.skipWaiting();
+    // Sin skipWaiting: la versión nueva queda en espera y el portal decide
+    // cuándo activarla. Activarla al instante dejaría la página vieja pidiendo
+    // archivos a la caché nueva, y recargar a mitad de una marca de asistencia
+    // la perdería. (La primera instalación, sin versión anterior, se activa
+    // sola de todos modos.)
   })());
 });
 
@@ -104,7 +116,11 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
+  const tipo = event.data && event.data.type;
+  if (tipo === "SKIP_WAITING") self.skipWaiting();
+  // El portal pregunta qué versión trae el service worker en espera, para
+  // anunciarla antes de instalarla.
+  if (tipo === "VERSION" && event.ports && event.ports[0]) event.ports[0].postMessage(VERSION);
 });
 
 // ---------------------------------------------------------------- fetch
@@ -147,7 +163,13 @@ self.addEventListener("fetch", (event) => {
 // ------------------------------------------------------------ estrategias
 async function navegacion(req) {
   try {
-    const res = await fetch(req);
+    // "no-cache" revalida con el servidor en vez de fiarse de la caché HTTP:
+    // GitHub Pages sirve el HTML con max-age=600, y sin esto una versión recién
+    // publicada podía tardar 10 minutos en llegar aunque se recargara.
+    const res = await fetch(req.url, { cache: "no-cache", credentials: "same-origin" });
+    // Una navegación no acepta una respuesta que ya siguió una redirección:
+    // se le devuelve la redirección y el navegador la sigue.
+    if (res.redirected) return Response.redirect(res.url, 302);
     if (res && res.ok) {
       const cache = await caches.open(CACHE_APP);
       cache.put(req, res.clone());

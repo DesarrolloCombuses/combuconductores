@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="./css/portal.css?v=1.5.7">
+  <link rel="stylesheet" href="./css/portal.css?v=1.6.0">
 </head>
 <body>
 
@@ -49,6 +49,8 @@
     <p id="loginError" class="form-error" hidden></p>
 
     <button id="loginSubmit" class="btn btn-primary btn-block" type="submit">Entrar</button>
+
+    <p class="version-note">Portal del Conductor <span data-version></span></p>
   </form>
 </section>
 
@@ -106,6 +108,7 @@
       </form>
     </div>
 
+    <p class="version-note">Portal del Conductor <span data-version></span></p>
   </div>
 </section>
 
@@ -219,7 +222,7 @@
           </button>
         </div>
 
-        <p class="version-note">Portal del Conductor <span id="versionLabel"></span></p>
+        <p class="version-note">Portal del Conductor <span data-version></span></p>
       </div>
     </div>
 
@@ -256,6 +259,15 @@
   </nav>
 </section>
 
+<!-- ============ Versión nueva lista ============ -->
+<!-- Fuera de appView para verse también en el login; con la app abierta va
+     sobre la barra de navegación (ver .aviso-actualizacion). -->
+<div id="avisoActualizacion" class="aviso-actualizacion" role="status" hidden>
+  <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.2M21 12a9 9 0 0 1-15.5 6.2"/><path d="M18 3v5h-5M6 21v-5h5"/></svg>
+  <span id="avisoActualizacionTexto">Versión nueva lista.</span>
+  <button id="btnActualizarAhora" class="btn btn-sm" type="button">Actualizar</button>
+</div>
+
 <!-- ============ Hoja de perfil ============ -->
 <div id="perfilSheet" class="sheet-overlay" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="perfilSheetTitle">
@@ -273,9 +285,12 @@
         <div><dt>Turno</dt><dd id="perfilTurno">—</dd></div>
         <div><dt>Base</dt><dd id="perfilBase">—</dd></div>
         <div><dt>Usuario</dt><dd id="perfilEmail">—</dd></div>
+        <div><dt>Versión</dt><dd data-version>—</dd></div>
       </dl>
       <button id="btnInstalarPerfil" class="btn btn-primary btn-block" type="button" hidden>Instalar aplicación</button>
       <button id="btnCambiarSeleccion" class="btn btn-ghost btn-block" type="button">Cambiar de conductor</button>
+      <button id="btnBuscarActualizacion" class="btn btn-ghost btn-block" type="button">Buscar actualización</button>
+      <p id="actualizacionEstado" class="actualizacion-estado" role="status" hidden></p>
       <button id="btnLogoutSheet" class="btn btn-danger btn-block" type="button">Cerrar sesión</button>
     </div>
   </div>
@@ -391,11 +406,11 @@
 <div id="bootOverlay" class="boot-overlay">
   <img class="boot-logo" src="./assets/logo-combuses.webp" alt="Combuses">
   <div class="boot-spinner" aria-hidden="true"></div>
-  <p>Abriendo el portal…</p>
+  <p id="bootTexto">Abriendo el portal…</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./js/portal-config.js?v=1.5.7"></script>
-<script src="./js/portal.js?v=1.5.7"></script>
+<script src="./js/portal-config.js?v=1.6.0"></script>
+<script src="./js/portal.js?v=1.6.0"></script>
 </body>
 </html>

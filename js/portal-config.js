@@ -8,7 +8,15 @@
 // OJO: los módulos embebidos declaran su propio window.APP_CONFIG dentro de su
 // iframe. Como cada iframe es un documento aparte, no chocan con este objeto.
 window.PORTAL_CONFIG = {
-  APP_VERSION: "v1.5.7",
+  // Versión que ve el conductor en el login, el inicio y Perfil. Para publicar
+  // una nueva no se edita a mano, se corre (desde la carpeta portal):
+  //   powershell -ExecutionPolicy Bypass -File .\nueva-version.ps1 1.6.1
+  // que la cambia aquí, en sw.js y en index.html a la vez.
+  APP_VERSION: "v1.6.0",
+
+  // Cada cuánto se pregunta al servidor si hay una versión nueva, con el
+  // portal a la vista. También se pregunta al abrirlo y al volver a él.
+  ACTUALIZACION_VERIFICAR_MS: 10 * 60 * 1000,
 
   SUPABASE_URL: "https://cbplebkmxrkaafqdhiyi.supabase.co",
   SUPABASE_ANON_KEY: "sb_publishable_DZCceNTENY4ViP17-eZrGg_bdMElZ9X",
