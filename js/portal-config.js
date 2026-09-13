@@ -12,7 +12,7 @@ window.PORTAL_CONFIG = {
   // una nueva no se edita a mano, se corre (desde la carpeta portal):
   //   powershell -ExecutionPolicy Bypass -File .\nueva-version.ps1 1.6.1
   // que la cambia aquí, en sw.js y en index.html a la vez.
-  APP_VERSION: "v1.6.0",
+  APP_VERSION: "v1.6.1",
 
   // Cada cuánto se pregunta al servidor si hay una versión nueva, con el
   // portal a la vista. También se pregunta al abrirlo y al volver a él.
@@ -53,6 +53,10 @@ window.PORTAL_CONFIG = {
 
   // Cada cuánto se vuelven a consultar los viajes con el inicio a la vista.
   DESPACHOS_REFRESCO_MS: 3 * 60 * 1000,
+
+  // Despachos repetidos: la misma ruta registrada otra vez dentro de este
+  // tiempo (doble registro del despachador) se muestra como un solo viaje.
+  VIAJES_REPETIDOS_VENTANA_MS: 15 * 60 * 1000,
 
   // Constancia de que el conductor confirmó el vehículo antes de abrir el
   // validador de tiquetes. Se crea con

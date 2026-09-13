@@ -1408,6 +1408,26 @@
     }
   }
 
+  // Lo más importante del portal: que el conductor registre su ingreso y su
+  // salida. El botón dice cuál le toca según las marcas del turno y lo lleva a
+  // Asistencia, que es donde se registra. Con la jornada cumplida desaparece.
+  var ICONO_INGRESO = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5M15 12H3"/></svg>';
+  var ICONO_SALIDA = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg>';
+
+  function botonMarcar(turno) {
+    var marca = turno ? marcaDeEntrada(turno, state.estadoTurno) : null;
+    if (marca && marca.salida) return "";
+    var salida = !!marca;
+    var texto = !turno ? "Marcar ingreso o salida" : salida ? "Marcar salida" : "Marcar ingreso";
+    return '<button class="btn btn-block btn-marcar" type="button" data-marcar>' +
+      (salida ? ICONO_SALIDA : ICONO_INGRESO) + escapeHtml(texto) + "</button>";
+  }
+
+  function enlazarBotonMarcar(box) {
+    var btn = box.querySelector("[data-marcar]");
+    if (btn) btn.addEventListener("click", function () { irA("asistencia"); });
+  }
+
   function pintarTurno(turno) {
     var box = $("turnoBody");
 
@@ -1416,7 +1436,9 @@
         (state.vehiculo
           ? " Vehículo indicado: <strong>" + escapeHtml(state.vehiculo) + "</strong>."
           : "") +
-        "</p>";
+        "</p>" +
+        botonMarcar(null);
+      enlazarBotonMarcar(box);
       return;
     }
 
@@ -1446,7 +1468,9 @@
             "<strong>" + escapeHtml(relevo.nombre) + "</strong>" +
             '<span class="turno-relevo-hora">Relevo programado a las ' + escapeHtml(relevo.hora) + "</span>" +
           "</div>"
-        : "");
+        : "") +
+      botonMarcar(turno);
+    enlazarBotonMarcar(box);
   }
 
   // Con quién se cruza el conductor en el vehículo. La hora de INICIA 2 es un
@@ -1588,9 +1612,28 @@
       });
   }
 
+  // Un mismo despacho a veces queda registrado dos veces (doble clic, o dos
+  // despachadores a la vez): misma ruta con uno o dos minutos de diferencia.
+  // Un bus no repite la misma ruta en tan poco tiempo, así que dentro de
+  // VIAJES_REPETIDOS_VENTANA_MS cuenta uno solo, el primero que se registró.
+  // La lista entra y sale del más reciente al más antiguo.
+  function unificarViajesRepetidos(lista) {
+    var ventana = cfg.VIAJES_REPETIDOS_VENTANA_MS || 15 * 60 * 1000;
+    var anteriorPorRuta = {};
+    var quedan = [];
+    lista.slice().sort(function (a, b) { return a.ms - b.ms; }).forEach(function (v) {
+      var ruta = String(v.ruta || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      var anterior = anteriorPorRuta[ruta];
+      anteriorPorRuta[ruta] = v.ms;
+      if (anterior != null && v.ms - anterior < ventana) return;
+      quedan.push(v);
+    });
+    return quedan.reverse();
+  }
+
   function pintarViajes() {
     var box = $("viajesBody");
-    var lista = viajes.lista || [];
+    var lista = unificarViajesRepetidos(viajes.lista || []);
     var n = lista.length;
 
     var html =
@@ -2386,7 +2429,6 @@
 
     $("btnLogout").addEventListener("click", logout);
     $("btnReloadModule").addEventListener("click", recargarModulo);
-    $("btnCambiarVehiculo").addEventListener("click", cambiarSeleccion);
 
     // Se lee el hash antes de resolver la sesión: como todavía no hay usuario,
     // aplicarHash() solo anota el destino en state.vista, y mostrarApp() lo

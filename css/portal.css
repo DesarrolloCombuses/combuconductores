@@ -441,6 +441,19 @@ button, a, [role="button"], .quick-action, .nav-item {
   color: #fff;
 }
 
+/* Ingreso y salida: la acción principal del conductor, grande y a la mano. */
+.btn-marcar {
+  margin-top: 14px;
+  min-height: 56px;
+  background: #fff;
+  color: var(--primary-strong);
+  font-size: 17px;
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .14);
+}
+.btn-marcar:hover:not(:disabled) { background: var(--primary-ink); }
+.btn-marcar .ico { width: 23px; height: 23px; stroke-width: 2.2; }
+
 .turno-hero {
   display: flex;
   align-items: center;

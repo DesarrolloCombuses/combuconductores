@@ -105,7 +105,9 @@ Con la elección el portal arma el inicio:
 - **Viajes de hoy** — encuentra el bus del turno en `despachos_realizados` (la
   tabla de la pestaña Realizados del aeropuerto) y muestra cuántos viajes lleva
   hoy, con la lista de hora e itinerario. Cuenta los despachos `ACTIVO` con ese
-  número interno desde las 00:00; los cancelados no cuentan. Se guarda por día
+  número interno desde las 00:00; los cancelados no cuentan. Un despacho
+  registrado dos veces (misma ruta con menos de 15 min de diferencia,
+  `VIAJES_REPETIDOS_VENTANA_MS`) se muestra una sola vez. Se guarda por día
   para verlo sin señal y se vuelve a consultar cada 3 min con el inicio a la
   vista.
 - **Mi jornada de hoy** — marcas de `asistencias` del día, resolviendo antes el
