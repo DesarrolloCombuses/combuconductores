@@ -1,0 +1,1133 @@
+/* ==========================================================================
+   Portal del Conductor - Combuses
+   Estilos del cascarón. NO afectan a los módulos: cada uno vive dentro de su
+   iframe con su propio CSS, así que sus clases nunca chocan con estas.
+
+   Pensado para el sitio de uso real: un teléfono, con una mano, a plena luz
+   del día y con datos móviles regulares. De ahí vienen las decisiones:
+   tipografía grande, mucho contraste, zonas de toque de 44px o más, y lo
+   importante (el turno) arriba del todo sin tener que desplazar.
+   ========================================================================== */
+
+:root {
+  --bg: #eef2ec;
+  --panel: #ffffff;
+  --panel-2: #f7faf6;
+
+  --ink: #12190f;
+  --ink-2: #3d4a3f;
+  --muted: #64735f;
+
+  --line: #dde5d8;
+  --line-strong: #c6d3bf;
+
+  --primary: #0b6b3a;
+  --primary-strong: #064526;
+  --primary-ink: #e8f5ec;
+  --primary-glow: rgba(11, 107, 58, .2);
+  --soft: #e6f2e9;
+
+  --accent: #f4b000;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
+  --warn-soft: #fff6e3;
+  --warn-ink: #7a5200;
+
+  --info: #4338ca;
+  --info-soft: #eef0ff;
+
+  --radius-sm: 10px;
+  --radius: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(11, 47, 25, .05);
+  --shadow: 0 2px 4px rgba(11, 47, 25, .05), 0 8px 20px -8px rgba(11, 47, 25, .12);
+  --shadow-lg: 0 12px 32px -12px rgba(11, 47, 25, .28);
+
+  --transition: 200ms cubic-bezier(.2, .7, .3, 1);
+
+  --topbar-h: 58px;
+  --navbar-h: 66px;
+  --ancho-lectura: 720px;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 16px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: none;
+}
+
+[hidden] { display: none !important; }
+
+.ico {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+}
+
+/* ---------------------------------------------------------------- botones */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 12px 18px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition),
+              color var(--transition), transform var(--transition);
+}
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--primary-glow); }
+
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--primary-strong); }
+
+.btn-ghost { background: var(--panel); color: var(--ink-2); border-color: var(--line-strong); }
+.btn-ghost:hover:not(:disabled) { background: var(--soft); border-color: var(--primary); color: var(--primary-strong); }
+
+.btn-danger { background: var(--danger-soft); color: var(--danger); border-color: #f2c9c5; }
+.btn-danger:hover:not(:disabled) { background: #f8d7d3; }
+
+.btn-block { width: 100%; }
+.btn-sm { min-height: 36px; padding: 7px 13px; font-size: 13.5px; }
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+.icon-btn:hover { background: var(--soft); color: var(--primary-strong); }
+.icon-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--primary-glow); }
+
+/* ----------------------------------------------------------------- campos */
+.field { display: block; margin-bottom: 15px; text-align: left; }
+.field > span {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--ink-2);
+}
+.field input {
+  width: 100%;
+  min-height: 50px;
+  padding: 13px 15px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  font: inherit;
+  font-size: 16px;            /* 16px evita el zoom automático de iOS */
+  color: var(--ink);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.field input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+/* La cédula se teclea mirando el teclado numérico: grande y espaciada. */
+.field input.input-dni {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-align: center;
+  min-height: 62px;
+}
+
+.form-error {
+  margin: 0 0 13px;
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 14px;
+  font-weight: 550;
+  text-align: left;
+}
+.form-hint {
+  margin: -6px 0 15px;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: left;
+}
+
+/* ------------------------------------------------------ login e identidad */
+.view { min-height: 100dvh; }
+
+.login-view,
+.identify-view {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 18px calc(24px + env(safe-area-inset-bottom));
+}
+
+.login-card,
+.identify-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 32px 26px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.login-logo { width: 108px; height: auto; margin-bottom: 16px; }
+.login-title { margin: 0 0 5px; font-size: 23px; font-weight: 800; letter-spacing: -.3px; }
+.login-subtitle { margin: 0 0 24px; font-size: 15px; color: var(--muted); }
+
+.identify-card .btn-ghost { margin-top: 9px; }
+
+/* =========================================================================
+   Cascarón de la app
+   Grid explícito. La versión anterior usaba flex-wrap y el navegador repartía
+   el espacio sobrante entre las dos líneas, lo que dejaba un hueco enorme
+   bajo la cabecera. Con grid cada banda mide exactamente lo que debe.
+   ========================================================================= */
+.app-view {
+  display: grid;
+  grid-template-rows: auto 1fr auto;   /* cabecera · contenido · navegación */
+  grid-template-columns: 100%;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* ---------------------------------------------------------------- cabecera */
+.topbar {
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--topbar-h);
+  padding: calc(env(safe-area-inset-top) + 9px) 14px 9px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  z-index: 20;
+}
+
+.topbar-brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.topbar-logo { width: 42px; height: auto; flex: none; }
+
+.topbar-titles { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.topbar-titles strong {
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topbar-subtitle {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-actions { display: flex; align-items: center; gap: 7px; flex: none; }
+
+/* Estado de conexión: para un conductor en la calle es información de
+   primera, no un adorno. En móvil se reduce al punto de color. */
+.net-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.net-status[data-online="true"] { background: var(--soft); color: var(--primary-strong); }
+.net-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex: none; }
+
+/* --------------------------------------------------------------- contenido */
+.content {
+  grid-row: 2;
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.module-panel {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.module-panel > iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* Módulo externo (Distribusion): barra propia arriba y el iframe debajo. */
+.module-panel-externo { display: flex; flex-direction: column; overflow: hidden; }
+.module-panel-externo > iframe { flex: 1; height: auto; min-height: 0; }
+
+.externo-barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  flex: none;
+}
+.externo-dato { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; min-width: 0; }
+.externo-dato span {
+  font-size: 11.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+}
+.externo-dato strong { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.externo-barra .btn { text-decoration: none; }
+
+.module-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 14.5px;
+  text-align: center;
+  z-index: 2;
+}
+
+/* ------------------------------------------------------------------ inicio */
+.home {
+  max-width: var(--ancho-lectura);
+  margin: 0 auto;
+  padding: 16px 15px calc(26px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.home-greeting { padding: 2px 2px 0; }
+.home-greeting h2 {
+  margin: 0;
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: -.5px;
+}
+.home-date { margin: 3px 0 0; font-size: 14px; color: var(--muted); }
+
+/* Aviso de datos guardados / sin conexión */
+.offline-note {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 14px;
+  border: 1px solid #f0dfb4;
+  border-radius: var(--radius);
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+  font-size: 13.5px;
+  font-weight: 550;
+}
+.offline-note .ico { width: 18px; height: 18px; }
+
+/* ------------------------------------------------------------------ cards */
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 15px 16px 0;
+}
+.card-head h3 {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--muted);
+}
+
+.card-body { padding: 12px 16px 17px; }
+
+.placeholder { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+/* --- Tarjeta del turno: la pieza principal de la pantalla ---
+   Va en verde sólido para que se lea de un vistazo con el teléfono al sol y
+   para que quede claro que es lo primero que el conductor debe mirar. */
+.card-turno {
+  border: 0;
+  background: linear-gradient(160deg, #0b6b3a 0%, #075430 100%);
+  color: #fff;
+  box-shadow: var(--shadow);
+}
+.card-turno .card-head h3 { color: rgba(255, 255, 255, .72); }
+.card-turno .placeholder { color: rgba(255, 255, 255, .8); }
+
+.card-turno .btn-ghost {
+  background: rgba(255, 255, 255, .12);
+  border-color: rgba(255, 255, 255, .28);
+  color: #fff;
+}
+.card-turno .btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, .2);
+  border-color: rgba(255, 255, 255, .45);
+  color: #fff;
+}
+
+.turno-hero {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex-wrap: wrap;
+  margin-bottom: 15px;
+}
+.turno-horas {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.turno-etiqueta {
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, .16);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+/* Rejilla de datos del turno. auto-fit con un mínimo generoso evita que un
+   texto largo como "NUTIBARA - EXPOSICIONES" desborde su casilla. */
+.datos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 9px;
+  margin: 0;
+}
+.dato {
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, .13);
+  min-width: 0;
+}
+.dato dt {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: rgba(255, 255, 255, .72);
+}
+.dato dd {
+  margin: 0;
+  font-size: 16.5px;
+  font-weight: 750;
+  line-height: 1.25;
+  overflow-wrap: anywhere;    /* nombres largos parten en vez de desbordar */
+}
+
+/* --- Marcas de la jornada --- */
+.marcas { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+.marca-tipo {
+  padding: 4px 11px;
+  border-radius: var(--radius-pill);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  flex: none;
+}
+.marca-tipo[data-tipo="entrada"] { background: var(--soft); color: var(--primary-strong); }
+.marca-tipo[data-tipo="salida"]  { background: var(--warn-soft); color: var(--warn-ink); }
+.marca-hora { font-size: 19px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.marca-meta {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* --- Fila del aeropuerto --- */
+.fila-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border-radius: var(--radius);
+  background: var(--info-soft);
+}
+.fila-puesto {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius);
+  background: var(--info);
+  color: #fff;
+  flex: none;
+}
+.fila-puesto strong { font-size: 27px; font-weight: 800; line-height: 1; }
+.fila-puesto span { margin-top: 2px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; opacity: .85; }
+.fila-info { min-width: 0; }
+.fila-info strong { display: block; font-size: 17px; font-weight: 750; }
+.fila-info span { font-size: 13.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+
+/* --- Viajes de hoy --- */
+.viajes-hero { display: flex; align-items: center; gap: 14px; }
+.viajes-total {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: #fff;
+  flex: none;
+}
+.viajes-total strong { font-size: 28px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.viajes-total span { margin-top: 2px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; opacity: .85; }
+.viajes-info { min-width: 0; }
+.viajes-info strong { display: block; font-size: 17px; font-weight: 750; }
+.viajes-info span { font-size: 13.5px; color: var(--ink-2); }
+
+.viajes-aviso {
+  margin: 12px 0 0;
+  padding: 8px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.viajes-lista { display: flex; flex-direction: column; gap: 7px; margin: 14px 0 0; padding: 0; list-style: none; }
+.viaje {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+.viaje-num {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--soft);
+  color: var(--primary-strong);
+  font-size: 12.5px;
+  font-weight: 800;
+  flex: none;
+}
+.viaje-hora { flex: none; font-size: 17px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.viaje-ruta { min-width: 0; font-size: 14px; color: var(--ink-2); overflow-wrap: anywhere; }
+
+.viajes-nota { margin: 10px 0 0; font-size: 12px; color: var(--muted); }
+
+/* --- Esqueletos de carga ---
+   Con datos móviles lentos, un bloque que late comunica "viene en camino"
+   mucho mejor que la palabra "Cargando…". */
+.skeleton {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, #e9eee7 25%, #f3f7f1 50%, #e9eee7 75%);
+  background-size: 200% 100%;
+  animation: skeleton 1.3s ease-in-out infinite;
+}
+.card-turno .skeleton {
+  background: linear-gradient(90deg, rgba(255,255,255,.13) 25%, rgba(255,255,255,.22) 50%, rgba(255,255,255,.13) 75%);
+  background-size: 200% 100%;
+}
+.skeleton-linea { height: 15px; margin-bottom: 9px; }
+.skeleton-titulo { height: 34px; width: 62%; margin-bottom: 15px; }
+.skeleton-bloque { height: 62px; }
+@keyframes skeleton { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* --- Accesos rápidos --- */
+.quick-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+.quick-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 92px;
+  padding: 14px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 650;
+  font-size: 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
+}
+.quick-action .ico { width: 26px; height: 26px; color: var(--primary); }
+.quick-action:hover { border-color: var(--primary); box-shadow: var(--shadow); }
+.quick-action:active { transform: translateY(1px); }
+.quick-action:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--primary-glow); }
+
+.version-note { margin: 2px 0 0; text-align: center; font-size: 12px; color: var(--muted); }
+
+/* ------------------------------------------------------------- navegación */
+.navbar {
+  grid-row: 3;
+  display: flex;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 20;
+}
+
+.nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: var(--navbar-h);
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: color var(--transition);
+  position: relative;
+}
+.nav-item .ico { width: 23px; height: 23px; }
+.nav-item.active { color: var(--primary); }
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 34px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--primary);
+}
+.nav-item:focus-visible { outline: none; box-shadow: inset 0 0 0 3px var(--primary-glow); }
+
+/* --------------------------------------------------------- hoja de perfil */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(9, 33, 18, .5);
+}
+
+.sheet {
+  width: 100%;
+  max-width: 480px;
+  max-height: 86dvh;
+  overflow: auto;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  background: var(--panel);
+  box-shadow: var(--shadow-lg);
+  padding-bottom: env(safe-area-inset-bottom);
+  animation: sheet-up 220ms cubic-bezier(.2, .7, .3, 1);
+}
+@keyframes sheet-up { from { transform: translateY(16px); opacity: .5; } to { transform: none; opacity: 1; } }
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.sheet-head h3 { margin: 0; font-size: 17px; font-weight: 750; }
+
+.sheet-body { padding: 16px 18px 22px; display: flex; flex-direction: column; gap: 11px; }
+
+/* Recordatorio antes de validar tiquetes: el número va enorme porque es justo
+   lo que el conductor debe elegir después en Distribusion. */
+.confirma-bloque { display: flex; flex-direction: column; gap: 11px; }
+.confirma-lead { margin: 0; font-size: 15px; color: var(--ink-2); text-align: center; }
+.confirma-vehiculo {
+  margin: 0;
+  font-size: 56px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -1px;
+  color: var(--primary);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.confirma-recordatorio {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid #f0dfb4;
+  border-radius: var(--radius);
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+  font-size: 14.5px;
+  font-weight: 550;
+  line-height: 1.4;
+}
+.confirma-recordatorio .ico { width: 20px; height: 20px; margin-top: 1px; }
+.confirma-recordatorio strong { font-weight: 800; }
+.confirma-meta { margin: 0; font-size: 13px; color: var(--muted); text-align: center; }
+.confirma-nota { margin: 2px 0 0; font-size: 12px; color: var(--muted); text-align: center; }
+
+.perfil-list { margin: 0 0 8px; display: flex; flex-direction: column; gap: 11px; }
+.perfil-list > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 11px;
+  border-bottom: 1px dashed var(--line);
+}
+.perfil-list dt { font-size: 13.5px; color: var(--muted); font-weight: 600; flex: none; }
+.perfil-list dd { margin: 0; font-size: 15px; font-weight: 700; text-align: right; overflow-wrap: anywhere; }
+
+/* ---------------------------------------------------------------- arranque */
+/* Sin internet: bloquea todo (login, módulos, hojas y hasta la pantalla de
+   carga) mientras no haya conexión, porque el portal no se usa sin internet. */
+.sin-internet {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 18px calc(24px + env(safe-area-inset-bottom));
+  background: rgba(18, 25, 15, .74);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+.sin-internet-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 380px;
+  padding: 28px 24px 22px;
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+.sin-internet-icono {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 4px;
+  border-radius: 50%;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.sin-internet-icono .ico { width: 32px; height: 32px; }
+.sin-internet h2 { margin: 0; font-size: 21px; font-weight: 800; letter-spacing: -.3px; }
+.sin-internet p { margin: 0; font-size: 15px; color: var(--ink-2); }
+.sin-internet .sin-internet-nota { font-size: 12.5px; color: var(--muted); }
+
+.boot-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 17px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 14.5px;
+}
+.boot-logo { width: 116px; height: auto; }
+.boot-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--line-strong);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* =========================================================================
+   Identificación por programación
+   Paso 1 cédula · paso 2 el portal trae conductor y vehículo y él confirma.
+   ========================================================================= */
+.identify-card { max-width: 460px; }
+
+.btn-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.btn-link:hover { text-decoration: underline; }
+.btn-link:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--primary-glow); }
+.btn-link-muted { margin-top: 0; color: var(--muted); }
+
+.btn-back {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  min-height: 40px;
+  margin: -10px 0 10px -8px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-back:hover { background: var(--soft); color: var(--primary-strong); }
+.btn-back .ico { width: 18px; height: 18px; }
+
+.turnos-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+}
+
+/* Cada turno es un botón grande: el conductor lo toca con el pulgar. */
+.turno-opcion {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
+}
+button.turno-opcion:hover { border-color: var(--primary); box-shadow: var(--shadow); }
+button.turno-opcion:active { transform: translateY(1px); }
+button.turno-opcion:focus-visible { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-glow); }
+
+.turno-opcion[data-estado="terminado"],
+.turno-opcion[data-estado="cumplido"] { background: var(--panel-2); }
+.turno-opcion[data-estado="terminado"] .turno-opcion-vehiculo strong,
+.turno-opcion[data-estado="terminado"] .turno-opcion-horas { color: var(--muted); }
+
+.turno-opcion-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.turno-opcion-num {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.estado-chip {
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--info-soft);
+  color: var(--info);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.estado-chip[data-estado="en-curso"] { background: var(--soft); color: var(--primary-strong); }
+.estado-chip[data-estado="terminado"] { background: #eceeea; color: var(--muted); }
+/* Estados que salen de las marcas reales */
+.estado-chip[data-estado="iniciado"] { background: var(--primary); color: #fff; }
+.estado-chip[data-estado="cumplido"] { background: #eceeea; color: var(--ink-2); }
+
+/* El vehículo es lo que el conductor viene a confirmar: es lo más grande. */
+.turno-opcion-vehiculo { display: flex; align-items: baseline; gap: 9px; }
+.turno-opcion-vehiculo span {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.turno-opcion-vehiculo strong {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -.8px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.turno-opcion-horas {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -.4px;
+  font-variant-numeric: tabular-nums;
+  color: var(--primary-strong);
+}
+.turno-opcion-meta { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+/* Entrada ya registrada: marca real, no la hora programada */
+.turno-opcion-marca {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+  padding: 8px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+  color: var(--primary-strong);
+  font-size: 13.5px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.turno-opcion-marca .ico { width: 17px; height: 17px; stroke-width: 2.6; }
+
+.turno-opcion-cta {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* Conductor encontrado con la cédula */
+.conductor-encontrado {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 14px;
+  padding: 14px 15px;
+  border-radius: var(--radius-lg);
+  background: var(--soft);
+  text-align: left;
+}
+.conductor-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  flex: none;
+}
+.conductor-avatar .ico { width: 25px; height: 25px; }
+.conductor-datos { display: flex; flex-direction: column; min-width: 0; }
+.conductor-datos strong { font-size: 18px; font-weight: 800; line-height: 1.25; overflow-wrap: anywhere; }
+.conductor-datos span { font-size: 13.5px; color: var(--ink-2); }
+
+.confirmar-pregunta { margin: 0 0 12px; font-size: 15px; color: var(--ink-2); text-align: left; }
+
+.sin-programacion { margin-top: 2px; text-align: left; }
+
+.turnos-aviso { margin: 0; }
+
+/* Entrada registrada, dentro de la tarjeta verde del turno */
+.turno-marca {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 13px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, .15);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.turno-marca .ico { width: 18px; height: 18px; stroke-width: 2.6; }
+
+/* Relevo, dentro de la tarjeta verde del turno */
+.turno-relevo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 7px;
+  margin-top: 10px;
+  padding: 10px 13px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, .1);
+  font-size: 14px;
+}
+.turno-relevo-verbo { color: rgba(255, 255, 255, .78); }
+.turno-relevo strong { font-weight: 750; overflow-wrap: anywhere; }
+.turno-relevo-hora { flex-basis: 100%; font-size: 12.5px; color: rgba(255, 255, 255, .7); }
+
+/* =========================================================================
+   Pantallas anchas: la navegación pasa a barra lateral.
+   El contenido NO se estira a lo ancho: una línea de 1900px es ilegible, así
+   que se mantiene la columna de lectura, igual que en el teléfono.
+   ========================================================================= */
+@media (min-width: 880px) {
+  .app-view {
+    grid-template-columns: 236px 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .topbar { grid-row: 1; grid-column: 1 / -1; padding-left: 20px; padding-right: 20px; }
+
+  .navbar {
+    grid-row: 2;
+    grid-column: 1;
+    flex-direction: column;
+    border-top: 0;
+    border-right: 1px solid var(--line);
+    padding: 14px 11px;
+    gap: 4px;
+  }
+  .nav-item {
+    flex: none;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 12px;
+    min-height: 46px;
+    padding: 0 14px;
+    border-radius: var(--radius-sm);
+    font-size: 14.5px;
+  }
+  .nav-item.active { background: var(--soft); }
+  .nav-item.active::before {
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 24px;
+    border-radius: 0 3px 3px 0;
+  }
+
+  .content { grid-row: 2; grid-column: 2; }
+
+  .home { padding: 24px 24px 32px; gap: 15px; }
+  .home-greeting h2 { font-size: 28px; }
+
+  .quick-actions { grid-template-columns: repeat(3, 1fr); }
+
+  .sheet-overlay { align-items: center; }
+  .sheet { border-radius: var(--radius-xl); max-height: 80dvh; }
+}
+
+/* En pantallas muy anchas el inicio se reparte en dos columnas para no dejar
+   una tira estrecha de tarjetas perdida en el centro. */
+@media (min-width: 1200px) {
+  .home {
+    max-width: 1060px;
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    align-content: start;
+    gap: 16px;
+  }
+  .home-greeting,
+  .offline-note,
+  .quick-actions,
+  .version-note { grid-column: 1 / -1; }
+  .card-turno,
+  #cardViajes { grid-column: 1 / -1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

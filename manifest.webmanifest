@@ -1,0 +1,50 @@
+{
+  "id": "/portal-conductor/",
+  "name": "Portal del Conductor · Combuses",
+  "short_name": "Conductor",
+  "description": "Tu turno, tu asistencia y tu posición en la fila del aeropuerto, en un solo lugar.",
+  "start_url": "./index.html?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#f4f7f1",
+  "theme_color": "#0b6b3a",
+  "lang": "es-CO",
+  "dir": "ltr",
+  "categories": ["productivity", "business"],
+  "icons": [
+    {
+      "src": "./assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Marcar asistencia",
+      "short_name": "Marcar",
+      "url": "./index.html#/asistencia",
+      "icons": [{ "src": "./assets/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Fila del aeropuerto",
+      "short_name": "Fila",
+      "url": "./index.html#/aeropuerto",
+      "icons": [{ "src": "./assets/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

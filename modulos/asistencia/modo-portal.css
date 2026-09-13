@@ -1,0 +1,42 @@
+/* ==========================================================================
+   Modo portal - módulo de asistencia biométrica
+
+   Todas las reglas cuelgan de html[data-embed="portal"], atributo que solo se
+   pone cuando la URL trae ?embed=portal (ver modo-portal.js). Abierto de forma
+   normal, este archivo no cambia absolutamente nada.
+
+   Qué recorta:
+   - La cabecera del módulo (logo, título, estado de conexión, cerrar sesión):
+     el portal ya muestra todo eso arriba, repetirlo roba pantalla en un móvil.
+   - Las pestañas de administración: el Portal del Conductor es solo para
+     conductores, así que no deben aparecer ni cuando la cuenta es de un admin.
+
+   Es un recorte de interfaz, no de permisos: quien decide lo que un usuario
+   puede leer o escribir son las políticas Row Level Security de Supabase.
+   ========================================================================== */
+
+/* --- Cabecera duplicada --- */
+html[data-embed="portal"] .topbar {
+  display: none !important;
+}
+
+/* --- Pestañas que no son del conductor --- */
+html[data-embed="portal"] #base3TabButton,
+html[data-embed="portal"] #adminTabButton,
+html[data-embed="portal"] #manualExitTabButton {
+  display: none !important;
+}
+
+/* Recuperamos el espacio que dejó la cabecera. */
+html[data-embed="portal"] .shell {
+  padding-top: 8px;
+}
+
+/* La pantalla de login del módulo sobra cuando la sesión llega heredada del
+   portal (mismo origen = mismo localStorage), que es el caso normal. Solo la
+   ocultamos si de verdad hay sesión: esconderla sin haberla heredado dejaría
+   al conductor ante un recuadro vacío. Ese caso lo marca modo-portal.js con
+   data-sesion="no". */
+html[data-embed="portal"]:not([data-sesion="no"]) #loginView {
+  display: none !important;
+}

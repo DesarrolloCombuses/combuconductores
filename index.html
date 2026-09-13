@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Portal del Conductor · Combuses</title>
+
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#0b6b3a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Portal Conductor">
+  <link rel="apple-touch-icon" href="./assets/icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./assets/icon-192.png">
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="./css/portal.css?v=1.5.6">
+</head>
+<body>
+
+<!-- ============ 1. LOGIN ============ -->
+<section id="loginView" class="view login-view" hidden>
+  <form id="loginForm" class="login-card" autocomplete="on">
+    <img class="login-logo" src="./assets/logo-combuses.webp" alt="Combuses">
+    <h1 class="login-title">Portal del Conductor</h1>
+    <p class="login-subtitle">Ingresa con tu usuario Combuses</p>
+
+    <label class="field">
+      <span>Usuario</span>
+      <input id="loginEmail" type="email" autocomplete="username" required
+             placeholder="usuario@combuses.com.co" inputmode="email">
+    </label>
+
+    <label class="field">
+      <span>Contraseña</span>
+      <input id="loginPassword" type="password" autocomplete="current-password" required
+             placeholder="••••••••">
+    </label>
+
+    <p id="loginError" class="form-error" hidden></p>
+
+    <button id="loginSubmit" class="btn btn-primary btn-block" type="submit">Entrar</button>
+  </form>
+</section>
+
+<!-- ============ 2. IDENTIFICACIÓN DEL CONDUCTOR ============ -->
+<!-- El login autentica el usuario Combuses. Aquí el conductor escribe su cédula
+     y el portal le trae su nombre y el vehículo que tiene programado hoy. -->
+<section id="identifyView" class="view identify-view" hidden>
+  <div class="identify-card">
+
+    <!-- Paso 1: cédula -->
+    <div id="pasoCedula">
+      <img class="login-logo" src="./assets/logo-combuses.webp" alt="Combuses">
+      <h1 class="login-title">Ingresa tu cédula</h1>
+      <p class="login-subtitle">Te traemos tu vehículo y tu turno de la programación de hoy.</p>
+
+      <form id="identifyForm" autocomplete="off">
+        <label class="field">
+          <span>Cédula</span>
+          <input id="identifyDni" class="input-dni" type="text" inputmode="numeric" pattern="[0-9]*"
+                 autocomplete="off" required placeholder="1017234567" maxlength="15">
+        </label>
+        <p id="identifyError" class="form-error" hidden></p>
+        <button id="identifySubmit" class="btn btn-primary btn-block" type="submit">Buscar mi programación</button>
+      </form>
+
+      <button id="btnCancelarCambio" class="btn-link btn-link-muted" type="button" hidden>Cancelar y volver</button>
+    </div>
+
+    <!-- Paso 2: confirmar conductor y vehículo -->
+    <div id="pasoConfirmar" hidden>
+      <button id="btnVolverDeConfirmar" class="btn-back" type="button">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        No soy yo
+      </button>
+
+      <div class="conductor-encontrado">
+        <span class="conductor-avatar" aria-hidden="true"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span>
+        <div class="conductor-datos">
+          <strong id="confirmarNombre"></strong>
+          <span id="confirmarDni"></span>
+        </div>
+      </div>
+
+      <p id="confirmarPregunta" class="confirmar-pregunta"></p>
+      <div id="turnosLista" class="turnos-lista"></div>
+
+      <!-- Solo cuando no tiene programación hoy -->
+      <form id="sinProgramacionForm" class="sin-programacion" autocomplete="off" hidden>
+        <label class="field">
+          <span>Vehículo que vas a manejar (opcional)</span>
+          <input id="vehiculoManualInput" class="input-dni" type="text" inputmode="numeric"
+                 autocomplete="off" placeholder="742" maxlength="8">
+        </label>
+        <button class="btn btn-primary btn-block" type="submit">Continuar</button>
+      </form>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============ 3. APLICACIÓN ============ -->
+<section id="appView" class="view app-view" hidden>
+
+  <header class="topbar">
+    <div class="topbar-brand">
+      <img class="topbar-logo" src="./assets/logo-combuses.webp" alt="Combuses">
+      <div class="topbar-titles">
+        <strong id="topbarTitle">Inicio</strong>
+        <span id="topbarSubtitle" class="topbar-subtitle"></span>
+      </div>
+    </div>
+
+    <div class="topbar-actions">
+      <button id="btnInstall" class="icon-btn" type="button" hidden
+              title="Instalar la aplicación" aria-label="Instalar la aplicación">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+      </button>
+      <button id="btnReloadModule" class="icon-btn" type="button" hidden
+              title="Recargar el módulo" aria-label="Recargar el módulo">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.2M21 12a9 9 0 0 1-15.5 6.2"/><path d="M18 3v5h-5M6 21v-5h5"/></svg>
+      </button>
+      <span id="netStatus" class="net-status" data-online="false" title="Estado de la conexión">
+        <span class="net-dot" aria-hidden="true"></span>
+        <span class="net-label">Sin conexión</span>
+      </span>
+      <button id="btnLogout" class="icon-btn" type="button"
+              title="Cerrar sesión" aria-label="Cerrar sesión">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="content">
+
+    <!-- ---- Inicio (vista nativa del portal) ---- -->
+    <div class="module-panel" data-panel="inicio">
+      <div class="home">
+
+        <div class="home-greeting">
+          <h2 id="homeGreeting">Hola</h2>
+          <p id="homeDate" class="home-date"></p>
+        </div>
+
+        <!-- Aviso cuando lo que se muestra viene de la última carga guardada -->
+        <div id="offlineNote" class="offline-note" hidden>
+          <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 9v4m0 4h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+          <span id="offlineNoteText"></span>
+        </div>
+
+        <!-- Mi turno de hoy -->
+        <article class="card card-turno" id="cardTurno">
+          <header class="card-head">
+            <h3>Mi turno de hoy</h3>
+            <button id="btnCambiarVehiculo" class="btn btn-ghost btn-sm" type="button">Cambiar conductor</button>
+          </header>
+          <div id="turnoBody" class="card-body">
+            <div class="skeleton skeleton-titulo"></div>
+            <div class="skeleton skeleton-bloque"></div>
+          </div>
+        </article>
+
+        <!-- Viajes de hoy: despachos activos del bus del turno -->
+        <article class="card" id="cardViajes">
+          <header class="card-head">
+            <h3>Viajes de hoy</h3>
+            <button id="btnRefrescarViajes" class="btn btn-ghost btn-sm" type="button" hidden>Actualizar</button>
+          </header>
+          <div id="viajesBody" class="card-body">
+            <div class="skeleton skeleton-linea"></div>
+            <div class="skeleton skeleton-linea" style="width:70%"></div>
+          </div>
+        </article>
+
+        <!-- Mi jornada (marcas de hoy) -->
+        <article class="card" id="cardJornada">
+          <header class="card-head">
+            <h3>Mi jornada de hoy</h3>
+          </header>
+          <div id="jornadaBody" class="card-body">
+            <div class="skeleton skeleton-linea"></div>
+            <div class="skeleton skeleton-linea" style="width:70%"></div>
+          </div>
+        </article>
+
+        <!-- Mi fila en el aeropuerto -->
+        <article class="card" id="cardFila">
+          <header class="card-head">
+            <h3>Mi fila en el aeropuerto</h3>
+          </header>
+          <div id="filaBody" class="card-body">
+            <div class="skeleton skeleton-bloque"></div>
+          </div>
+        </article>
+
+        <!-- Accesos directos -->
+        <div class="quick-actions">
+          <button class="quick-action" type="button" data-goto="asistencia">
+            <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+            <span>Marcar asistencia</span>
+          </button>
+          <button class="quick-action" type="button" data-goto="aeropuerto">
+            <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M17.8 19.8 16 14l-4 1-4-1-1.8 5.8"/><path d="M22 12c0-1.1-.9-2-2-2h-3l-4-7h-2l1.5 7H8L6 8H4l1 4-1 4h2l2-2h4.5L11 21h2l4-7h3c1.1 0 2-.9 2-2Z"/></svg>
+            <span>Ver la fila</span>
+          </button>
+          <button class="quick-action" type="button" data-goto="tiquetes">
+            <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M3 9a3 3 0 0 0 0 6v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a3 3 0 0 0 0-6V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2Z"/><path d="M13 5v2M13 11v2M13 17v2"/></svg>
+            <span>Validar tiquetes</span>
+          </button>
+        </div>
+
+        <p class="version-note">Portal del Conductor <span id="versionLabel"></span></p>
+      </div>
+    </div>
+
+    <!-- ---- Módulos embebidos: los iframes los inserta portal.js ---- -->
+    <div class="module-panel" data-panel="asistencia" hidden></div>
+    <div class="module-panel" data-panel="aeropuerto" hidden></div>
+    <!-- Sistema externo (Distribusion): barra propia + iframe, sin sesión compartida -->
+    <div class="module-panel module-panel-externo" data-panel="tiquetes" hidden></div>
+
+  </main>
+
+  <!-- Navegación inferior (móvil) / lateral (escritorio) -->
+  <nav class="navbar" aria-label="Secciones del portal">
+    <button class="nav-item active" type="button" data-nav="inicio">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M9 22V12h6v10"/></svg>
+      <span>Inicio</span>
+    </button>
+    <button class="nav-item" type="button" data-nav="asistencia">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+      <span>Asistencia</span>
+    </button>
+    <button class="nav-item" type="button" data-nav="aeropuerto">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M17.8 19.8 16 14l-4 1-4-1-1.8 5.8"/><path d="M22 12c0-1.1-.9-2-2-2h-3l-4-7h-2l1.5 7H8L6 8H4l1 4-1 4h2l2-2h4.5L11 21h2l4-7h3c1.1 0 2-.9 2-2Z"/></svg>
+      <span>Aeropuerto</span>
+    </button>
+    <button class="nav-item" type="button" data-nav="tiquetes">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M3 9a3 3 0 0 0 0 6v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a3 3 0 0 0 0-6V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2Z"/><path d="M13 5v2M13 11v2M13 17v2"/></svg>
+      <span>Tiquetes</span>
+    </button>
+    <button class="nav-item" type="button" data-nav="perfil">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+      <span>Perfil</span>
+    </button>
+  </nav>
+</section>
+
+<!-- ============ Hoja de perfil ============ -->
+<div id="perfilSheet" class="sheet-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="perfilSheetTitle">
+    <header class="sheet-head">
+      <h3 id="perfilSheetTitle">Mi perfil</h3>
+      <button id="perfilSheetClose" class="icon-btn" type="button" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <dl class="perfil-list">
+        <div><dt>Conductor</dt><dd id="perfilNombre">—</dd></div>
+        <div><dt>Cédula</dt><dd id="perfilDni">—</dd></div>
+        <div><dt>Vehículo</dt><dd id="perfilVehiculo">—</dd></div>
+        <div><dt>Turno</dt><dd id="perfilTurno">—</dd></div>
+        <div><dt>Base</dt><dd id="perfilBase">—</dd></div>
+        <div><dt>Usuario</dt><dd id="perfilEmail">—</dd></div>
+      </dl>
+      <button id="btnCambiarSeleccion" class="btn btn-ghost btn-block" type="button">Cambiar de conductor</button>
+      <button id="btnLogoutSheet" class="btn btn-danger btn-block" type="button">Cerrar sesión</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Recordatorio del vehículo antes de validar tiquetes ============ -->
+<div id="tiquetesSheet" class="sheet-overlay" hidden>
+  <div class="sheet" role="alertdialog" aria-modal="true" aria-labelledby="tiquetesSheetTitle">
+    <header class="sheet-head">
+      <h3 id="tiquetesSheetTitle">Validación de tiquetes</h3>
+      <button id="tiquetesSheetClose" class="icon-btn" type="button" aria-label="Cancelar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body">
+
+      <div id="tiquetesConVehiculo" class="confirma-bloque">
+        <p class="confirma-lead">Usted está validando tiquetes del vehículo</p>
+        <p id="tiquetesVehiculo" class="confirma-vehiculo">—</p>
+        <div class="confirma-recordatorio">
+          <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 9v4m0 4h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+          <span>En Distribusion debe seleccionar el vehículo <strong id="tiquetesVehiculoRecordatorio">—</strong>. Si elige otro, los tiquetes quedan en el vehículo equivocado.</span>
+        </div>
+        <p id="tiquetesConductor" class="confirma-meta"></p>
+        <button id="btnConfirmarTiquetes" class="btn btn-primary btn-block" type="button">
+          Confirmo, es el vehículo&nbsp;<span id="tiquetesVehiculoBoton">—</span>
+        </button>
+        <button id="btnCancelarTiquetes" class="btn btn-ghost btn-block" type="button">Cancelar</button>
+        <p class="confirma-nota">Su confirmación queda registrada con su cédula, el vehículo y la hora.</p>
+      </div>
+
+      <div id="tiquetesSinVehiculo" class="confirma-bloque" hidden>
+        <p class="placeholder">No tiene vehículo asignado en la programación de hoy. Confirme su vehículo antes de validar tiquetes.</p>
+        <button id="btnTiquetesCambiarConductor" class="btn btn-primary btn-block" type="button">Ingresar cédula o vehículo</button>
+        <button id="btnTiquetesVolver" class="btn btn-ghost btn-block" type="button">Volver</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ============ Sin internet: el portal exige conexión ============ -->
+<div id="sinInternet" class="sin-internet" role="alertdialog" aria-modal="true"
+     aria-labelledby="sinInternetTitulo" aria-describedby="sinInternetTexto" hidden>
+  <div class="sin-internet-card">
+    <div class="sin-internet-icono" aria-hidden="true">
+      <svg viewBox="0 0 24 24" class="ico"><path d="M2 8.8a15 15 0 0 1 20 0"/><path d="M5 12.9a10 10 0 0 1 14 0"/><path d="M8.5 16.4a5 5 0 0 1 7 0"/><path d="M12 20h.01"/><path d="m3 3 18 18"/></svg>
+    </div>
+    <h2 id="sinInternetTitulo">Sin conexión a internet</h2>
+    <p id="sinInternetTexto">Para usar el portal debe estar conectado a internet. Revise los datos móviles o el Wi-Fi.</p>
+    <button id="btnReintentarInternet" class="btn btn-primary btn-block" type="button">Reintentar</button>
+    <p class="sin-internet-nota">Se vuelve a intentar solo cada pocos segundos.</p>
+  </div>
+</div>
+
+<!-- ============ Cargando ============ -->
+<div id="bootOverlay" class="boot-overlay">
+  <img class="boot-logo" src="./assets/logo-combuses.webp" alt="Combuses">
+  <div class="boot-spinner" aria-hidden="true"></div>
+  <p>Abriendo el portal…</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./js/portal-config.js?v=1.5.6"></script>
+<script src="./js/portal.js?v=1.5.6"></script>
+</body>
+</html>

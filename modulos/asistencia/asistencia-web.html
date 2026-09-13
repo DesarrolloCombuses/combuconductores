@@ -1,0 +1,1735 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Asistencia</title>
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#0a6b3b">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Asistencia">
+  <link rel="apple-touch-icon" href="./assets/icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./assets/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="./assets/icon-512.png">
+  <link rel="icon" type="image/webp" href="./assets/logo-combuses.webp">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="./asistencia.css?v=20260906a-fix-duplicate-dni-colaborador">
+
+  <!-- Modo portal: recorta la cabecera y las pestañas de administración cuando
+       el Portal del Conductor embebe este módulo con ?embed=portal.
+       Abierto normalmente, ninguno de los dos archivos cambia nada. -->
+  <link rel="stylesheet" href="./modo-portal.css">
+  <script src="./modo-portal.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <section id="loginView" class="auth-view">
+      <form id="loginForm" class="panel auth-panel" autocomplete="on">
+        <div class="brand-block">
+          <img class="brand-logo" src="./assets/logo-combuses.webp" alt="Combuses">
+          <div>
+            <h1>Combuses <span class="app-pill app-pill-conductores">Conductores</span></h1>
+            <p>Control de ingreso y salida</p>
+          </div>
+        </div>
+
+        <label>
+          Usuario
+          <input id="emailInput" type="email" autocomplete="username" required>
+        </label>
+
+        <label>
+          Contraseña
+          <input id="passwordInput" type="password" autocomplete="current-password" required>
+        </label>
+
+        <button class="primary" type="submit">
+          <i data-lucide="log-in"></i>
+          Iniciar sesión
+        </button>
+
+        <p id="loginMessage" class="message" role="status"></p>
+      </form>
+    </section>
+
+    <section id="appView" class="app-view hidden">
+      <header class="topbar">
+        <div>
+          <div class="top-brand">
+            <img class="top-logo" src="./assets/logo-combuses.webp" alt="Combuses">
+            <h1>Registro de asistencia <span class="app-pill app-pill-conductores">Conductores</span></h1>
+          </div>
+          <p id="userLabel"></p>
+        </div>
+        <div class="top-actions">
+          <button id="installPwaButton" class="install-pwa-button hidden" type="button" title="Instalar como aplicacion">
+            <i data-lucide="download"></i>
+            <span>Instalar app</span>
+          </button>
+          <span id="deviceModeBadge" class="device-mode-badge" data-mode="desktop" title="Modo de visualizacion">
+            <i data-lucide="monitor"></i>
+            <span>Web</span>
+          </span>
+          <span id="connectionStatus" class="connection-status offline">Sin conexión</span>
+          <button id="logoutButton" class="icon-button" type="button" aria-label="Cerrar sesión" title="Cerrar sesión">
+            <i data-lucide="log-out"></i>
+          </button>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="Secciones">
+        <button id="registerTabButton" class="tab-button active" type="button">
+          <i data-lucide="clipboard-check"></i>
+          Registro
+        </button>
+        <button id="historyTabButton" class="tab-button" type="button">
+          <i data-lucide="list-checks"></i>
+          Mis registros
+        </button>
+        <button id="base3TabButton" class="tab-button" type="button">
+          <i data-lucide="ticket"></i>
+          Fichos Base 3
+        </button>
+        <button id="adminTabButton" class="tab-button hidden" type="button">
+          <i data-lucide="shield-check"></i>
+          Administración
+          <span id="adminTabBadge" class="tab-badge hidden" aria-label="Turnos vencidos sin cerrar">0</span>
+        </button>
+        <button id="manualExitTabButton" class="tab-button hidden" type="button">
+          <i data-lucide="log-out"></i>
+          Salida incapacidad
+        </button>
+      </nav>
+
+      <div id="registerPanel" class="register-layout">
+        <form id="attendanceForm" class="panel form-panel">
+          <div class="tutorial-bar">
+            <button id="tutorialButton" class="tutorial-open" type="button">
+              <i data-lucide="help-circle"></i>
+              ¿Cómo marcar?
+            </button>
+          </div>
+          <div class="step-list" aria-label="Proceso de registro">
+            <div id="stepDni" class="step-item active">
+              <span>1</span>
+              <strong>Validar cédula</strong>
+            </div>
+            <div id="stepPhoto" class="step-item">
+              <span>2</span>
+              <strong>Capturar rostro</strong>
+            </div>
+            <div id="stepRegister" class="step-item">
+              <span>3</span>
+              <strong>Registrar marca</strong>
+            </div>
+          </div>
+          <p id="stepGuideText" class="step-guide-text" aria-live="polite"></p>
+
+          <div class="field-row">
+            <label>
+              Cédula
+              <input id="dniInput" type="text" inputmode="numeric" autocomplete="off" required>
+            </label>
+            <button id="searchButton" class="secondary" type="button">
+              <i data-lucide="search"></i>
+              Validar
+            </button>
+          </div>
+
+          <div id="driverGreetingCard" class="driver-greeting-card hidden" aria-live="polite"></div>
+
+          <div id="collaboratorBox" class="result-box muted">
+            Digita una cédula para validar si está activa.
+          </div>
+
+          <div id="turnoStatusBanner" class="turno-status-banner hidden" role="status" aria-live="polite"></div>
+
+          <div id="programacionBanner" class="programacion-banner hidden" role="status" aria-live="polite"></div>
+
+          <div class="server-time-box">
+            <label>
+              Fecha de reporte
+              <input id="reportDateInput" type="date" disabled>
+            </label>
+            <label>
+              Hora de reporte
+              <input id="reportTimeInput" type="time" disabled>
+            </label>
+          </div>
+          <p id="reportTimeHint" class="field-hint">La fecha y hora vienen del servidor.</p>
+
+          <div id="driverFields" class="driver-fields hidden">
+            <div class="section-head compact">
+              <div>
+                <h2>Datos del conductor</h2>
+                <p>Se solicitan porque el cargo corresponde a conductor.</p>
+              </div>
+            </div>
+            <div class="field-row">
+              <label>
+                Vehículo
+                <input id="vehicleInput" list="vehiclesDatalist" type="text"
+                  placeholder="Seleccione vehículo (escriba interno o placa)"
+                  autocomplete="off" inputmode="search">
+                <datalist id="vehiclesDatalist"></datalist>
+                <small class="field-hint" id="vehicleHint">Selecciona el interno asignado para hoy.</small>
+              </label>
+              <label>
+                Base operativa
+                <input id="baseInput" type="text" autocomplete="off" placeholder="Base operativa">
+              </label>
+            </div>
+            <div id="attendanceDriverBox" class="result-box muted">
+              Al validar la cédula del conductor se consultará Sonar y se preparará el vehículo para la asignación.
+            </div>
+          </div>
+
+          <section id="locationSection" class="location-box hidden">
+            <div class="location-header">
+              <strong>Ubicación <span class="location-required">(obligatoria)</span></strong>
+              <p id="locationStatus">Pendiente por validar coordenadas.</p>
+            </div>
+            <div id="locationMap" class="location-map" aria-label="Mapa con tu ubicación"></div>
+            <div id="locationPermissionHelp" class="location-help hidden">
+              <strong>No podemos acceder a tu ubicación</strong>
+              <p>La ubicación es obligatoria para registrar. Sigue estos pasos para habilitar el GPS:</p>
+              <ol>
+                <li>Toca el <strong>candado</strong> o el ícono de información al lado de la dirección web (URL).</li>
+                <li>Busca <strong>"Ubicación"</strong> y selecciona <strong>"Permitir"</strong>.</li>
+                <li>Recarga la página (Ctrl+R) y vuelve a tocar "Activar ubicación".</li>
+              </ol>
+              <p class="muted">Si usas el celular, también revisa que el GPS esté encendido en los ajustes del teléfono.</p>
+            </div>
+            <button id="locationButton" class="secondary" type="button">
+              <i data-lucide="map-pin"></i>
+              Activar ubicación
+            </button>
+          </section>
+
+          <div id="markControls" class="hidden">
+            <div id="nextMarkBox" class="next-mark-box">
+              <div class="sentido-selector-label">Tipo de marca</div>
+              <div class="sentido-selector">
+                <button id="sentidoEntradaButton" class="sentido-button" type="button" data-sentido="entrada">
+                  <i data-lucide="log-in"></i>
+                  Entrada
+                </button>
+                <button id="sentidoSalidaButton" class="sentido-button" type="button" data-sentido="salida">
+                  <i data-lucide="log-out"></i>
+                  Salida
+                </button>
+              </div>
+              <div id="sentidoSuggestion" class="sentido-suggestion"></div>
+              <div id="jornadaHint" class="jornada-hint hidden"></div>
+            </div>
+
+            <label>
+              Observación
+              <textarea id="observacionInput" rows="3" placeholder="Opcional"></textarea>
+            </label>
+
+            <label class="comprobante-field">
+              Celular para comprobante por WhatsApp (opcional)
+              <input id="celularComprobanteInput" type="tel" inputmode="numeric"
+                     placeholder="Ej: 3001234567" maxlength="15" autocomplete="off">
+              <small id="celularAgendaHint" class="comprobante-agenda hidden"></small>
+              <small class="comprobante-hint">
+                Si el conductor quiere recibir el comprobante de esta marca por WhatsApp,
+                digita su número. Déjalo vacío para no enviar nada.
+              </small>
+            </label>
+          </div>
+
+          <div class="photo-tools">
+            <button id="cameraButton" class="secondary" type="button" disabled>
+              <i data-lucide="camera"></i>
+              Abrir cámara
+            </button>
+          </div>
+
+          <div id="previewBox" class="preview-box hidden">
+            <img id="photoPreview" alt="Foto de asistencia">
+            <div>
+              <strong id="photoName"></strong>
+              <span id="photoSize"></span>
+            </div>
+          </div>
+
+          <button id="submitButton" class="primary wide" type="submit" disabled>
+            <i data-lucide="check-circle-2"></i>
+            Registrar asistencia
+          </button>
+
+          <div id="nextActionNotice" class="next-action-notice hidden" role="status"></div>
+          <p id="formMessage" class="message" role="status"></p>
+          <pre id="bukResultBox" class="response-box hidden"></pre>
+        </form>
+      </div>
+
+      <section id="historyPanel" class="panel history-panel hidden">
+        <div class="section-head">
+          <div>
+            <h2>Mis registros</h2>
+            <p id="historySubtitle">Digita una cedula para consultar</p>
+          </div>
+          <button id="refreshButton" class="icon-button" type="button" aria-label="Actualizar" title="Actualizar">
+            <i data-lucide="refresh-cw"></i>
+          </button>
+        </div>
+        <div class="field-row history-query">
+          <label>
+            Cedula
+            <input id="historyDniInput" type="text" inputmode="numeric" autocomplete="off" placeholder="Cedula del colaborador">
+          </label>
+          <label>
+            Desde
+            <input id="historyStartDateInput" type="date">
+          </label>
+          <label>
+            Hasta
+            <input id="historyEndDateInput" type="date">
+          </label>
+          <button id="historySearchButton" class="secondary" type="button">
+            <i data-lucide="search"></i>
+            Consultar
+          </button>
+        </div>
+        <div id="historySummary" class="history-summary hidden">
+          <div>
+            <span>Total marcas</span>
+            <strong id="historyTotal">0</strong>
+          </div>
+          <div>
+            <span>Ultima marca</span>
+            <strong id="historyLast">--</strong>
+          </div>
+          <div>
+            <span>Proxima</span>
+            <strong id="historyNext">Entrada</strong>
+          </div>
+        </div>
+        <div id="historyList" class="history-list"></div>
+        <div class="pagination-bar">
+          <button id="historyPrevPageButton" class="secondary" type="button" disabled>
+            <i data-lucide="chevron-left"></i>
+            Anterior
+          </button>
+          <span id="historyPageLabel">Pagina 1</span>
+          <button id="historyNextPageButton" class="secondary" type="button" disabled>
+            Siguiente
+            <i data-lucide="chevron-right"></i>
+          </button>
+        </div>
+      </section>
+
+      <template id="oldHistoryPanel">
+        <aside class="panel history-panel">
+          <div class="section-head">
+            <div>
+              <h2>Jornada de hoy</h2>
+              <p id="historySubtitle">Digita una cédula para consultar</p>
+            </div>
+            <button id="refreshButton" class="icon-button" type="button" aria-label="Actualizar" title="Actualizar">
+              <i data-lucide="refresh-cw"></i>
+            </button>
+          </div>
+          <div id="historySummary" class="history-summary hidden">
+            <div>
+              <span>Total marcas</span>
+              <strong id="historyTotal">0</strong>
+            </div>
+            <div>
+              <span>Última marca</span>
+              <strong id="historyLast">--</strong>
+            </div>
+            <div>
+              <span>Próxima</span>
+              <strong id="historyNext">Entrada</strong>
+            </div>
+          </div>
+          <div id="historyList" class="history-list"></div>
+        </aside>
+      </template>
+
+      <section id="base3Panel" class="panel database-panel hidden">
+        <div class="database-toolbar">
+          <div>
+            <h2>Fichos de salida · Base 3</h2>
+            <p id="base3Status">Terminal del Norte. Consulta los fichos por fecha.</p>
+          </div>
+          <div class="database-actions">
+            <label class="search-field">
+              Fecha
+              <input id="base3DateInput" type="date">
+            </label>
+            <button id="base3BuscarButton" class="primary" type="button">
+              <i data-lucide="search"></i>
+              Consultar
+            </button>
+            <button id="base3ExportButton" class="secondary" type="button">
+              <i data-lucide="download"></i>
+              Exportar CSV
+            </button>
+          </div>
+        </div>
+        <p class="field-hint">
+          El ficho es el número de salida. Cada fila muestra el vehículo y sus horas:
+          <strong>Inicia</strong> (entrada turno 1), <strong>Inicia 2</strong> (relevo) y
+          <strong>Hora fin</strong> (fin turno 2).
+        </p>
+        <div id="base3Resultado" class="puntualidad-lista"></div>
+        <p id="base3Message" class="message" role="status"></p>
+      </section>
+
+      <section id="adminPanel" class="admin-panel hidden">
+        <nav class="admin-subtabs" id="adminSubtabs" role="tablist">
+          <button class="admin-subtab active" type="button" data-admin-tab="alerts" role="tab">
+            <i data-lucide="bell-ring"></i>
+            Alertas
+            <span id="adminSubtabAlertsBadge" class="tab-badge hidden">0</span>
+          </button>
+          <button class="admin-subtab" type="button" data-admin-tab="abiertos" role="tab">
+            <i data-lucide="clock"></i>
+            Turnos abiertos
+          </button>
+          <button class="admin-subtab" type="button" data-admin-tab="marcas" role="tab">
+            <i data-lucide="list-checks"></i>
+            Marcas
+          </button>
+          <button class="admin-subtab" type="button" data-admin-tab="jornadas" role="tab">
+            <i data-lucide="calendar-days"></i>
+            Ingresos y salidas
+          </button>
+          <button class="admin-subtab" type="button" data-admin-tab="rechazos" role="tab">
+            <i data-lucide="circle-x"></i>
+            Rechazos Buk
+          </button>
+          <button class="admin-subtab" type="button" data-admin-tab="inconsistencias" role="tab">
+            <i data-lucide="alert-triangle"></i>
+            Revisar registros
+          </button>
+          <button class="admin-subtab" type="button" data-admin-tab="validacion" role="tab">
+            <i data-lucide="clipboard-check"></i>
+            Validación de turnos
+          </button>
+          <button class="admin-subtab" type="button" data-admin-tab="sinmarca" role="tab">
+            <i data-lucide="user-x"></i>
+            Sin marca propia
+          </button>
+          <button class="admin-subtab" type="button" data-admin-tab="corregir" role="tab">
+            <i data-lucide="clock"></i>
+            Corregir horas
+          </button>
+          <button class="admin-subtab" type="button" data-admin-tab="puntualidad" role="tab">
+            <i data-lucide="timer"></i>
+            Puntualidad
+          </button>
+          <button class="admin-subtab" type="button" data-admin-tab="jornadas-anomalas" role="tab">
+            <i data-lucide="alert-triangle"></i>
+            Fuera de horario
+          </button>
+          <button class="admin-subtab" type="button" data-admin-tab="verificador" role="tab">
+            <i data-lucide="clock"></i>
+            Verificador de horarios
+          </button>
+          <button class="admin-subtab" type="button" data-admin-tab="horario" role="tab">
+            <i data-lucide="calendar-days"></i>
+            Horario
+          </button>
+          <button class="admin-subtab" type="button" data-admin-tab="mapa" role="tab">
+            <i data-lucide="map-pin"></i>
+            Mapa de marcas
+          </button>
+          <button class="admin-subtab" type="button" data-admin-tab="colaboradores" role="tab">
+            <i data-lucide="users"></i>
+            Colaboradores
+          </button>
+          <button class="admin-subtab" type="button" data-admin-tab="perfilsociodemografico" role="tab">
+            <i data-lucide="id-card"></i>
+            Perfil sociodemográfico
+          </button>
+          <button class="admin-subtab" type="button" data-admin-tab="rostros" role="tab">
+            <i data-lucide="scan-face"></i>
+            Rostros
+          </button>
+          <button class="admin-subtab" type="button" data-admin-tab="sonar" role="tab">
+            <i data-lucide="bus-front"></i>
+            Sonar
+          </button>
+        </nav>
+
+        <div class="admin-subtab-content" data-admin-content="alerts">
+        <section class="panel form-panel" id="overdueTurnsPanel">
+          <div class="open-turns-head">
+            <div>
+              <h2>Turnos vencidos (mas de 15h sin cerrar)</h2>
+              <p id="overdueTurnsStatus" class="muted">Sin cargar</p>
+            </div>
+            <div class="open-turns-actions">
+              <button id="overdueTurnsExportButton" class="secondary" type="button">
+                <i data-lucide="download"></i>
+                Excel
+              </button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Cédula</th>
+                  <th>Nombre</th>
+                  <th>Cargo</th>
+                  <th>Entrada</th>
+                  <th>Tiempo abierto</th>
+                </tr>
+              </thead>
+              <tbody id="overdueTurnsBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel form-panel" id="sentidoRevisionPanel">
+          <div class="open-turns-head">
+            <div>
+              <h2>Marcas con sentido a revisar</h2>
+              <p id="sentidoRevisionStatus" class="muted">Sin cargar</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Cédula</th>
+                  <th>Nombre</th>
+                  <th>Cargo</th>
+                  <th>Fecha</th>
+                  <th>Hora</th>
+                  <th>Sentido registrado</th>
+                </tr>
+              </thead>
+              <tbody id="sentidoRevisionBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        </div>
+
+        <div class="admin-subtab-content hidden" data-admin-content="abiertos">
+        <section class="panel form-panel" id="openTurnsPanel">
+          <div class="open-turns-head">
+            <div>
+              <h2>Turnos abiertos</h2>
+              <p id="openTurnsStatus" class="muted">Cargando...</p>
+            </div>
+            <div class="open-turns-actions">
+              <button id="openTurnsExportButton" class="secondary" type="button">
+                <i data-lucide="download"></i>
+                Excel
+              </button>
+              <button id="openTurnsReloadButton" class="secondary" type="button">
+                <i data-lucide="refresh-cw"></i>
+                Actualizar
+              </button>
+            </div>
+          </div>
+          <div class="open-turns-filters">
+            <label class="search-field">
+              Buscar
+              <input id="openTurnsSearchInput" type="search" placeholder="Cédula o nombre">
+            </label>
+            <label class="search-field">
+              Cargo
+              <select id="openTurnsCargoFilter" multiple size="4"></select>
+            </label>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Cédula</th>
+                  <th>Nombre</th>
+                  <th>Cargo</th>
+                  <th>Entrada</th>
+                  <th>Tiempo abierto</th>
+                </tr>
+              </thead>
+              <tbody id="openTurnsBody"></tbody>
+            </table>
+          </div>
+        </section>
+        </div>
+
+        <div class="admin-subtab-content hidden" data-admin-content="rostros">
+        <form id="enrollFaceForm" class="panel form-panel">
+          <h2>Registrar rostro de colaborador</h2>
+          <div class="field-row">
+            <label>
+              Cédula
+              <input id="enrollDniInput" type="text" inputmode="numeric" autocomplete="off" required>
+            </label>
+            <button id="enrollValidateButton" class="secondary" type="button">
+              <i data-lucide="search"></i>
+              Validar
+            </button>
+          </div>
+          <div id="enrollBox" class="result-box muted">
+            Digita la cédula del colaborador para enrolar su rostro.
+          </div>
+          <div id="enrollPreviewBox" class="preview-box hidden">
+            <img id="enrollPreviewImage" alt="Rostro enrolado">
+            <div>
+              <strong>Rostro enrolado</strong>
+              <span>Referencia actual</span>
+            </div>
+          </div>
+          <button id="enrollCameraButton" class="primary wide" type="button" disabled>
+            <i data-lucide="camera"></i>
+            Capturar rostro de referencia
+          </button>
+          <button id="deleteEnrollButton" class="secondary wide" type="button" disabled>
+            <i data-lucide="trash-2"></i>
+            Eliminar rostro enrolado
+          </button>
+          <p id="enrollMessage" class="message" role="status"></p>
+        </form>
+        </div>
+
+        <div class="admin-subtab-content hidden" data-admin-content="sonar">
+        <form id="sonarAdminForm" class="panel form-panel">
+          <h2>Sonar conductores</h2>
+          <div class="field-row">
+            <label>
+              Buscar conductor
+              <input id="sonarDriverSearchInput" type="search" autocomplete="off" placeholder="Cédula, nombre o dr_id">
+            </label>
+            <button id="loadSonarDriversButton" class="secondary" type="button">
+              <i data-lucide="download"></i>
+              Consumir conductores
+            </button>
+          </div>
+          <div id="sonarAdminStatus" class="result-box muted">
+            Carga la base de conductores de Sonar para seleccionar uno.
+          </div>
+          <div class="sonar-driver-list-wrap">
+            <div class="sonar-driver-selected" id="sonarDriverSelected">
+              <span class="muted">Ningun conductor seleccionado.</span>
+            </div>
+            <ul id="sonarDriverList" class="sonar-driver-list" role="listbox"></ul>
+            <select id="sonarDriverSelect" class="hidden">
+              <option value="">Primero consume conductores</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label>
+              Vehículo Sonar
+              <select id="sonarVehicleSelect">
+                <option value="">Cargando vehículos...</option>
+              </select>
+            </label>
+          </div>
+          <div id="sonarSelectionBox" class="result-box muted">
+            Selecciona conductor y vehículo para ver el dr_id y el mId que se enviarán a Sonar.
+          </div>
+          <button id="assignSonarDriverButton" class="primary wide" type="submit">
+            <i data-lucide="bus-front"></i>
+            Asignar vehículo a conductor
+          </button>
+          <p id="sonarAdminMessage" class="message" role="status"></p>
+        </form>
+        </div>
+
+        <div class="admin-subtab-content hidden" data-admin-content="marcas">
+        <section class="panel database-panel">
+          <div class="database-toolbar">
+            <div>
+              <h2>Marcas registradas</h2>
+              <p id="adminMarksStatus">Sin cargar</p>
+            </div>
+            <div class="database-actions">
+              <label class="search-field">
+                Nombre
+                <input id="adminNameSearchInput" type="search" placeholder="Nombre">
+              </label>
+              <label class="search-field">
+                Cédula
+                <input id="adminDniSearchInput" type="search" placeholder="Cédula">
+              </label>
+              <label class="search-field">
+                Desde
+                <input id="adminDateFromInput" type="date">
+              </label>
+              <label class="search-field">
+                Hasta
+                <input id="adminDateToInput" type="date">
+              </label>
+              <label class="search-field">
+                Cargo
+                <select id="adminCargoFilter" multiple size="4"></select>
+              </label>
+              <button id="reloadMarksButton" class="secondary" type="button">
+                <i data-lucide="refresh-cw"></i>
+                Actualizar
+              </button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Cédula</th>
+                  <th>Nombre</th>
+                  <th>Entrada</th>
+                  <th>Salida</th>
+                  <th>Tiempo</th>
+                  <th>Observación</th>
+                </tr>
+              </thead>
+            <tbody id="adminMarksBody"></tbody>
+          </table>
+        </div>
+          <div class="pagination-bar">
+            <button id="adminPrevPageButton" class="secondary" type="button">
+              <i data-lucide="chevron-left"></i>
+              Anterior
+            </button>
+            <span id="adminPageLabel">Página 1</span>
+            <button id="adminNextPageButton" class="secondary" type="button">
+              Siguiente
+              <i data-lucide="chevron-right"></i>
+            </button>
+          </div>
+        </section>
+        </div>
+
+        <div class="admin-subtab-content hidden" data-admin-content="jornadas">
+        <section class="panel database-panel">
+          <div class="database-toolbar">
+            <div>
+              <h2>Ingresos y salidas por fechas</h2>
+              <p id="journalStatus">Sin cargar</p>
+            </div>
+            <div class="database-actions">
+              <label class="search-field">
+                Desde
+                <input id="journalDateFromInput" type="date">
+              </label>
+              <label class="search-field">
+                Hasta
+                <input id="journalDateToInput" type="date">
+              </label>
+              <label class="search-field">
+                Buscar
+                <input id="journalSearchInput" type="search" placeholder="Cédula o nombre">
+              </label>
+              <label class="search-field">
+                Cargo
+                <select id="journalCargoFilter" multiple size="4"></select>
+              </label>
+              <button id="reloadJournalButton" class="secondary" type="button">
+                <i data-lucide="refresh-cw"></i>
+                Actualizar
+              </button>
+              <button id="exportJournalButton" class="secondary" type="button">
+                <i data-lucide="download"></i>
+                Excel
+              </button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Cédula</th>
+                  <th>Nombre</th>
+                  <th>Cargo</th>
+                  <th>Entrada</th>
+                  <th>Salida</th>
+                  <th>Tiempo</th>
+                  <th>Buk</th>
+                </tr>
+              </thead>
+              <tbody id="journalBody"></tbody>
+            </table>
+          </div>
+          <div class="pagination-bar">
+            <button id="journalPrevPageButton" class="secondary" type="button">
+              <i data-lucide="chevron-left"></i>
+              Anterior
+            </button>
+            <span id="journalPageLabel">Página 1</span>
+            <button id="journalNextPageButton" class="secondary" type="button">
+              Siguiente
+              <i data-lucide="chevron-right"></i>
+            </button>
+          </div>
+        </section>
+        </div>
+
+        <div class="admin-subtab-content hidden" data-admin-content="rechazos">
+        <section class="panel database-panel">
+          <div class="database-toolbar">
+            <div>
+              <h2>Marcas rechazadas por Buk (no confirmadas)</h2>
+              <p id="rechazoStatus">Sin cargar</p>
+            </div>
+            <div class="database-actions">
+              <label class="search-field">
+                Desde
+                <input id="rechazoDateFromInput" type="date">
+              </label>
+              <label class="search-field">
+                Hasta
+                <input id="rechazoDateToInput" type="date">
+              </label>
+              <label class="search-field">
+                Buscar
+                <input id="rechazoSearchInput" type="search" placeholder="Cédula o nombre">
+              </label>
+              <button id="reloadRechazoButton" class="secondary" type="button">
+                <i data-lucide="refresh-cw"></i>
+                Actualizar
+              </button>
+              <button id="exportRechazoButton" class="secondary" type="button">
+                <i data-lucide="download"></i>
+                Excel
+              </button>
+              <button id="resendAllRechazoButton" class="primary" type="button">
+                <i data-lucide="send"></i>
+                Reenviar todas
+              </button>
+            </div>
+          </div>
+          <p class="field-hint">
+            Aquí aparecen las marcas guardadas en la base pero que Buk/Ctrlit no confirmó (enviado_buk = false).
+            Corresponden a salidas manuales y salidas pendientes cuyo envío a Buk falló (por ejemplo, error 400).
+          </p>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Hora</th>
+                  <th>Cédula</th>
+                  <th>Nombre</th>
+                  <th>Cargo</th>
+                  <th>Tipo</th>
+                  <th>Origen</th>
+                  <th>Estado Buk</th>
+                  <th>Observación</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody id="rechazoBody"></tbody>
+            </table>
+          </div>
+          <div class="pagination-bar">
+            <button id="rechazoPrevPageButton" class="secondary" type="button">
+              <i data-lucide="chevron-left"></i>
+              Anterior
+            </button>
+            <span id="rechazoPageLabel">Página 1</span>
+            <button id="rechazoNextPageButton" class="secondary" type="button">
+              Siguiente
+              <i data-lucide="chevron-right"></i>
+            </button>
+          </div>
+        </section>
+        </div>
+
+        <div class="admin-subtab-content hidden" data-admin-content="inconsistencias">
+        <section class="panel database-panel">
+          <div class="database-toolbar">
+            <div>
+              <h2>Revisar registros mal formados</h2>
+              <p id="inconsistStatus">Sin cargar</p>
+            </div>
+            <div class="database-actions">
+              <label class="search-field">
+                Desde
+                <input id="inconsistDateFromInput" type="date">
+              </label>
+              <label class="search-field">
+                Hasta
+                <input id="inconsistDateToInput" type="date">
+              </label>
+              <label class="search-field">
+                Buscar
+                <input id="inconsistSearchInput" type="search" placeholder="Cédula o nombre">
+              </label>
+              <button id="reloadInconsistButton" class="secondary" type="button">
+                <i data-lucide="refresh-cw"></i>
+                Actualizar
+              </button>
+              <button id="exportInconsistButton" class="secondary" type="button">
+                <i data-lucide="download"></i>
+                Excel
+              </button>
+            </div>
+          </div>
+          <p class="field-hint">
+            Cada fila es una marca que rompe la secuencia entrada→salida. Revisa y, si es un error,
+            elimina la marca sobrante. Si la marca ya está en Buk, eliminarla aquí NO la borra de Buk.
+          </p>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Cédula</th>
+                  <th>Nombre</th>
+                  <th>Cargo</th>
+                  <th>Problema</th>
+                  <th>Fecha</th>
+                  <th>Hora</th>
+                  <th>Tipo</th>
+                  <th>Antigüedad</th>
+                  <th>Origen</th>
+                  <th>Buk</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody id="inconsistBody"></tbody>
+            </table>
+          </div>
+          <p id="inconsistMessage" class="message" role="status"></p>
+        </section>
+        </div>
+
+        <div class="admin-subtab-content hidden" data-admin-content="validacion">
+        <section class="panel database-panel">
+          <div class="database-toolbar">
+            <div>
+              <h2>Validación de turnos</h2>
+              <p id="validacionStatus">Sin cargar</p>
+            </div>
+            <div class="database-actions">
+              <label class="search-field">
+                Desde
+                <input id="validacionDateFromInput" type="date">
+              </label>
+              <label class="search-field">
+                Hasta
+                <input id="validacionDateToInput" type="date">
+              </label>
+              <label class="search-field">
+                Máx. horas
+                <input id="validacionMaxHorasInput" type="number" min="1" max="48" value="14">
+              </label>
+              <label class="search-field">
+                Buscar
+                <input id="validacionSearchInput" type="search" placeholder="Cédula o nombre">
+              </label>
+              <label class="search-field">
+                Validación
+                <select id="validacionFiltroTipo">
+                  <option value="todas">Todas</option>
+                  <option value="problemas">Solo con problemas</option>
+                  <option value="correcto">Correctas</option>
+                  <option value="abierto">Turno abierto</option>
+                  <option value="secuencia">Secuencia (doble / sin entrada)</option>
+                  <option value="doble">Doble entrada</option>
+                  <option value="salida_sin">Salida sin entrada</option>
+                  <option value="exceso">Exceso de horas</option>
+                  <option value="buk">Rechazo Buk</option>
+                </select>
+              </label>
+              <button id="reloadValidacionButton" class="secondary" type="button">
+                <i data-lucide="refresh-cw"></i>
+                Actualizar
+              </button>
+              <button id="exportValidacionButton" class="secondary" type="button">
+                <i data-lucide="download"></i>
+                Excel
+              </button>
+            </div>
+          </div>
+          <p class="field-hint">
+            Cada fila es una jornada (entrada → salida) desde el 8 de julio. La columna
+            <strong>Validación</strong> marca: turno abierto, doble entrada, salida sin entrada,
+            exceso de horas (según "Máx. horas") o rechazo de Buk. Verde = correcto.
+          </p>
+          <div id="validacionResumen" class="validacion-resumen"></div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Cédula</th>
+                  <th>Nombre</th>
+                  <th>Cargo</th>
+                  <th>Jornada</th>
+                  <th>Entrada</th>
+                  <th>Salida</th>
+                  <th>Horas</th>
+                  <th>Buk</th>
+                  <th>Validación</th>
+                </tr>
+              </thead>
+              <tbody id="validacionBody"></tbody>
+            </table>
+          </div>
+          <p id="validacionMessage" class="message" role="status"></p>
+        </section>
+        </div>
+
+        <div class="admin-subtab-content hidden" data-admin-content="sinmarca">
+        <section class="panel database-panel">
+          <div class="database-toolbar">
+            <div>
+              <h2>Conductores sin marca propia</h2>
+              <p id="sinMarcaStatus">Sin cargar</p>
+            </div>
+            <div class="database-actions">
+              <label class="search-field">
+                Días
+                <input id="sinMarcaDaysInput" type="number" min="1" max="365" value="90">
+              </label>
+              <label class="search-field">
+                Máx. propias
+                <input id="sinMarcaMaxBioInput" type="number" min="0" max="20" value="1">
+              </label>
+              <label class="search-field">
+                Buscar
+                <input id="sinMarcaSearchInput" type="search" placeholder="Cédula o nombre">
+              </label>
+              <button id="reloadSinMarcaButton" class="secondary" type="button">
+                <i data-lucide="refresh-cw"></i>
+                Actualizar
+              </button>
+              <button id="exportSinMarcaButton" class="secondary" type="button">
+                <i data-lucide="download"></i>
+                Excel
+              </button>
+            </div>
+          </div>
+          <p class="field-hint">
+            Conductores cuya asistencia registra casi siempre un administrador y que casi nunca marcan
+            ellos mismos de forma biométrica (web/móvil). Úsalo como lista de vigilancia: revisa uno por uno.
+            "Máx. propias" filtra por cuántas marcas biométricas propias se permiten (0 = ninguna).
+          </p>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Cédula</th>
+                  <th>Nombre</th>
+                  <th>Cargo</th>
+                  <th>Total marcas</th>
+                  <th>Registradas por admin</th>
+                  <th>Biométricas propias</th>
+                  <th>% admin</th>
+                  <th>Última marca</th>
+                </tr>
+              </thead>
+              <tbody id="sinMarcaBody"></tbody>
+            </table>
+          </div>
+          <p id="sinMarcaMessage" class="message" role="status"></p>
+        </section>
+        </div>
+
+        <div class="admin-subtab-content hidden" data-admin-content="corregir">
+        <section class="panel database-panel">
+          <div class="database-toolbar">
+            <div>
+              <h2>Corregir horas de ingreso/salida</h2>
+              <p id="corregirStatus">Busca por cédula y fecha para ver las marcas de ese día.</p>
+            </div>
+            <div class="database-actions">
+              <label class="search-field">
+                Cédula
+                <input id="corregirDniInput" type="text" inputmode="numeric" autocomplete="off" placeholder="Cédula del conductor">
+              </label>
+              <label class="search-field">
+                Fecha
+                <input id="corregirDateInput" type="date">
+              </label>
+              <button id="corregirBuscarButton" class="primary" type="button">
+                <i data-lucide="search"></i>
+                Buscar
+              </button>
+            </div>
+          </div>
+          <p class="field-hint">
+            Corrige la hora de una marca ya registrada (solo en la base local; no toca Buk).
+            Cada cambio queda anotado en la observación de la marca para auditoría.
+          </p>
+          <div id="corregirResultado" class="corregir-lista"></div>
+          <p id="corregirMessage" class="message" role="status"></p>
+        </section>
+        </div>
+
+        <div class="admin-subtab-content hidden" data-admin-content="puntualidad">
+        <section class="panel database-panel">
+          <div class="database-toolbar">
+            <div>
+              <h2>Puntualidad frente a la programación</h2>
+              <p id="puntualidadStatus">Compara cada marca con el horario programado del conductor.</p>
+            </div>
+            <div class="database-actions">
+              <label class="search-field">
+                Desde
+                <input id="puntualidadDesdeInput" type="date">
+              </label>
+              <label class="search-field">
+                Hasta
+                <input id="puntualidadHastaInput" type="date">
+              </label>
+              <label class="search-field">
+                Tolerancia (min)
+                <input id="puntualidadTolInput" type="number" min="0" max="120" step="5" value="15">
+              </label>
+              <button id="puntualidadBuscarButton" class="primary" type="button">
+                <i data-lucide="search"></i>
+                Consultar
+              </button>
+            </div>
+          </div>
+
+          <p class="field-hint">
+            Se cuenta como falta la <strong>entrada después de la hora programada</strong> y la
+            <strong>salida del turno 2 antes de HORA FIN</strong>. Llegar antes o salir después no es falta.
+            La <strong>salida del turno 1 no se evalúa</strong>: la programación no registra la hora
+            real de relevo entre conductores.
+          </p>
+
+          <div id="puntualidadTotales" class="puntualidad-totales"></div>
+          <div id="puntualidadResumen" class="puntualidad-lista"></div>
+
+          <details id="puntualidadDetalleBox" class="puntualidad-detalle hidden">
+            <summary>Ver evento por evento</summary>
+            <div id="puntualidadDetalle" class="puntualidad-lista"></div>
+          </details>
+
+          <p id="puntualidadMessage" class="message" role="status"></p>
+        </section>
+
+        <section class="panel database-panel">
+          <div class="database-toolbar">
+            <div>
+              <h2>Nombres de la programación</h2>
+              <p id="puenteStatus">La programación trae nombres, no cédulas. Aquí se resuelve el cruce.</p>
+            </div>
+            <div class="database-actions">
+              <button id="puenteResolverButton" class="secondary" type="button">
+                <i data-lucide="refresh-cw"></i>
+                Resolver nombres
+              </button>
+            </div>
+          </div>
+          <div id="puenteResultado" class="puntualidad-lista"></div>
+        </section>
+        </div>
+
+        <div class="admin-subtab-content hidden" data-admin-content="jornadas-anomalas">
+        <section class="panel database-panel">
+          <div class="database-toolbar">
+            <div>
+              <h2>Jornadas fuera de horario</h2>
+              <p id="jornadasStatus">Detecta conductores que trabajaron fuera de su turno o con las marcas trocadas.</p>
+            </div>
+            <div class="database-actions">
+              <label class="search-field">
+                Desde
+                <input id="jornadasDesdeInput" type="date">
+              </label>
+              <label class="search-field">
+                Hasta
+                <input id="jornadasHastaInput" type="date">
+              </label>
+              <button id="jornadasBuscarButton" class="primary" type="button">
+                <i data-lucide="search"></i>
+                Consultar
+              </button>
+              <button id="jornadasExportButton" class="secondary" type="button">
+                <i data-lucide="download"></i>
+                Exportar Excel
+              </button>
+            </div>
+          </div>
+
+          <p class="field-hint">
+            <strong>Sentido invertido:</strong> marcó salida donde iba entrada.
+            <strong>Turno cambiado:</strong> trabajó el turno del otro conductor del vehículo.
+            <strong>Fuera de ventana:</strong> entrada y salida corridas 3 h o más.
+            <strong>Sin cerrar / duración rara:</strong> nunca marcó salida, o la jornada
+            duró menos de 30 min o más de 16 h.
+          </p>
+
+          <div class="jornadas-filtros" id="jornadasFiltros"></div>
+          <div id="jornadasTotales" class="puntualidad-totales"></div>
+
+          <div id="jornadasDetalleBox" class="hidden">
+            <h3 class="jornadas-subtitulo">Detalle para corregir (entrada, salida y turno)</h3>
+            <div id="jornadasDetalle" class="puntualidad-lista"></div>
+          </div>
+
+          <details id="jornadasResumenBox" class="puntualidad-detalle hidden">
+            <summary>Ver resumen por conductor</summary>
+            <div id="jornadasResumen" class="puntualidad-lista"></div>
+          </details>
+
+          <p id="jornadasMessage" class="message" role="status"></p>
+        </section>
+        </div>
+
+        <div class="admin-subtab-content hidden" data-admin-content="verificador">
+        <section class="panel database-panel">
+          <div class="database-toolbar">
+            <div>
+              <h2>Verificador de horarios</h2>
+              <p id="verificadorStatus">Revisa las jornadas contra la programación y corrige la hora de ingreso o salida aquí mismo.</p>
+            </div>
+            <div class="database-actions">
+              <label class="search-field">
+                Desde
+                <input id="verificadorDesdeInput" type="date">
+              </label>
+              <label class="search-field">
+                Hasta
+                <input id="verificadorHastaInput" type="date">
+              </label>
+              <label class="search-field">
+                Buscar
+                <input id="verificadorBuscarInput" type="text" autocomplete="off"
+                       placeholder="Nombre, cédula o vehículo">
+              </label>
+              <button id="verificadorFiltrarButton" class="secondary" type="button">
+                <i data-lucide="search"></i>
+                Buscar
+              </button>
+              <button id="verificadorBuscarButton" class="primary" type="button">
+                <i data-lucide="alert-triangle"></i>
+                Ver errores
+              </button>
+              <button id="verificadorDiaButton" class="primary" type="button">
+                <i data-lucide="calendar-check"></i>
+                Ver día completo
+              </button>
+              <button id="verificadorDesfasesButton" class="primary" type="button">
+                <i data-lucide="timer"></i>
+                Anticipos y excesos
+              </button>
+              <button id="verificadorGestoresButton" class="primary" type="button">
+                <i data-lucide="user-check"></i>
+                Gestores y auxiliares
+              </button>
+              <button id="verificadorCierresButton" class="primary" type="button">
+                <i data-lucide="file-clock"></i>
+                Cierres declarados
+              </button>
+              <button id="verificadorExcedidasButton" class="primary" type="button">
+                <i data-lucide="alert-octagon"></i>
+                Jornadas +16 h
+              </button>
+              <button id="verificadorNovedadesButton" class="primary" type="button">
+                <i data-lucide="calendar-off"></i>
+                Marcó con novedad
+              </button>
+              <button id="verificadorExportButton" class="secondary" type="button">
+                <i data-lucide="download"></i>
+                Exportar Excel
+              </button>
+            </div>
+          </div>
+
+          <p class="field-hint">
+            <strong>Ver errores:</strong> solo las jornadas con novedad en el rango (sentido
+            invertido, turno cambiado, fuera de ventana, sin cerrar o duración rara).
+            <strong>Ver día completo:</strong> TODOS los conductores programados de la fecha
+            <em>«Hasta»</em>, con su turno, la hora programada y la que marcaron. En ambos modos
+            puedes editar la hora de ingreso o salida y guardar para corregir.
+            <strong>Anticipos y excesos:</strong> quién entra minutos u horas antes de su turno
+            y quién cierra después de su hora fin, con el ranking por conductor.
+            <strong>Gestores y auxiliares:</strong> el personal sin programación (gestores de
+            servicio y de movilidad, auxiliares de control). Como rotan turno no hay horario
+            contra el cual compararlos, así que se valida la jornada: turnos sin cerrar,
+            duraciones imposibles y marcas dobles.
+          </p>
+
+          <div class="jornadas-filtros" id="verificadorFiltros"></div>
+          <div id="verificadorTotales" class="puntualidad-totales"></div>
+          <div id="verificadorDetalle" class="puntualidad-lista"></div>
+          <p id="verificadorMessage" class="message" role="status"></p>
+        </section>
+        </div>
+
+        <div class="admin-subtab-content hidden" data-admin-content="horario">
+        <section class="panel database-panel">
+          <div class="database-toolbar">
+            <div>
+              <h2>Horario programado</h2>
+              <p id="horarioStatus">Consulta el turno programado de los conductores por fecha.</p>
+            </div>
+            <div class="database-actions">
+              <label class="search-field">
+                Desde
+                <input id="horarioDesdeInput" type="date">
+              </label>
+              <label class="search-field">
+                Hasta
+                <input id="horarioHastaInput" type="date">
+              </label>
+              <label class="search-field">
+                Buscar
+                <input id="horarioBuscarInput" type="text" autocomplete="off"
+                       placeholder="Nombre, cédula, vehículo o base">
+              </label>
+              <button id="horarioBuscarButton" class="primary" type="button">
+                <i data-lucide="search"></i>
+                Consultar
+              </button>
+              <button id="horarioExportButton" class="secondary" type="button">
+                <i data-lucide="download"></i>
+                Exportar CSV
+              </button>
+            </div>
+          </div>
+          <p class="field-hint">
+            Turno 1: entrada y primer relevo. Turno 2: relevo y hora fin (puede cruzar la
+            medianoche). El horario viene de la programación cargada en el portal.
+          </p>
+          <div id="horarioResultado" class="puntualidad-lista"></div>
+          <p id="horarioMessage" class="message" role="status"></p>
+        </section>
+        </div>
+
+        <div class="admin-subtab-content hidden" data-admin-content="mapa">
+        <section class="panel database-panel">
+          <div class="database-toolbar">
+            <div>
+              <h2>Mapa de posiciones de las marcas</h2>
+              <p id="mapaStatus">Verifica dónde se hicieron los registros biométricos.</p>
+            </div>
+            <div class="database-actions">
+              <label class="search-field">
+                Desde
+                <input id="mapaDesdeInput" type="date">
+              </label>
+              <label class="search-field">
+                Hasta
+                <input id="mapaHastaInput" type="date">
+              </label>
+              <label class="search-field">
+                Buscar
+                <input id="mapaBuscarInput" type="text" autocomplete="off"
+                       placeholder="Nombre, cédula o vehículo">
+              </label>
+              <button id="mapaBuscarButton" class="primary" type="button">
+                <i data-lucide="search"></i>
+                Ver en el mapa
+              </button>
+            </div>
+          </div>
+          <div class="mapa-leyenda">
+            <span><i class="mapa-dot mapa-dot-entrada"></i> Entrada</span>
+            <span><i class="mapa-dot mapa-dot-salida"></i> Salida</span>
+            <span class="field-hint">El círculo indica la precisión GPS reportada.</span>
+          </div>
+          <div id="mapaMarcas" class="mapa-marcas"></div>
+          <p id="mapaMessage" class="message" role="status"></p>
+        </section>
+        </div>
+
+        <div class="admin-subtab-content hidden" data-admin-content="colaboradores">
+        <section class="panel database-panel">
+          <div class="database-toolbar">
+            <div>
+              <h2>Base de colaboradores</h2>
+              <p id="csvStatus">Sin cargar</p>
+            </div>
+            <div class="database-actions">
+              <label class="search-field">
+                Buscar
+                <input id="csvSearchInput" type="search" placeholder="Cédula, nombre, ruta...">
+              </label>
+              <button id="reloadCsvButton" class="secondary" type="button">
+                <i data-lucide="refresh-cw"></i>
+                Actualizar
+              </button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Cédula</th>
+                  <th>Nombre</th>
+                  <th>Estado</th>
+                  <th>Cargo</th>
+                  <th>Empresa</th>
+                  <th>Vehículo</th>
+                  <th>Ruta</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="csvTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+        </div>
+
+        <div class="admin-subtab-content hidden" data-admin-content="perfilsociodemografico">
+        <section class="panel database-panel">
+          <div class="database-toolbar">
+            <div>
+              <h2>Perfil sociodemográfico</h2>
+              <p id="perfilSocioStatus">Sin cargar</p>
+            </div>
+            <div class="database-actions">
+              <label class="search-field">
+                Buscar
+                <input id="perfilSocioSearchInput" type="search" placeholder="Cédula o nombre">
+              </label>
+              <button id="reloadPerfilSocioButton" class="secondary" type="button">
+                <i data-lucide="refresh-cw"></i>
+                Actualizar
+              </button>
+            </div>
+          </div>
+          <p class="field-hint">
+            Datos de <strong>employees</strong> y <strong>perfil_sociodemografico</strong>. "Perfil" indica
+            cuántos de los campos sociodemográficos ya están diligenciados para ese colaborador.
+          </p>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Cédula</th>
+                  <th>Nombre</th>
+                  <th>Cargo</th>
+                  <th>Estado</th>
+                  <th>Perfil</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="perfilSocioBody"></tbody>
+            </table>
+          </div>
+          <p id="perfilSocioMessage" class="message" role="status"></p>
+        </section>
+        </div>
+      </section>
+
+      <section id="manualExitPanel" class="hidden">
+        <form id="manualExitForm" class="panel form-panel">
+          <h2>Salida por incapacidad o ausencia</h2>
+          <p class="field-hint">
+            Uso exclusivo para colaboradores que NO pueden asistir al punto de registro biométrico
+            (incapacidad médica o ausencia justificada). Los turnos olvidados se cierran marcando
+            la salida biométrica en el punto, no aquí.
+          </p>
+          <div class="field-row">
+            <label>
+              Cédula
+              <input id="manualDniInput" type="text" inputmode="numeric" autocomplete="off" required>
+            </label>
+            <label>
+              Fecha
+              <input id="manualDateInput" type="date" required>
+            </label>
+            <label>
+              Hora salida
+              <input id="manualTimeInput" type="time" required>
+            </label>
+          </div>
+          <label>
+            Motivo
+            <select id="manualReasonCategory" required>
+              <option value="">Selecciona el motivo</option>
+              <option value="Incapacidad">Incapacidad médica</option>
+              <option value="Ausencia justificada">Ausencia justificada</option>
+              <option value="Otro">Otro (especificar)</option>
+            </select>
+          </label>
+          <label>
+            Detalle
+            <textarea id="manualReasonInput" rows="3" placeholder="Detalle del motivo (obligatorio si elige 'Otro')"></textarea>
+          </label>
+
+          <div class="manual-secure-block">
+            <h3>Autorización obligatoria</h3>
+            <p class="field-hint">
+              Para evitar fraudes, esta salida exige un <strong>código de autorización</strong>,
+              la <strong>ubicación</strong> de quien registra (se toma sola) y una <strong>foto (selfie)</strong>
+              del líder tomada <strong>en el momento con la cámara</strong> (no se pueden subir fotos del dispositivo).
+            </p>
+
+            <!-- Paso 1: código dinámico -->
+            <div class="manual-step">
+              <div class="manual-step-head"><span class="manual-step-num">1</span> Código de autorización</div>
+              <button id="manualCodeButton" class="secondary" type="button">
+                <i data-lucide="key-round"></i>
+                Solicitar código
+              </button>
+              <div id="manualCodeShown" class="manual-code-shown hidden"></div>
+              <label>
+                Escribe el código mostrado
+                <input id="manualCodeInput" type="text" inputmode="numeric" autocomplete="off" maxlength="6" placeholder="6 dígitos" disabled>
+              </label>
+            </div>
+
+            <!-- Paso 2: ubicación (automática) -->
+            <div class="manual-step">
+              <div class="manual-step-head"><span class="manual-step-num">2</span> Ubicación de quien registra <span class="manual-step-auto">automática</span></div>
+              <button id="manualLocationButton" class="secondary hidden" type="button">
+                <i data-lucide="map-pin"></i>
+                Activar ubicación
+              </button>
+              <p id="manualLocationStatus" class="location-status">Ubicación obligatoria: se captura automáticamente.</p>
+            </div>
+
+            <!-- Paso 3: selfie del líder (la cámara se abre sola) -->
+            <div class="manual-step">
+              <div class="manual-step-head"><span class="manual-step-num">3</span> Foto del líder (selfie) <span class="manual-step-auto">la cámara se abre sola</span></div>
+              <button id="manualCameraButton" class="secondary" type="button">
+                <i data-lucide="camera"></i>
+                Abrir cámara
+              </button>
+              <div id="manualCameraBox" class="manual-camera-box hidden">
+                <video id="manualCameraVideo" playsinline autoplay muted></video>
+                <div class="manual-camera-actions">
+                  <button id="manualCaptureButton" class="primary" type="button">
+                    <i data-lucide="camera"></i>
+                    Tomar foto
+                  </button>
+                  <button id="manualCameraCancelButton" class="secondary" type="button">Cancelar</button>
+                </div>
+              </div>
+              <div id="manualPhotoPreview" class="manual-photo-preview hidden">
+                <img id="manualPhotoImg" alt="Selfie del líder">
+                <button id="manualPhotoRetakeButton" class="secondary" type="button">Repetir foto</button>
+              </div>
+            </div>
+          </div>
+
+          <button id="manualExitButton" class="primary wide" type="submit">
+            <i data-lucide="log-out"></i>
+            Registrar salida por incapacidad/ausencia
+          </button>
+          <p id="manualMessage" class="message" role="status"></p>
+        </form>
+      </section>
+    </section>
+
+    <section id="cameraBox" class="camera-overlay hidden" aria-modal="true" role="dialog">
+      <div class="camera-modal">
+        <div class="camera-header">
+          <div>
+            <h2>Captura de rostro</h2>
+            <p id="liveFaceStatus">Ubica tu rostro dentro del recuadro.</p>
+          </div>
+          <button id="stopCameraButton" class="icon-button" type="button" aria-label="Cerrar cámara" title="Cerrar cámara">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="camera-frame">
+          <video id="cameraVideo" autoplay playsinline muted></video>
+          <div id="faceGuide" class="face-guide" aria-hidden="true"></div>
+        </div>
+        <div class="photo-tools">
+          <button id="captureButton" class="primary wide" type="button" disabled>
+            <i data-lucide="scan-face"></i>
+            Capturar rostro
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section id="processOverlay" class="process-overlay hidden" aria-live="polite" aria-busy="true">
+      <div class="process-modal">
+        <span class="loader-ring" aria-hidden="true"></span>
+        <strong id="processTitle">Procesando</strong>
+        <p id="processText">Espera un momento.</p>
+      </div>
+    </section>
+
+    <section id="alertOverlay" class="process-overlay hidden" aria-live="assertive" aria-modal="true" role="dialog">
+      <div class="process-modal alert-modal">
+        <strong id="alertTitle">Atención</strong>
+        <p id="alertText">Debes repetir el proceso.</p>
+        <button id="alertButton" class="primary wide" type="button">Entendido</button>
+      </div>
+    </section>
+
+    <section id="photoModalOverlay" class="process-overlay hidden" aria-live="polite" aria-modal="true" role="dialog">
+      <div class="process-modal photo-modal">
+        <strong id="photoModalTitle">Foto de la marca</strong>
+        <p id="photoModalStatus">Cargando foto...</p>
+        <img id="photoModalImage" class="photo-modal-image hidden" alt="Foto de evidencia de la marca">
+        <button id="photoModalClose" class="secondary wide" type="button">Cerrar</button>
+      </div>
+    </section>
+
+    <section id="perfilSocioDetailOverlay" class="process-overlay hidden" aria-live="polite" aria-modal="true" role="dialog">
+      <div class="process-modal perfil-socio-modal">
+        <button id="perfilSocioDetailClose" class="icon-button perfil-socio-close" type="button" aria-label="Cerrar">
+          <i data-lucide="x"></i>
+        </button>
+        <div id="perfilSocioDetailBody" class="perfil-socio-body"></div>
+      </div>
+    </section>
+
+    <section id="registroSuccessOverlay" class="process-overlay hidden" aria-live="polite" aria-modal="true" role="dialog">
+      <div class="process-modal registro-success-modal">
+        <div id="registroSuccessIcon" class="registro-success-icon" aria-hidden="true">
+          <i data-lucide="check-circle-2"></i>
+        </div>
+        <strong id="registroSuccessTitle">Asistencia registrada</strong>
+        <p id="registroSuccessSubtitle" class="registro-success-subtitle"></p>
+        <div id="registroSuccessBody" class="registro-success-body"></div>
+        <button id="registroSuccessButton" class="primary wide" type="button">Entendido</button>
+      </div>
+    </section>
+
+    <section id="tutorialOverlay" class="process-overlay hidden" aria-modal="true" role="dialog" aria-labelledby="tutorialTitle">
+      <div class="process-modal tutorial-modal">
+        <button id="tutorialClose" class="tutorial-close" type="button" aria-label="Cerrar tutorial">
+          <i data-lucide="x"></i>
+        </button>
+        <div id="tutorialIcon" class="tutorial-icon" aria-hidden="true">
+          <i data-lucide="badge-check"></i>
+        </div>
+        <span id="tutorialStepNum" class="tutorial-step-num">Paso 1 de 5</span>
+        <strong id="tutorialTitle">Título del paso</strong>
+        <p id="tutorialText" class="tutorial-text">Descripción del paso.</p>
+        <div id="tutorialDots" class="tutorial-dots" aria-hidden="true"></div>
+        <div class="tutorial-actions">
+          <button id="tutorialPrev" class="secondary" type="button">Anterior</button>
+          <button id="tutorialNext" class="primary" type="button">Siguiente</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="adminClaveOverlay" class="process-overlay hidden" aria-modal="true" role="dialog" aria-labelledby="adminClaveTitle">
+      <div class="process-modal alert-modal">
+        <div class="tutorial-icon" aria-hidden="true"><i data-lucide="lock"></i></div>
+        <strong id="adminClaveTitle">Acceso restringido</strong>
+        <p>El panel de Administración está protegido. Digita la clave para continuar.</p>
+        <input id="adminClaveInput" type="password" class="admin-clave-input" placeholder="Clave" autocomplete="off" autocapitalize="off">
+        <p id="adminClaveError" class="admin-clave-error hidden">Clave incorrecta.</p>
+        <div class="confirm-actions">
+          <button id="adminClaveCancel" class="secondary" type="button">Cancelar</button>
+          <button id="adminClaveAccept" class="primary" type="button">Entrar</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="updateBanner" class="update-banner hidden" role="status">
+      <span>Hay una nueva versi&oacute;n disponible.</span>
+      <button id="updateBannerButton" class="primary" type="button">Actualizar</button>
+    </div>
+
+    <aside id="overdueDriversToast" class="overdue-toast hidden" role="alert" aria-live="polite">
+      <div class="overdue-toast-head">
+        <strong>
+          <i data-lucide="alert-triangle"></i>
+          <span id="overdueDriversToastTitle">Conductores con turno &gt; 15 h</span>
+        </strong>
+        <button id="overdueDriversToastClose" class="overdue-toast-close" type="button" aria-label="Cerrar aviso">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <ul id="overdueDriversToastList" class="overdue-toast-list"></ul>
+      <div class="overdue-toast-actions">
+        <button id="overdueDriversToastGo" class="primary wide" type="button">
+          Revisar en el panel
+        </button>
+      </div>
+    </aside>
+
+    <section id="confirmOverlay" class="process-overlay hidden" aria-modal="true" role="dialog">
+      <div class="process-modal alert-modal">
+        <strong id="confirmTitle">Confirmar accion</strong>
+        <p id="confirmText"></p>
+        <div class="confirm-actions">
+          <button id="confirmCancel" class="secondary" type="button">Cancelar</button>
+          <button id="confirmAccept" class="primary" type="button">Confirmar</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Motivo obligatorio cuando la marca no concuerda con el horario programado.
+         Queda guardado en la observacion de la marca. -->
+    <section id="motivoOverlay" class="process-overlay hidden" aria-modal="true" role="dialog">
+      <div class="process-modal alert-modal motivo-modal">
+        <strong id="motivoTitle">¿Por qué no coincide con el horario?</strong>
+        <p id="motivoText"></p>
+        <div class="motivo-opciones" id="motivoOpciones"></div>
+        <label class="motivo-campo">
+          Detalle
+          <input id="motivoInput" type="text" maxlength="120" autocomplete="off"
+                 placeholder="Ej: estaba en el taller esperando el vehículo">
+        </label>
+        <p id="motivoError" class="message" role="status"></p>
+        <div class="confirm-actions">
+          <button id="motivoCancel" class="secondary" type="button">Cancelar</button>
+          <button id="motivoAccept" class="primary" type="button">Registrar con este motivo</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Cierre de un turno que quedo sin salida. El operario DECLARA la hora real y el
+         motivo; ambos quedan en la bitacora `cierres_turno` con su nombre y la fecha en
+         que lo declaro. Antes la app cerraba sola en la hora programada, sin explicacion. -->
+    <section id="cierreOverlay" class="process-overlay hidden" aria-modal="true" role="dialog">
+      <div class="process-modal alert-modal cierre-modal">
+        <strong id="cierreTitle">Turno sin cerrar</strong>
+        <p id="cierreText"></p>
+
+        <div class="cierre-paso">
+          <span class="cierre-num">1</span>
+          <div class="cierre-cuerpo">
+            <label class="cierre-campo">
+              ¿A qué hora terminó realmente ese turno?
+              <input id="cierreHoraInput" type="time" step="60" autocomplete="off">
+            </label>
+            <p id="cierreHoraHint" class="field-hint"></p>
+          </div>
+        </div>
+
+        <div class="cierre-paso">
+          <span class="cierre-num">2</span>
+          <div class="cierre-cuerpo">
+            <span class="cierre-label">¿Por qué no quedó registrada la salida ese día?</span>
+            <div class="motivo-opciones" id="cierreOpciones"></div>
+            <label class="motivo-campo">
+              Detalle
+              <input id="cierreMotivoInput" type="text" maxlength="140" autocomplete="off"
+                     placeholder="Ej: entregó el vehículo en el taller y no pasó por la base">
+            </label>
+          </div>
+        </div>
+
+        <div class="cierre-resumen" id="cierreResumen"></div>
+        <p class="cierre-obligatorio">
+          <i data-lucide="lock"></i>
+          Mientras este turno no quede cerrado <strong>no se puede registrar la entrada de hoy</strong>.
+        </p>
+        <p id="cierreError" class="message" role="status"></p>
+        <div class="confirm-actions">
+          <button id="cierreCancel" class="secondary" type="button">Ahora no</button>
+          <button id="cierreAccept" class="primary" type="button">Cerrar turno y registrar ENTRADA</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="./supabase-config.js"></script>
+  <script src="./asistencia.js?v=20260906a-fix-duplicate-dni-colaborador"></script>
+</body>
+</html>
+
