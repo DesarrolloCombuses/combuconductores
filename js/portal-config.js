@@ -12,7 +12,7 @@ window.PORTAL_CONFIG = {
   // una nueva no se edita a mano, se corre (desde la carpeta portal):
   //   powershell -ExecutionPolicy Bypass -File .\nueva-version.ps1 1.6.1
   // que la cambia aquí, en sw.js y en index.html a la vez.
-  APP_VERSION: "v1.6.2",
+  APP_VERSION: "v1.7.0",
 
   // Cada cuánto se pregunta al servidor si hay una versión nueva, con el
   // portal a la vista. También se pregunta al abrirlo y al volver a él.
@@ -33,10 +33,30 @@ window.PORTAL_CONFIG = {
   // quién es el relevo aunque su nombre aún no tenga cédula cruzada.
   VISTA_PROGRAMACION_TURNOS: "v_programacion_turnos",
 
-  // Espejo de "esperando turno" en el aeropuerto (FIFO por hora de llegada
-  // confirmada). Se usa para decirle al conductor en qué posición de la fila
-  // va su vehículo.
-  TABLA_ENTURNAMIENTO: "enturnamiento_actual",
+  // La fila de espera: de aquí sale el puesto que ve el conductor.
+  //
+  // Hasta el 24-sep-2026 esto leyó `enturnamiento_actual` y le mentió a todo el
+  // mundo: de 19 conductores esperando turno de verdad, a 13 les decía que su
+  // bus no estaba en la fila y a los otros 6 les daba un puesto equivocado --
+  // al 746 le decía que iba de 6 cuando iba de 17. Ninguno veía el puesto bien.
+  //
+  // `enturne_filas` la calcula el programa de enturnes con las geocercas
+  // dibujadas y el cruce de la raya de llegada. Para devolverse basta dejar
+  // estas dos líneas como estaban:
+  //     TABLA_ENTURNAMIENTO: "enturnamiento_actual",
+  //     SOLO_PUNTO_ENTURNAMIENTO: null,
+  TABLA_ENTURNAMIENTO: "enturne_filas",
+
+  // La tabla nueva guarda la fila de TODOS los puntos (Aeropuerto, Almacentro,
+  // Nutibara, Terminal Norte, Exposiciones).
+  //
+  // En null, la tarjeta busca el bus del conductor en CUALQUIERA de esos puntos
+  // y le muestra el puesto de la fila donde esté. Antes solo miraba el
+  // aeropuerto, así que a los que esperaban en Almacentro les decía que su
+  // vehículo no estaba en ninguna fila -- eran 13 el 24-sep-2026.
+  //
+  // Con el nombre de un punto ("Aeropuerto"), la tarjeta vuelve a mirar solo ese.
+  SOLO_PUNTO_ENTURNAMIENTO: null,
 
   // Buses que un despachador ocultó a mano de la fila. Se descuentan para que
   // la posición que ve el conductor coincida con la que ve el despachador.
@@ -89,7 +109,7 @@ window.PORTAL_CONFIG = {
   //   precarga si true, el iframe se crea al entrar al portal en vez de al
   //            abrir el módulo.
   //   externo  sistema de otro dominio: no recibe la sesión ni la cédula, y
-  //            lleva una barra con el bus del turno y "Abrir aparte".
+  //            lleva una barra con el bus del turno a la vista.
   //
   // Los dos módulos van SIN precarga a propósito. El de asistencia son ~530 KB
   // entre JS y CSS: descargarlos al entrar castiga a un conductor con datos
@@ -122,7 +142,8 @@ window.PORTAL_CONFIG = {
       descripcion: "Valida los tiquetes en Distribusion",
       icono: "ticket",
       // Validador de Distribusion, con su propio login (Ory). Se deja abrir en
-      // un iframe; su login con Google no, por eso la barra trae "Abrir aparte".
+      // un iframe y su login con usuario y contraseña funciona ahí dentro.
+      // OJO: el login CON GOOGLE no funciona embebido, Google no lo permite.
       src: "https://portal.distribusion.com/bookings/ticket-validator",
       externo: true,
       permisos: "camera; clipboard-read; clipboard-write; fullscreen",

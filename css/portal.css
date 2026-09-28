@@ -321,7 +321,7 @@ button, a, [role="button"], .quick-action, .nav-item {
 .externo-barra {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   padding: 8px 14px;
   border-bottom: 1px solid var(--line);
@@ -337,7 +337,8 @@ button, a, [role="button"], .quick-action, .nav-item {
   color: var(--muted);
 }
 .externo-dato strong { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.externo-barra .btn { text-decoration: none; }
+/* La barra quedó con un solo dato (el bus), ya no hay nada que empujar al
+   otro lado. Si se le vuelve a poner un botón, cambiar a space-between. */
 
 .module-loading {
   position: absolute;
@@ -1237,4 +1238,18 @@ button.turno-opcion:focus-visible { outline: none; border-color: var(--primary);
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
   }
+}
+
+/* El punto donde el conductor está haciendo fila (Aeropuerto, Almacentro...).
+   Antes no hacía falta porque la tarjeta solo mostraba el aeropuerto. */
+.fila-info .fila-punto {
+    display: inline-block;
+    align-self: flex-start;
+    margin: 2px 0 4px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: #e0e7ff;
+    color: #3730a3;
+    font-size: 12px;
+    font-weight: 600;
 }

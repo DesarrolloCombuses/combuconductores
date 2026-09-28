@@ -1166,17 +1166,19 @@
   }
 
   // Barra sobre un módulo externo: el bus del turno a la vista, porque el
-  // sistema externo no lo recibe, y la salida a otra pestaña por si su login
-  // no funciona dentro del marco (Google no deja abrir el suyo en un iframe, y
-  // Safari en iPhone puede bloquear sus cookies).
+  // sistema externo no lo recibe y el conductor tiene que escribirlo.
+  //
+  // Antes esta barra llevaba también un "Abrir aparte" que sacaba el módulo a
+  // otra pestaña. Se quitó porque estorbaba en una pantalla que ya es de otro
+  // sistema. Si algún día hace falta -- el login de Distribusion CON GOOGLE no
+  // funciona dentro de un marco, Google no lo permite; con usuario y contraseña
+  // sí -- se devuelve agregando aquí el enlace a modulo.src con target="_blank".
   function barraExterna(modulo) {
     var barra = document.createElement("div");
     barra.className = "externo-barra";
     barra.innerHTML =
       '<div class="externo-dato"><span>Seleccione el vehículo</span>' +
-        "<strong data-bus-turno>" + escapeHtml(state.vehiculo || "—") + "</strong></div>" +
-      '<a class="btn btn-ghost btn-sm" href="' + escapeHtml(modulo.src) + '" target="_blank" rel="noopener">' +
-        "Abrir aparte</a>";
+        "<strong data-bus-turno>" + escapeHtml(state.vehiculo || "—") + "</strong></div>";
     return barra;
   }
 
@@ -1790,7 +1792,11 @@
     esqueleto(box, "bloque");
 
     try {
-      var resFila = await conTiempoLimite(client.from(cfg.TABLA_ENTURNAMIENTO).select("*"));
+      var consultaFila = client.from(cfg.TABLA_ENTURNAMIENTO).select("*");
+      if (cfg.SOLO_PUNTO_ENTURNAMIENTO) {
+        consultaFila = consultaFila.eq("punto", cfg.SOLO_PUNTO_ENTURNAMIENTO);
+      }
+      var resFila = await conTiempoLimite(consultaFila);
       if (resFila.error) throw resFila.error;
 
       // Se descuentan los buses que un despachador ocultó a mano, para que la
@@ -1805,12 +1811,32 @@
         }
       } catch (_) { /* sin la lista de ocultos seguimos con la fila completa */ }
 
-      var fila = (resFila.data || [])
-        .filter(function (r) {
-          return !ocultos.has(String(r.vehicle_id || "") + "|" + String(r.llegada_aeropuerto || ""));
-        })
-        // FIFO por hora de llegada confirmada, igual que el módulo aeropuerto.
+      var todas = (resFila.data || []).filter(function (r) {
+        return !ocultos.has(String(r.vehicle_id || "") + "|" + String(r.llegada_aeropuerto || ""));
+      });
+
+      // Primero se busca el bus del conductor: él no tiene por qué saber en qué
+      // punto lo tiene anotado el programa. Puede estar esperando en el
+      // aeropuerto, en Almacentro, en Nutibara...
+      var mio = todas.find(function (r) {
+        return normalizarInterno(r.interno) === normalizarInterno(interno);
+      });
+
+      if (!mio) {
+        box.innerHTML =
+          '<p class="placeholder">Tu vehículo (' + escapeHtml(interno) +
+          ") no está esperando turno en ningún punto en este momento.</p>";
+        return;
+      }
+
+      // El puesto se cuenta SOLO entre los del mismo punto: en el aeropuerto se
+      // hace una fila y en Almacentro otra, no se mezclan.
+      var fila = todas
+        .filter(function (r) { return r.punto === mio.punto; })
+        // Por orden de llegada. El turno ya viene numerado por el programa
+        // (1, 2, 3...); si faltara, se ordena por hora.
         .sort(function (a, b) {
+          if (a.turno && b.turno) return a.turno - b.turno;
           return String(a.llegada_aeropuerto || "").localeCompare(String(b.llegada_aeropuerto || ""));
         });
 
@@ -1818,19 +1844,12 @@
         return normalizarInterno(r.interno) === normalizarInterno(interno);
       });
 
-      if (idx < 0) {
-        box.innerHTML =
-          '<p class="placeholder">Tu vehículo (' + escapeHtml(interno) +
-          ") no está en la fila del aeropuerto en este momento.</p>";
-        return;
-      }
-
-      var mio = fila[idx];
       box.innerHTML =
         '<div class="fila-hero">' +
           '<div class="fila-puesto"><strong>' + (idx + 1) + "</strong><span>de " + fila.length + "</span></div>" +
           '<div class="fila-info">' +
             "<strong>Bus " + escapeHtml(mio.interno || interno) + "</strong>" +
+            (mio.punto ? '<span class="fila-punto">' + escapeHtml(mio.punto) + "</span>" : "") +
             "<span>Llegó " + escapeHtml(haceCuanto(mio.llegada_aeropuerto) || horaCorta(mio.llegada_aeropuerto)) +
               (mio.itinerario ? " · " + escapeHtml(mio.itinerario) : "") + "</span>" +
           "</div>" +

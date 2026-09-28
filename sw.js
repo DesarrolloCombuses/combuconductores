@@ -23,7 +23,7 @@
 // Igual a APP_VERSION de js/portal-config.js. No se cambia a mano: lo hace
 // nueva-version.ps1 en todos los sitios a la vez. Que este archivo cambie es
 // lo que avisa a los teléfonos de que hay una versión nueva.
-const VERSION = "v1.6.2";
+const VERSION = "v1.7.0";
 const CACHE_APP = "portal-app-" + VERSION;
 const CACHE_CDN = "portal-cdn-" + VERSION;
 const CACHE_TILES = "portal-tiles-" + VERSION;
@@ -58,6 +58,9 @@ const APP_SHELL = [
   "./modulos/aeropuerto/aplicacion-aeropuerto.html",
   "./modulos/aeropuerto/css/style.css",
   "./modulos/aeropuerto/css/modo-conductor.css",
+  "./modulos/aeropuerto/css/pantalla-chica.css",
+  "./modulos/aeropuerto/css/mapa-enturnes.css",
+  "./modulos/aeropuerto/css/sin-conductor.css",
   "./modulos/aeropuerto/js/config.js",
   "./modulos/aeropuerto/js/main.js",
   "./modulos/aeropuerto/js/modo-conductor.js",
