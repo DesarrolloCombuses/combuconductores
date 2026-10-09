@@ -623,6 +623,58 @@ button, a, [role="button"], .quick-action, .nav-item {
 
 .viajes-nota { margin: 10px 0 0; font-size: 12px; color: var(--muted); }
 
+/* --- Documentos del bus ---
+   Un renglón por papel: nombre, qué tan cerca está de vencer y el estado en
+   una pastilla de color. Rojo y ámbar tienen que saltar a la vista al sol. */
+.docs-resumen {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+.docs-resumen[data-nivel="ok"]      { background: var(--soft); color: var(--primary-strong); }
+.docs-resumen[data-nivel="pronto"],
+.docs-resumen[data-nivel="falta"]   { background: var(--warn-soft); color: var(--warn-ink); }
+.docs-resumen[data-nivel="vencido"] { background: var(--danger-soft); color: var(--danger); }
+.docs-placa { display: block; margin-top: 2px; font-size: 12px; font-weight: 600; opacity: .8; }
+
+.docs-lista { display: flex; flex-direction: column; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.doc {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+.doc-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.doc-nombre { font-size: 14.5px; font-weight: 700; overflow-wrap: anywhere; }
+.doc-detalle { font-size: 12.5px; color: var(--muted); }
+.doc-estado {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.doc-estado[data-nivel="ok"]      { background: var(--soft); color: var(--primary-strong); }
+.doc-estado[data-nivel="pronto"]  { background: var(--warn-soft); color: var(--warn-ink); }
+.doc-estado[data-nivel="vencido"] { background: var(--danger-soft); color: var(--danger); }
+.doc-estado[data-nivel="falta"]   { background: var(--line); color: var(--ink-2); }
+.doc-ver { flex: none; text-decoration: none; }
+.doc-licencia { margin-top: 12px; }
+
+@media (max-width: 380px) {
+  .doc { flex-wrap: wrap; }
+  .doc-info { flex-basis: 100%; }
+}
+
 /* --- Esqueletos de carga ---
    Con datos móviles lentos, un bloque que late comunica "viene en camino"
    mucho mejor que la palabra "Cargando…". */

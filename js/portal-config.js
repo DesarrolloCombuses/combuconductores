@@ -12,7 +12,7 @@ window.PORTAL_CONFIG = {
   // una nueva no se edita a mano, se corre (desde la carpeta portal):
   //   powershell -ExecutionPolicy Bypass -File .\nueva-version.ps1 1.6.1
   // que la cambia aquí, en sw.js y en index.html a la vez.
-  APP_VERSION: "v1.7.0",
+  APP_VERSION: "v1.8.0",
 
   // Cada cuánto se pregunta al servidor si hay una versión nueva, con el
   // portal a la vista. También se pregunta al abrirlo y al volver a él.
@@ -77,6 +77,24 @@ window.PORTAL_CONFIG = {
   // Despachos repetidos: la misma ruta registrada otra vez dentro de este
   // tiempo (doble registro del despachador) se muestra como un solo viaje.
   VIAJES_REPETIDOS_VENTANA_MS: 15 * 60 * 1000,
+
+  // Tarjeta "Documentos del bus" del inicio: los papeles del vehículo del
+  // turno y el estado de la licencia del conductor. Son las mismas tablas
+  // que llenan el Portal de Documentos por ruta y el panel de despachos.
+  //   flota_vehiculos            interno -> placa
+  //   flota_documentos_estado    el documento vigente de cada tipo por placa
+  //   conductor_documentos_estado la licencia vigente por cédula
+  TABLA_FLOTA_VEHICULOS: "flota_vehiculos",
+  VISTA_FLOTA_DOCUMENTOS: "flota_documentos_estado",
+  VISTA_CONDUCTOR_DOCUMENTOS: "conductor_documentos_estado",
+  BUCKET_FLOTA_DOCUMENTOS: "flota-documentos",
+  // Desde cuántos días antes del vencimiento se avisa "Por vencer" (el mismo
+  // umbral de las vistas en la base de datos).
+  DOCUMENTOS_POR_VENCER_DIAS: 30,
+  // Los documentos cambian poco: con el inicio a la vista se vuelven a pedir
+  // como mucho cada 15 min. Los enlaces para abrir un archivo duran 1 hora.
+  DOCUMENTOS_REFRESCO_MS: 15 * 60 * 1000,
+  DOCUMENTOS_ENLACE_S: 60 * 60,
 
   // Constancia de que el conductor confirmó el vehículo antes de abrir el
   // validador de tiquetes. Se crea con

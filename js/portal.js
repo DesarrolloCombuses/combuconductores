@@ -1284,9 +1284,9 @@
   }
 
   // ---------------------------------------------------------------- INICIO
-  // cargarTurno() es quien dispara cargarFila() y cargarViajes(), porque
-  // los dos se ubican por el vehículo que da el turno: no tiene sentido
-  // pedirlos antes.
+  // cargarTurno() es quien dispara cargarFila(), cargarViajes() y
+  // cargarDocumentos(), porque se ubican por el vehículo que da el turno: no
+  // tiene sentido pedirlos antes.
   function cargarInicio() {
     pintarSaludo();
     cargarTurno();
@@ -1340,12 +1340,14 @@
       box.innerHTML = '<p class="placeholder">Ingresa tu cédula para ver tu turno.</p>';
       cargarFila();
       cargarViajes();
+      cargarDocumentos();
       return;
     }
 
     if (state.turno) pintarTurno(state.turno); else esqueleto(box, "turno");
     cargarFila();
     cargarViajes();
+    cargarDocumentos();
 
     var vehiculoAntes = state.vehiculo;
     try {
@@ -1397,6 +1399,7 @@
       if (state.vehiculo !== vehiculoAntes) {
         cargarFila();
         cargarViajes();
+        cargarDocumentos();
         pintarBusEnBarras();
       }
     } catch (err) {
@@ -1857,6 +1860,248 @@
     } catch (err) {
       pintarErrorTarjeta(box, "No se pudo cargar la fila.", err, cargarFila);
     }
+  }
+
+  // ------------------------------------------------------ documentos del bus
+  // Los papeles que el conductor debe llevar en el bus del turno (los que
+  // pide un retén), con su vencimiento, y el estado de su licencia. Salen de
+  // las mismas tablas del Portal de Documentos por ruta.
+  //
+  // Del bus se puede abrir el archivo; de la licencia solo se muestra el
+  // estado: la cédula se escribe a mano y no se verifica, así que no se
+  // entrega el documento de una persona a quien escriba su número.
+  var DOC_TIPOS = [
+    { tipo: "SOAT", nombre: "SOAT" },
+    { tipo: "TECNOMECANICA", nombre: "Revisión técnico-mecánica" },
+    { tipo: "TARJETA_OPERACION", nombre: "Tarjeta de operación" },
+    // En la base se llama LICENCIA_TRANSITO, pero es la Tarjeta de Propiedad:
+    // no vence (migración 20261005140000_tarjeta_propiedad_sin_vencimiento).
+    { tipo: "LICENCIA_TRANSITO", nombre: "Tarjeta de propiedad", sinVencimiento: true },
+    { tipo: "CERTIFICACION_AMPARO", nombre: "Certificación de amparo" },
+    // El mantenimiento preventivo no va: no es un documento del bus y no
+    // debe contar como vencido.
+  ];
+
+  var docs = { clave: null, cargadoEn: 0, cargandoClave: null };
+
+  function diasHasta(fecha) {
+    if (!fecha) return null;
+    var ms = Date.parse(String(fecha).slice(0, 10) + "T00:00:00Z") - Date.parse(hoyColombia() + "T00:00:00Z");
+    return isNaN(ms) ? null : Math.round(ms / DIA_MS);
+  }
+
+  function fechaCorta(fecha) {
+    var p = String(fecha || "").slice(0, 10).split("-");
+    return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : "";
+  }
+
+  // nivel: ok | pronto | vencido | falta. El texto dice lo que el conductor
+  // necesita saber sin hacer cuentas: "Vence en 5 días", "Venció hace 2 días".
+  function estadoDocumento(cfgTipo, fila) {
+    if (!fila) return { nivel: "falta", etiqueta: "Sin cargar", detalle: "No está en el sistema" };
+    if (cfgTipo.sinVencimiento) {
+      return fila.storage_path
+        ? { nivel: "ok", etiqueta: "Cargada", detalle: "No vence" }
+        : { nivel: "falta", etiqueta: "Sin archivo", detalle: "Registrada sin archivo" };
+    }
+    var dias = diasHasta(fila.fecha_vencimiento);
+    if (dias == null) return { nivel: "falta", etiqueta: "Sin fecha", detalle: "Falta la fecha de vencimiento" };
+
+    var umbral = cfg.DOCUMENTOS_POR_VENCER_DIAS || 30;
+    var detalle;
+    if (dias < 0) {
+      detalle = "Venció hace " + (-dias) + (dias === -1 ? " día" : " días");
+      return { nivel: "vencido", etiqueta: "Vencido", detalle: detalle };
+    }
+    if (dias === 0) detalle = "Vence hoy";
+    else if (dias === 1) detalle = "Vence mañana";
+    else if (dias <= umbral) detalle = "Vence en " + dias + " días";
+    else detalle = "Vence el " + fechaCorta(fila.fecha_vencimiento);
+    return { nivel: dias <= umbral ? "pronto" : "ok", etiqueta: dias <= umbral ? "Por vencer" : "Vigente", detalle: detalle };
+  }
+
+  // El interno no es único en flota_vehiculos (192, 708, 709 y 757 se
+  // repiten entre vehículos retirados y activos): manda el que sigue
+  // vinculado y operando.
+  async function consultarVehiculoFlota(interno) {
+    var res = await conTiempoLimite(
+      client
+        .from(cfg.TABLA_FLOTA_VEHICULOS)
+        .select("placa,interno,nombre_ruta,vinculado,operante")
+        .in("interno", variantesInterno(interno))
+    );
+    if (res.error) throw res.error;
+    var puntaje = function (v) { return (v.vinculado === false ? 0 : 2) + (v.operante === false ? 0 : 1); };
+    var filas = (res.data || []).slice().sort(function (a, b) { return puntaje(b) - puntaje(a); });
+    return filas[0] || null;
+  }
+
+  async function consultarDocumentos(interno, dni) {
+    var vehiculo = interno ? await consultarVehiculoFlota(interno) : null;
+    var consultas = [
+      vehiculo
+        ? conTiempoLimite(
+            client
+              .from(cfg.VISTA_FLOTA_DOCUMENTOS)
+              .select("tipo,fecha_vencimiento,storage_path")
+              .eq("placa", vehiculo.placa)
+          )
+        : Promise.resolve({ data: [] }),
+      dni
+        ? conTiempoLimite(client.from(cfg.VISTA_CONDUCTOR_DOCUMENTOS).select("*").eq("cedula", dni))
+        : Promise.resolve({ data: [] }),
+    ];
+    var res = await Promise.all(consultas);
+    if (res[0].error) throw res[0].error;
+
+    var porTipo = {};
+    (res[0].data || []).forEach(function (f) { porTipo[f.tipo] = f; });
+
+    // Enlaces para abrir cada archivo, todos en una sola llamada. Se piden de
+    // una vez para poder ponerlos como enlaces normales: abrir una pestaña
+    // después de esperar al servidor lo bloquea Safari en el iPhone.
+    var rutas = Object.keys(porTipo)
+      .map(function (t) { return porTipo[t].storage_path; })
+      .filter(Boolean);
+    var enlaces = {};
+    if (rutas.length) {
+      try {
+        var firmas = await conTiempoLimite(
+          client.storage.from(cfg.BUCKET_FLOTA_DOCUMENTOS).createSignedUrls(rutas, cfg.DOCUMENTOS_ENLACE_S || 3600)
+        );
+        (firmas.data || []).forEach(function (f) {
+          if (f && f.signedUrl && !f.error) enlaces[f.path] = f.signedUrl;
+        });
+      } catch (_) { /* sin enlaces se ven igual el estado y la fecha */ }
+    }
+
+    // Licencia: si la consulta falla, la tarjeta del bus sigue sirviendo.
+    var licencia = null;
+    if (!res[1].error) {
+      licencia = (res[1].data || []).find(function (f) { return f.tipo === "LICENCIA_CONDUCCION"; }) || null;
+    }
+
+    return { vehiculo: vehiculo, porTipo: porTipo, enlaces: enlaces, licencia: licencia, licenciaConsultada: !!dni && !res[1].error };
+  }
+
+  function cargarDocumentos(forzar) {
+    var box = $("documentosBody");
+    var interno = state.vehiculo ? String(state.vehiculo).trim() : "";
+    var dni = state.dni || "";
+    $("documentosTitulo").textContent = interno ? "Documentos del bus " + interno : "Documentos del bus";
+
+    if (!interno && !dni) {
+      docs.clave = null;
+      box.innerHTML = '<p class="placeholder">Cuando tengas vehículo asignado verás aquí si sus papeles están al día.</p>';
+      return;
+    }
+
+    var clave = normalizarInterno(interno) + "_" + dni;
+    var reciente = docs.clave === clave && Date.now() - docs.cargadoEn < (cfg.DOCUMENTOS_REFRESCO_MS || 900000);
+    if (reciente && !forzar) return;
+    if (docs.cargandoClave === clave) return;
+
+    var cache = leerCache("documentos_" + clave);
+    if (docs.clave !== clave) {
+      if (cache && cache.datos) pintarDocumentos(cache.datos, cache.guardadoEn);
+      else esqueleto(box, "lineas");
+    }
+    docs.clave = clave;
+
+    if (!navigator.onLine) {
+      if (!cache) box.innerHTML = '<p class="placeholder">Necesitas conexión para ver los documentos del bus.</p>';
+      return;
+    }
+
+    docs.cargandoClave = clave;
+    consultarDocumentos(interno, dni)
+      .then(function (datos) {
+        if (docs.clave !== clave) return; // cambió el bus o el conductor mientras tanto
+        docs.cargadoEn = Date.now();
+        // Al teléfono va solo el estado: los enlaces vencen en una hora.
+        guardarCache("documentos_" + clave, Object.assign({}, datos, { enlaces: {} }));
+        pintarDocumentos(datos, null);
+      })
+      .catch(function (err) {
+        if (docs.clave !== clave) return;
+        if (cache && cache.datos) pintarDocumentos(cache.datos, cache.guardadoEn);
+        else pintarErrorTarjeta(box, "No se pudieron consultar los documentos.", err, function () { cargarDocumentos(true); });
+      })
+      .then(function () {
+        if (docs.cargandoClave === clave) docs.cargandoClave = null;
+      });
+  }
+
+  function pintarDocumentos(datos, guardadoEn) {
+    var box = $("documentosBody");
+    var interno = state.vehiculo ? String(state.vehiculo).trim() : "";
+    var html = "";
+
+    if (interno && !datos.vehiculo) {
+      html += '<p class="placeholder">El bus ' + escapeHtml(interno) +
+        " no aparece en el registro de documentos. Avísale a tu coordinador.</p>";
+    } else if (datos.vehiculo) {
+      var filas = DOC_TIPOS.map(function (t) {
+        return { cfg: t, fila: datos.porTipo[t.tipo] || null, estado: estadoDocumento(t, datos.porTipo[t.tipo]) };
+      });
+      var vencidos = filas.filter(function (f) { return f.estado.nivel === "vencido"; }).length;
+      var pronto = filas.filter(function (f) { return f.estado.nivel === "pronto"; }).length;
+      var faltan = filas.filter(function (f) { return f.estado.nivel === "falta"; }).length;
+
+      var resumen, nivelResumen;
+      if (vencidos) {
+        nivelResumen = "vencido";
+        resumen = (vencidos === 1 ? "1 documento vencido" : vencidos + " documentos vencidos") +
+          ". Avísale a tu coordinador antes de salir.";
+      } else if (pronto) {
+        nivelResumen = "pronto";
+        resumen = (pronto === 1 ? "1 documento vence" : pronto + " documentos vencen") + " pronto.";
+      } else if (faltan) {
+        nivelResumen = "falta";
+        resumen = "Al día, pero " + (faltan === 1 ? "falta cargar 1 documento" : "faltan cargar " + faltan + " documentos") + ".";
+      } else {
+        nivelResumen = "ok";
+        resumen = "Todos los documentos al día.";
+      }
+
+      html += '<p class="docs-resumen" data-nivel="' + nivelResumen + '">' + escapeHtml(resumen) +
+        ' <span class="docs-placa">Placa ' + escapeHtml(datos.vehiculo.placa) + "</span></p>";
+
+      html += '<ul class="docs-lista">' + filas.map(function (f) {
+        var url = f.fila && f.fila.storage_path ? (datos.enlaces || {})[f.fila.storage_path] : null;
+        return '<li class="doc">' +
+          '<div class="doc-info">' +
+            '<span class="doc-nombre">' + escapeHtml(f.cfg.nombre) + "</span>" +
+            '<span class="doc-detalle">' + escapeHtml(f.estado.detalle) + "</span>" +
+          "</div>" +
+          '<span class="doc-estado" data-nivel="' + f.estado.nivel + '">' + escapeHtml(f.estado.etiqueta) + "</span>" +
+          (url
+            ? '<a class="btn btn-ghost btn-sm doc-ver" href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Ver</a>'
+            : "") +
+        "</li>";
+      }).join("") + "</ul>";
+    }
+
+    if (datos.licenciaConsultada || datos.licencia) {
+      var est = estadoDocumento({ nombre: "Licencia" }, datos.licencia);
+      var detalleLic = datos.licencia
+        ? est.detalle + (datos.licencia.categoria_licencia ? " · Categoría " + datos.licencia.categoria_licencia : "")
+        : "No está en el sistema. Llévala a tu coordinador.";
+      html += '<div class="doc doc-licencia">' +
+        '<div class="doc-info">' +
+          '<span class="doc-nombre">Mi licencia de conducción</span>' +
+          '<span class="doc-detalle">' + escapeHtml(detalleLic) + "</span>" +
+        "</div>" +
+        '<span class="doc-estado" data-nivel="' + est.nivel + '">' + escapeHtml(est.etiqueta) + "</span>" +
+      "</div>";
+    }
+
+    if (guardadoEn) {
+      html += '<p class="viajes-aviso">Sin conexión: es la consulta guardada a las ' +
+        escapeHtml(horaDeMs(guardadoEn)) + ".</p>";
+    }
+
+    box.innerHTML = html || '<p class="placeholder">Sin documentos para mostrar.</p>';
   }
 
   // ---------------------------------------------------------------- PERFIL
