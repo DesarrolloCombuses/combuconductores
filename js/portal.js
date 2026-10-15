@@ -933,7 +933,11 @@
     asistencia: { titulo: "Asistencia", sub: "Registra tu entrada y salida" },
     aeropuerto: { titulo: "Aeropuerto", sub: "Enturnamiento y mapa en vivo" },
     tiquetes: { titulo: "Tiquetes", sub: "Validación en Distribusion" },
+    tarjeta: { titulo: "Mi tarjeta", sub: "Cívica, pasajeros y tiquetes de cada despacho" },
   };
+
+  // Vistas del propio portal (sin iframe): Inicio y Mi tarjeta.
+  var VISTAS_NATIVAS = { inicio: true, tarjeta: true };
 
   function irA(vista, desdeHash, confirmado) {
     // El perfil es una hoja, no una vista: no cambia el panel de fondo.
@@ -958,16 +962,17 @@
     });
 
     $("topbarTitle").textContent = TITULOS[vista].titulo;
-    $("topbarSubtitle").textContent = vista === "inicio" && state.vehiculo
+    $("topbarSubtitle").textContent = VISTAS_NATIVAS[vista] && state.vehiculo
       ? "Vehículo " + state.vehiculo
       : TITULOS[vista].sub;
-    show($("btnReloadModule"), vista !== "inicio");
+    show($("btnReloadModule"), !VISTAS_NATIVAS[vista]);
 
-    if (vista !== "inicio") {
+    if (!VISTAS_NATIVAS[vista]) {
       crearIframe(vista);
       pintarBusEnBarras();
     }
     if (vista === "inicio") cargarInicio();
+    if (vista === "tarjeta") cargarTarjeta();
 
     if (!desdeHash) {
       try { history.replaceState(null, "", "#/" + vista); } catch (_) {}
@@ -1284,9 +1289,9 @@
   }
 
   // ---------------------------------------------------------------- INICIO
-  // cargarTurno() es quien dispara cargarFila(), cargarViajes() y
-  // cargarDocumentos(), porque se ubican por el vehículo que da el turno: no
-  // tiene sentido pedirlos antes.
+  // cargarTurno() es quien dispara cargarFila(), cargarTarjeta(),
+  // cargarViajes() y cargarDocumentos(), porque se ubican por el vehículo que
+  // da el turno: no tiene sentido pedirlos antes.
   function cargarInicio() {
     pintarSaludo();
     cargarTurno();
@@ -1339,6 +1344,7 @@
     if (!sel || !sel.dni) {
       box.innerHTML = '<p class="placeholder">Ingresa tu cédula para ver tu turno.</p>';
       cargarFila();
+      cargarTarjeta();
       cargarViajes();
       cargarDocumentos();
       return;
@@ -1346,6 +1352,7 @@
 
     if (state.turno) pintarTurno(state.turno); else esqueleto(box, "turno");
     cargarFila();
+    cargarTarjeta();
     cargarViajes();
     cargarDocumentos();
 
@@ -1398,6 +1405,7 @@
       // Si cambió el vehículo del turno, su fila y sus viajes son otros.
       if (state.vehiculo !== vehiculoAntes) {
         cargarFila();
+        cargarTarjeta();
         cargarViajes();
         cargarDocumentos();
         pintarBusEnBarras();
@@ -1687,6 +1695,840 @@
       if (!state.user || state.vista !== "inicio" || document.hidden || $("appView").hidden) return;
       cargarViajes();
     }, cfg.DESPACHOS_REFRESCO_MS || 180000);
+  }
+
+  // ------------------------------------------------------------- mi tarjeta
+  // La tarjeta de despacho del bus del turno, como la de papel: un renglón por
+  // viaje (también los que salieron sin despacho) con su hora, su ruta y los
+  // pasajeros que contó el sensor (tope 19). En cada despacho el conductor
+  // escribe el número que marca el validador de la cívica, cuántos pasajeros
+  // llevó (por su cuenta: control lo audita contra el sensor) y cuántos
+  // tiquetes escaneó en Distribusion; las cívicas de un viaje salen solas: la
+  // lectura del despacho siguiente menos la suya.
+  //
+  // Para que la auditoría sirva, el número del sensor de un viaje no se le
+  // muestra al conductor hasta que guarda el suyo (si lo viera, lo copiaría).
+  // La plata que ve es la de sus pasajeros: pasajeros x el pasaje del día.
+  //
+  // Los viajes los publica el programa de enturnes en tarjeta_viajes, y la
+  // vista v_tarjeta_viajes los junta con las lecturas, los pasajeros del
+  // conductor, los tiquetes, los daños del validador y el pasaje. Lo guardado
+  // no se cambia desde aquí: si quedó mal lo corrige un despachador, y queda
+  // quién y por qué (almacentro/enturnes/sql/tarjeta_despacho.sql).
+  var CAMPOS_TARJETA = "clave,dia,interno,viaje,sin_despacho,hora_salida,pasajeros,subidas,itinerario,ruta," +
+    "civica_lectura,civicas,estado_civica,lectura_corregida,tiquetes_escaneados,tiquetes_corregidos,estado_calculo," +
+    "pasajeros_conductor,pasajeros_conductor_corregidos,tarifa";
+
+  var tarj = {
+    clave: null, vehiculo: null, dia: null, filas: null, danos: [], guardadoEn: null, error: null,
+    cargandoClave: null,
+    borrador: {},      // { clave: { civica, pasajeros, tiquetes } } lo que va escribiendo: sobrevive a un refresco
+    confirmando: null, // { clave, civica, pasajeros, tiquetes, avisos }: el "¿Guardar?" a la vista
+    guardando: null,   // clave del viaje que se está guardando
+    mensaje: null,     // { clave, tipo: ok|error, texto } debajo de un renglón
+  };
+
+  // Lo que dice cada estado de la cívica (estado_civica de la vista), en las
+  // palabras del conductor.
+  var ESTADO_CIVICA = {
+    ok: { nivel: "ok", texto: "Cuadra" },
+    pendiente_cierre: { nivel: "espera", texto: "Se completa en el próximo despacho" },
+    falta_lectura_siguiente: { nivel: "espera", texto: "Falta la cívica del viaje siguiente" },
+    dano_por_revisar: { nivel: "revisa", texto: "Daño del validador en revisión" },
+    bajo: { nivel: "mal", texto: "El número bajó: lo revisa el despachador" },
+    salto: { nivel: "revisa", texto: "Subió mucho: lo revisa el despachador" },
+  };
+
+  var ICONO_ALERTA = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 9v4m0 4h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>';
+
+  // El día de la tarjeta va de 3 a. m. a 3 a. m., como la de papel: el viaje
+  // de la 1 de la mañana todavía es del día anterior.
+  function diaDeTarjeta() { return fechaColombiaDe(Date.now() - 3 * HORA_MS); }
+
+  function nombreConductor() {
+    return (state.conductor && state.conductor.nombre) ||
+      (state.turno && state.turno.nombre_programacion) || null;
+  }
+
+  function nombreViaje(f) { return f.sin_despacho ? "viaje sin despacho" : "viaje " + (f.viaje || "—"); }
+
+  function horaViaje(f) { return horaDeMs(Date.parse(f.hora_salida)); }
+
+  async function consultarTarjeta(vehiculo, dia) {
+    var internos = variantesInterno(vehiculo);
+    var res = await Promise.all([
+      conTiempoLimite(
+        client.from(cfg.VISTA_TARJETA_VIAJES)
+          .select(CAMPOS_TARJETA)
+          .in("interno", internos)
+          .eq("dia", dia)
+          .order("hora_salida", { ascending: false })
+      ),
+      conTiempoLimite(
+        client.from(cfg.TABLA_CIVICA_DANOS)
+          .select("id,clave_viaje,estado,lectura_final_viejo,lectura_inicial_nuevo,reportado_en,nota_revision")
+          .in("interno", internos)
+          .eq("dia", dia)
+          .order("reportado_en", { ascending: true })
+      ),
+    ]);
+    if (res[0].error) throw res[0].error;
+    // Los daños son un extra: si esa consulta falla, la tarjeta sirve igual.
+    return { filas: res[0].data || [], danos: res[1].error ? [] : (res[1].data || []) };
+  }
+
+  function cargarTarjeta() {
+    var box = $("tarjetaBody");
+    var btn = $("btnRefrescarTarjeta");
+    var vehiculo = state.vehiculo ? String(state.vehiculo).trim() : "";
+    var dia = diaDeTarjeta();
+
+    if (!vehiculo) {
+      tarj.clave = null;
+      show(btn, false);
+      $("tarjetaTitulo").textContent = "Mi tarjeta de hoy";
+      box.innerHTML = '<p class="placeholder">Cuando tengas vehículo asignado verás aquí su tarjeta: ' +
+        "los viajes, los pasajeros y la cívica de cada despacho.</p>";
+      pintarResumenTarjeta();
+      return;
+    }
+    show(btn, true);
+    $("tarjetaTitulo").textContent = "Mi tarjeta · bus " + vehiculo;
+
+    var clave = normalizarInterno(vehiculo) + "_" + dia;
+    if (tarj.clave !== clave) {
+      var cache = leerCache("tarjeta_" + clave);
+      tarj.clave = clave;
+      tarj.vehiculo = vehiculo;
+      tarj.dia = dia;
+      tarj.filas = cache && cache.datos ? cache.datos.filas : null;
+      tarj.danos = cache && cache.datos ? cache.datos.danos || [] : [];
+      tarj.guardadoEn = tarj.filas ? cache.guardadoEn : null;
+      tarj.error = null;
+      tarj.borrador = {};
+      tarj.confirmando = null;
+      tarj.mensaje = null;
+    }
+
+    if (tarj.filas) {
+      pintarTarjeta();
+    } else if (!navigator.onLine) {
+      box.innerHTML = '<p class="placeholder">Necesitas conexión para ver tu tarjeta.</p>';
+      pintarResumenTarjeta();
+    } else {
+      esqueleto(box, "bloque");
+      pintarResumenTarjeta();
+    }
+
+    if (!navigator.onLine || tarj.cargandoClave === clave) return;
+    tarj.cargandoClave = clave;
+    btn.disabled = true;
+
+    consultarTarjeta(vehiculo, dia)
+      .then(function (datos) {
+        if (tarj.clave !== clave) return; // cambió el bus o el día mientras tanto
+        tarj.filas = datos.filas;
+        tarj.danos = datos.danos;
+        tarj.guardadoEn = Date.now();
+        tarj.error = null;
+        guardarCache("tarjeta_" + clave, datos);
+        pintarTarjeta();
+      })
+      .catch(function (err) {
+        if (tarj.clave !== clave) return;
+        tarj.error = err;
+        if (tarj.filas) pintarTarjeta();
+        else {
+          pintarErrorTarjeta(box, "No se pudo consultar tu tarjeta.", err, cargarTarjeta);
+          pintarResumenTarjeta();
+        }
+      })
+      .then(function () {
+        if (tarj.cargandoClave === clave) tarj.cargandoClave = null;
+        btn.disabled = false;
+      });
+  }
+
+  // La lectura anterior a un viaje en el mismo bus (la lista va del más
+  // reciente al más viejo) y cuánta gente subió desde ese despacho: con eso se
+  // avisa de un número que parece mal escrito, antes de guardarlo.
+  function lecturaAnterior(filas, i) {
+    var subidas = 0;
+    for (var j = i + 1; j < filas.length; j++) {
+      subidas += Number(filas[j].subidas != null ? filas[j].subidas : filas[j].pasajeros || 0);
+      if (filas[j].civica_lectura != null) {
+        return { fila: filas[j], lectura: Number(filas[j].civica_lectura), subidas: subidas };
+      }
+    }
+    return null;
+  }
+
+  // Los mismos límites con que la vista marca "bajo" y "salto". El aviso no
+  // dice cuánta gente contó el sensor: eso no lo ve el conductor antes de
+  // escribir sus pasajeros.
+  function avisosDeLectura(filas, i, valor) {
+    var ant = lecturaAnterior(filas, i);
+    if (!ant) return [];
+    var dif = valor - ant.lectura;
+    if (dif < 0) {
+      return [{
+        tipo: "bajo", clave: ant.fila.clave,
+        texto: "La cívica es menor que la del " + nombreViaje(ant.fila) + " (" + ant.lectura + "). " +
+          "Si cambiaron el validador, repórtalo como daño.",
+      }];
+    }
+    if (dif > Math.max(ant.subidas, 19) + 5) {
+      return [{
+        tipo: "salto",
+        texto: "La cívica tiene " + dif + " más que la del " + nombreViaje(ant.fila) + " (" + ant.lectura + "): " +
+          "son más de las personas que caben en esos viajes. Revisa el número.",
+      }];
+    }
+    return [];
+  }
+
+  // Más de 19 (el tope de la tarjeta de papel) es casi seguro un número mal
+  // escrito. No se compara con el sensor: lo del conductor es su cuenta, y
+  // control es el que compara.
+  function avisosDePasajeros(n) {
+    if (n > 19) {
+      return [{
+        tipo: "salto",
+        texto: "Son " + n + " pasajeros y el tope de la tarjeta es 19. Revisa el número.",
+      }];
+    }
+    return [];
+  }
+
+  // Más tiquetes que pasajeros es casi seguro un número mal escrito. Se compara
+  // con los pasajeros que escribió el conductor (no con el sensor, que no ve).
+  function avisosDeTiquetes(n, pasajeros) {
+    if (pasajeros != null && n > pasajeros) {
+      return [{
+        tipo: "salto",
+        texto: "Son más tiquetes (" + n + ") que los pasajeros que escribiste (" + pasajeros + "). " +
+          "Revisa los números.",
+      }];
+    }
+    return [];
+  }
+
+  function enViajes(n) { return n === 1 ? "1 viaje" : n + " viajes"; }
+
+  // 380000 -> "$380.000"
+  function pesos(n) { return "$" + String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, "."); }
+
+  // Lo que dice el conductor en el día: sus pasajeros y la plata (pasajeros x
+  // el pasaje). Los viajes en que no ha escrito no cuentan.
+  function totalesDelConductor(filas) {
+    return filas.reduce(function (t, f) {
+      if (f.pasajeros_conductor == null) return t;
+      t.pasajeros += Number(f.pasajeros_conductor);
+      if (f.tarifa != null) { t.plata += Number(f.pasajeros_conductor) * Number(f.tarifa); t.conPlata = true; }
+      return t;
+    }, { pasajeros: 0, plata: 0, conPlata: false });
+  }
+
+  // "a", "a y b", "a, b y c"
+  function listaY(partes) {
+    return partes.length < 2 ? partes.join("") : partes.slice(0, -1).join(", ") + " y " + partes[partes.length - 1];
+  }
+
+  function faltaAlgo(f) {
+    return f.civica_lectura == null || f.pasajeros_conductor == null || f.tiquetes_escaneados == null;
+  }
+
+  // Lo que le falta a la tarjeta, en palabras: "la cívica en 2 viajes, los
+  // pasajeros en 2 viajes y los tiquetes en 1 viaje".
+  function faltanEnTarjeta(filas) {
+    function cuantos(campo) { return filas.filter(function (f) { return f[campo] == null; }).length; }
+    var civica = cuantos("civica_lectura");
+    var pasajeros = cuantos("pasajeros_conductor");
+    var tiquetes = cuantos("tiquetes_escaneados");
+    var partes = [];
+    if (civica) partes.push("la cívica en " + enViajes(civica));
+    if (pasajeros) partes.push("los pasajeros en " + enViajes(pasajeros));
+    if (tiquetes) partes.push("los tiquetes en " + enViajes(tiquetes));
+    return listaY(partes);
+  }
+
+  // El aviso corto del inicio: qué falta y el botón para abrir la tarjeta, que
+  // está en el menú. Es lo primero que ve el conductor al abrir la aplicación
+  // después de un despacho.
+  function pintarResumenTarjeta() {
+    var box = $("tarjetaResumenBody");
+    if (!box) return;
+    if (!tarj.clave) {
+      box.innerHTML = '<p class="placeholder">Cuando tengas vehículo asignado verás aquí lo que falta en tu tarjeta.</p>';
+      return;
+    }
+    var filas = tarj.filas;
+    if (!filas) {
+      box.innerHTML = tarj.error
+        ? '<p class="placeholder">No se pudo consultar tu tarjeta.</p>' + botonAbrirTarjeta(false)
+        : '<div class="skeleton skeleton-linea"></div>';
+      return;
+    }
+    var faltan = faltanEnTarjeta(filas);
+    var suyo = totalesDelConductor(filas);
+    var texto, nivel;
+    if (!filas.length) {
+      nivel = "falta";
+      texto = "Todavía no hay viajes hoy en el bus " + tarj.vehiculo + ".";
+    } else if (faltan) {
+      nivel = "pronto";
+      texto = "Falta " + faltan + ".";
+    } else {
+      nivel = "ok";
+      texto = "Tarjeta al día: " + enViajes(filas.length) + ", " + suyo.pasajeros + " pasajeros" +
+        (suyo.conPlata ? ", " + pesos(suyo.plata) : "") + ".";
+    }
+    box.innerHTML = '<p class="docs-resumen" data-nivel="' + nivel + '">' + escapeHtml(texto) + "</p>" +
+      botonAbrirTarjeta(!!faltan);
+  }
+
+  function botonAbrirTarjeta(urgente) {
+    return '<button class="btn ' + (urgente ? "btn-primary" : "btn-ghost") + ' btn-block" type="button" data-abrir-tarjeta>' +
+      (urgente ? "Completar mi tarjeta" : "Abrir mi tarjeta") + "</button>";
+  }
+
+  function pintarTarjeta() {
+    var box = $("tarjetaBody");
+    var filas = tarj.filas || [];
+
+    // Si estaba escribiendo un número, el campo vuelve a quedar listo.
+    var activo = document.activeElement;
+    var enfocado = activo && box.contains(activo) && activo.getAttribute("data-lectura")
+      ? { clave: activo.getAttribute("data-lectura"), campo: activo.getAttribute("data-campo") }
+      : null;
+
+    var n = filas.length;
+    // Los totales son los del conductor: el del sensor dejaría sacar, por resta,
+    // el número de un viaje que todavía no ha escrito.
+    var suyo = totalesDelConductor(filas);
+    var tiquetes = filas.reduce(function (s, f) { return s + Number(f.tiquetes_escaneados || 0); }, 0);
+    var primeraFalta = filas.findIndex(faltaAlgo);
+    var faltan = faltanEnTarjeta(filas);
+
+    var html =
+      '<div class="viajes-hero">' +
+        '<div class="viajes-total"><strong>' + n + "</strong><span>" + (n === 1 ? "viaje" : "viajes") + "</span></div>" +
+        '<div class="viajes-info">' +
+          "<strong>" + suyo.pasajeros + (suyo.pasajeros === 1 ? " pasajero" : " pasajeros") +
+            (suyo.conPlata ? " · " + pesos(suyo.plata) : "") +
+            (n ? " · " + tiquetes + (tiquetes === 1 ? " tiquete" : " tiquetes") : "") + "</strong>" +
+          "<span>" +
+            (!n ? "Todavía no hay viajes hoy" : faltan ? "Falta " + faltan : "Tarjeta completa") +
+          "</span>" +
+        "</div>" +
+      "</div>";
+
+    if (tarj.guardadoEn && (tarj.error || !navigator.onLine)) {
+      html += '<p class="viajes-aviso">' + (navigator.onLine ? "No se pudo actualizar" : "Sin conexión") +
+        ": es la tarjeta guardada a las " + escapeHtml(horaDeMs(tarj.guardadoEn)) + ".</p>";
+    }
+
+    if (n) {
+      html += '<ol class="tarj-lista">' +
+        filas.map(function (f, i) { return renglonTarjeta(f, i, i === primeraFalta); }).join("") +
+        "</ol>";
+    } else {
+      html += '<p class="viajes-nota">Cada viaje aparece aquí un par de minutos después del despacho.</p>';
+    }
+
+    if (tarj.danos.length) {
+      html += '<ul class="tarj-danos">' + tarj.danos.map(function (d) {
+        var f = filas.find(function (x) { return x.clave === d.clave_viaje; });
+        var est = d.estado === "aprobado" ? { nivel: "ok", texto: "Aprobado" }
+          : d.estado === "rechazado" ? { nivel: "vencido", texto: "Rechazado" }
+          : { nivel: "pronto", texto: "En revisión" };
+        var detalle = (d.lectura_final_viejo != null ? "Quedó en " + d.lectura_final_viejo + " · " : "") +
+          "el nuevo arrancó en " + d.lectura_inicial_nuevo +
+          (d.estado === "rechazado" && d.nota_revision ? " · " + d.nota_revision : "");
+        return '<li class="doc">' +
+          '<div class="doc-info">' +
+            '<span class="doc-nombre">Daño del validador · ' + escapeHtml(f ? nombreViaje(f) : "viaje") + "</span>" +
+            '<span class="doc-detalle">' + escapeHtml(detalle) + "</span>" +
+          "</div>" +
+          '<span class="doc-estado" data-nivel="' + est.nivel + '">' + est.texto + "</span>" +
+        "</li>";
+      }).join("") + "</ul>";
+    }
+
+    if (n) {
+      html += '<button class="btn btn-ghost btn-block btn-dano" type="button" data-dano="">' +
+        ICONO_ALERTA + "Reportar daño del validador</button>";
+    }
+
+    if (tarj.guardadoEn) {
+      html += '<p class="viajes-nota">Actualizada a las ' + escapeHtml(horaDeMs(tarj.guardadoEn)) + "</p>";
+    }
+
+    box.innerHTML = html;
+    pintarResumenTarjeta();
+
+    if (enfocado) {
+      Array.prototype.some.call(box.querySelectorAll("[data-lectura]"), function (campo) {
+        if (campo.getAttribute("data-lectura") !== enfocado.clave ||
+            campo.getAttribute("data-campo") !== enfocado.campo) return false;
+        campo.focus();
+        try { campo.setSelectionRange(campo.value.length, campo.value.length); } catch (_) {}
+        return true;
+      });
+    }
+  }
+
+  function campoTarjeta(f, i, campo, etiqueta, ejemplo, largo) {
+    var id = "tarj" + campo + i;
+    return '<label class="tv-campo tv-campo-' + campo + '" for="' + id + '"><span>' + etiqueta + "</span>" +
+      '<input id="' + id + '" data-lectura="' + escapeHtml(f.clave) + '" data-campo="' + campo + '" type="text" ' +
+        'inputmode="numeric" pattern="[0-9]*" maxlength="' + largo + '" autocomplete="off" placeholder="' + ejemplo + '" ' +
+        'value="' + escapeHtml((tarj.borrador[f.clave] || {})[campo] || "") + '">' +
+    "</label>";
+  }
+
+  function renglonTarjeta(f, i, esLaQueSigue) {
+    var faltaCivica = f.civica_lectura == null;
+    var faltaPasajeros = f.pasajeros_conductor == null;
+    var faltaTiquetes = f.tiquetes_escaneados == null;
+    var falta = faltaCivica || faltaPasajeros || faltaTiquetes;
+    var ruta = f.itinerario ? rutaLegible(f.itinerario) : f.ruta ? "Ruta " + f.ruta : "Sin itinerario";
+
+    // El viaje sin despacho no tiene número ni ruta: el letrero va en su lugar.
+    var html =
+      '<div class="tv-fila">' +
+        '<span class="viaje-num">' + (f.sin_despacho ? "–" : escapeHtml(f.viaje)) + "</span>" +
+        '<span class="viaje-hora">' + escapeHtml(horaViaje(f)) + "</span>" +
+        '<span class="tv-ruta">' +
+          (f.sin_despacho ? '<span class="tv-sd">SIN DESPACHO</span>' : escapeHtml(ruta)) +
+        "</span>" +
+        // Lo del sensor, solo cuando ya guardó sus pasajeros (si no, lo copiaría).
+        // Mientras va en camino el número puede subir: el sensor a veces cuenta tarde
+        // (el 709 el 14-oct: 5 en el aeropuerto con el sensor tapado y 18 más en Bello).
+        (faltaPasajeros ? "" :
+          '<span class="tv-pas"><strong>' + escapeHtml(f.pasajeros) + "</strong>sensor" +
+            (f.estado_calculo === "en_curso" ? "<br>hasta ahora" : "") + "</span>") +
+      "</div>";
+
+    // Lo que ya está guardado
+    if (!faltaCivica) {
+      var est = ESTADO_CIVICA[f.estado_civica];
+      html += '<div class="tv-civica">' +
+        "<span>Cívica <b>" + escapeHtml(f.civica_lectura) + "</b></span>" +
+        (f.civicas != null
+          ? "<span>" + escapeHtml(f.civicas) + (Number(f.civicas) === 1 ? " cívica" : " cívicas") + "</span>"
+          : "") +
+        (est ? '<span class="tv-chip" data-nivel="' + est.nivel + '">' + escapeHtml(est.texto) + "</span>" : "") +
+        (f.lectura_corregida ? '<span class="tv-chip" data-nivel="espera">Corregida por el despachador</span>' : "") +
+      "</div>";
+    }
+    if (!faltaPasajeros) {
+      html += '<div class="tv-civica">' +
+        "<span>Pasajeros que llevaste <b>" + escapeHtml(f.pasajeros_conductor) + "</b></span>" +
+        (f.tarifa != null
+          ? '<span class="tv-plata">' + pesos(Number(f.pasajeros_conductor) * Number(f.tarifa)) + "</span>"
+          : "") +
+        (f.pasajeros_conductor_corregidos ? '<span class="tv-chip" data-nivel="espera">Corregidos por el despachador</span>' : "") +
+      "</div>";
+    }
+    if (!faltaTiquetes) {
+      html += '<div class="tv-civica">' +
+        "<span>Tiquetes escaneados <b>" + escapeHtml(f.tiquetes_escaneados) + "</b></span>" +
+        (f.tiquetes_corregidos ? '<span class="tv-chip" data-nivel="espera">Corregidos por el despachador</span>' : "") +
+      "</div>";
+    }
+
+    // Lo que falta: el "¿Guardar?" o el formulario
+    var c = tarj.confirmando;
+    if (falta && c && c.clave === f.clave) {
+      var guardando = tarj.guardando === f.clave;
+      var valores = [];
+      if (c.civica != null) valores.push(["Cívica", c.civica]);
+      if (c.pasajeros != null) valores.push(["Pasajeros", c.pasajeros]);
+      if (c.tiquetes != null) valores.push(["Tiquetes", c.tiquetes]);
+      html += '<div class="tv-confirma">' +
+        c.avisos.map(function (a) {
+          return '<p class="tv-aviso" data-tipo="' + a.tipo + '">' + escapeHtml(a.texto) +
+            (a.tipo === "bajo"
+              ? '<button class="btn-link" type="button" data-dano="' + escapeHtml(a.clave) + '">Reportar daño del validador</button>'
+              : "") +
+            "</p>";
+        }).join("") +
+        "<p>¿Guardar esto en el " + escapeHtml(nombreViaje(f)) + "?</p>" +
+        '<div class="tv-valores">' + valores.map(function (v) {
+          return "<div><span>" + v[0] + '</span><strong class="tv-numero">' + v[1] + "</strong></div>";
+        }).join("") + "</div>" +
+        "<p>Después solo el despachador lo puede corregir.</p>" +
+        '<div class="tv-acciones">' +
+          '<button class="btn btn-primary btn-sm" type="button" data-confirmar="' + escapeHtml(f.clave) + '"' +
+            (tarj.guardando ? " disabled" : "") + ">" + (guardando ? "Guardando…" : "Sí, guardar") + "</button>" +
+          '<button class="btn btn-ghost btn-sm" type="button" data-cambiar="' + escapeHtml(f.clave) + '"' +
+            (guardando ? " disabled" : "") + ">Cambiar</button>" +
+        "</div>" +
+      "</div>";
+    } else if (falta) {
+      var faltan = [];
+      if (faltaCivica) faltan.push("la cívica");
+      if (faltaPasajeros) faltan.push("los pasajeros");
+      if (faltaTiquetes) faltan.push("los tiquetes");
+      var titulo = esLaQueSigue
+        ? "Escribe " + listaY(faltan) + " de este despacho"
+        : (faltan.length === 1 && faltaCivica ? "Falta " : "Faltan ") + listaY(faltan);
+      html += '<form class="tv-form" data-clave="' + escapeHtml(f.clave) + '" novalidate>' +
+        '<p class="tv-etiqueta">' + titulo + "</p>" +
+        (faltaCivica ? campoTarjeta(f, i, "civica", "Número del validador", "Ej. 1250", 9) : "") +
+        (faltaPasajeros ? campoTarjeta(f, i, "pasajeros", "Pasajeros", "Ej. 15", 2) : "") +
+        (faltaTiquetes ? campoTarjeta(f, i, "tiquetes", "Tiquetes", "Ej. 12", 3) : "") +
+        '<button class="btn btn-primary btn-sm tv-guardar" type="submit">Guardar</button>' +
+        (esLaQueSigue && faltaPasajeros
+          ? '<p class="tv-ayuda">Pasajeros: cuántas personas llevaste en este viaje, contadas por ti.</p>'
+          : "") +
+        (esLaQueSigue && faltaTiquetes
+          ? '<p class="tv-ayuda">Tiquetes: los que escaneaste en Distribusion para este viaje. Si no hubo, pon 0.</p>'
+          : "") +
+      "</form>";
+    }
+
+    var m = tarj.mensaje;
+    if (m && m.clave === f.clave) {
+      html += '<p class="tv-msg" data-tipo="' + m.tipo + '" role="status">' + escapeHtml(m.texto) + "</p>";
+    }
+    return '<li class="tv"' + (falta ? " data-falta" : "") + ">" + html + "</li>";
+  }
+
+  function prepararLectura(clave) {
+    var filas = tarj.filas || [];
+    var i = filas.findIndex(function (f) { return f.clave === clave; });
+    if (i < 0) return;
+    var f = filas[i];
+    var b = tarj.borrador[clave] || {};
+    var civica = f.civica_lectura == null ? String(b.civica || "").trim() : "";
+    var pasajeros = f.pasajeros_conductor == null ? String(b.pasajeros || "").trim() : "";
+    var tiquetes = f.tiquetes_escaneados == null ? String(b.tiquetes || "").trim() : "";
+
+    var falla = !civica && !pasajeros && !tiquetes
+      ? (f.civica_lectura == null ? "Escribe el número que marca el validador."
+        : f.pasajeros_conductor == null ? "Escribe cuántos pasajeros llevaste."
+        : "Escribe cuántos tiquetes escaneaste.")
+      : civica && !/^\d{1,9}$/.test(civica) ? "La cívica va solo con números."
+      : pasajeros && !/^\d{1,2}$/.test(pasajeros) ? "Los pasajeros van solo con números."
+      : tiquetes && !/^\d{1,3}$/.test(tiquetes) ? "Los tiquetes van solo con números."
+      : "";
+    if (falla) {
+      tarj.mensaje = { clave: clave, tipo: "error", texto: falla };
+      pintarTarjeta();
+      return;
+    }
+
+    // Los tiquetes se comparan con los pasajeros que dijo: los de ahora o los ya guardados.
+    var suyos = pasajeros ? Number(pasajeros) : f.pasajeros_conductor != null ? Number(f.pasajeros_conductor) : null;
+    var avisos = (civica ? avisosDeLectura(filas, i, Number(civica)) : [])
+      .concat(pasajeros ? avisosDePasajeros(Number(pasajeros)) : [])
+      .concat(tiquetes ? avisosDeTiquetes(Number(tiquetes), suyos) : []);
+    // Dejó alguno en blanco: se puede, pero que lo sepa.
+    var blancos = [];
+    if (f.civica_lectura == null && !civica) blancos.push("la cívica");
+    if (f.pasajeros_conductor == null && !pasajeros) blancos.push("los pasajeros");
+    if (f.tiquetes_escaneados == null && !tiquetes) blancos.push("los tiquetes");
+    if (blancos.length) {
+      avisos.push({
+        tipo: "nota",
+        texto: "No escribiste " + listaY(blancos) + ": " +
+          (blancos.length === 1 && blancos[0] === "la cívica" ? "la" : "los") + " puedes poner después.",
+      });
+    }
+    tarj.mensaje = null;
+    tarj.confirmando = {
+      clave: clave,
+      civica: civica ? Number(civica) : null,
+      pasajeros: pasajeros ? Number(pasajeros) : null,
+      tiquetes: tiquetes ? Number(tiquetes) : null,
+      avisos: avisos,
+    };
+    pintarTarjeta();
+  }
+
+  var NOMBRE_CAMPO = { civica: "la cívica", pasajeros: "los pasajeros", tiquetes: "los tiquetes" };
+
+  function errorAlGuardar(err, cual) {
+    var codigo = err && err.code;
+    if (codigo === "23505") {
+      return cual === "civica"
+        ? "La cívica de ese viaje ya estaba guardada: mira el número que quedó."
+        : (cual === "pasajeros" ? "Los pasajeros" : "Los tiquetes") +
+          " de ese viaje ya estaban guardados: mira el número que quedó.";
+    }
+    if (codigo === "42501") return "Esta cuenta no puede guardar en la tarjeta. Avísale a tu coordinador.";
+    if (codigo === "23514") return "Ese número no es válido.";
+    return "No se pudo guardar " + NOMBRE_CAMPO[cual] +
+      (err && err.message ? " (" + err.message + ")" : "") + ". Intenta otra vez.";
+  }
+
+  async function guardarLectura(clave) {
+    var c = tarj.confirmando;
+    if (!c || c.clave !== clave || tarj.guardando) return;
+    var f = (tarj.filas || []).find(function (x) { return x.clave === clave; });
+    if (!f) return;
+
+    tarj.guardando = clave;
+    pintarTarjeta();
+    var quien = { cedula: state.dni || null, nombre: nombreConductor(), origen: "celular" };
+    var borrador = tarj.borrador[clave] || {};
+    var hecho = [];
+    var errores = [];
+
+    if (c.civica != null) {
+      try {
+        var r1 = await conTiempoLimite(client.from(cfg.TABLA_CIVICA_LECTURAS).insert(Object.assign({
+          clave_viaje: f.clave, dia: f.dia, interno: f.interno, lectura: c.civica,
+        }, quien)));
+        if (r1.error) throw r1.error;
+        // Se ve al instante; las cívicas del viaje anterior llegan con la recarga.
+        f.civica_lectura = c.civica;
+        f.estado_civica = "pendiente_cierre";
+        delete borrador.civica;
+        hecho.push("la cívica");
+      } catch (err) {
+        // Ya estaba guardada (por ejemplo, la señal se cayó justo después de
+        // enviarla): la recarga muestra el número que quedó.
+        if (err && err.code === "23505") delete borrador.civica;
+        errores.push(errorAlGuardar(err, "civica"));
+      }
+    }
+    // Los pasajeros y los tiquetes: cada uno en su hoja, y se guardan igual.
+    var cantidades = [
+      { campo: "pasajeros", tabla: cfg.TABLA_TARJETA_PASAJEROS, columna: "pasajeros_conductor" },
+      { campo: "tiquetes", tabla: cfg.TABLA_TARJETA_TIQUETES, columna: "tiquetes_escaneados" },
+    ];
+    for (var k = 0; k < cantidades.length; k++) {
+      var q = cantidades[k];
+      if (c[q.campo] == null) continue;
+      try {
+        var r2 = await conTiempoLimite(client.from(q.tabla).insert(Object.assign({
+          clave_viaje: f.clave, dia: f.dia, interno: f.interno, cantidad: c[q.campo],
+        }, quien)));
+        if (r2.error) throw r2.error;
+        f[q.columna] = c[q.campo];
+        delete borrador[q.campo];
+        hecho.push(NOMBRE_CAMPO[q.campo]);
+      } catch (err) {
+        if (err && err.code === "23505") delete borrador[q.campo];
+        errores.push(errorAlGuardar(err, q.campo));
+      }
+    }
+
+    tarj.confirmando = null;
+    tarj.mensaje = errores.length
+      ? { clave: clave, tipo: "error", texto: (hecho.length ? "Se guardó " + listaY(hecho) + ". " : "") + errores.join(" ") }
+      : { clave: clave, tipo: "ok", texto: "Guardado a las " + horaDeMs(Date.now()) + "." };
+    tarj.guardando = null;
+    pintarTarjeta();
+    cargarTarjeta();
+  }
+
+  // ------------------------------------------- daño del validador de la cívica
+  // Lo reporta el conductor con foto (obligatoria), en qué número quedó el
+  // validador dañado y con cuál arrancó el nuevo. Queda "En revisión" hasta
+  // que un despachador lo aprueba o lo rechaza; la base no deja que se apruebe
+  // desde aquí.
+  var dano = { foto: null, vista: null, enviando: false };
+
+  function ponerFotoDano(archivo) {
+    if (dano.vista) URL.revokeObjectURL(dano.vista);
+    dano.foto = archivo || null;
+    dano.vista = archivo ? URL.createObjectURL(archivo) : null;
+    var img = $("danoFotoVista");
+    if (dano.vista) img.src = dano.vista; else img.removeAttribute("src");
+    show(img, !!dano.vista);
+    $("danoFotoTexto").textContent = archivo ? "Cambiar la foto" : "Tomar la foto del validador";
+    if (!archivo) $("danoFoto").value = "";
+  }
+
+  function errorDano(texto) {
+    var box = $("danoError");
+    box.textContent = texto || "";
+    show(box, !!texto);
+  }
+
+  function abrirDano(claveSugerida) {
+    var filas = tarj.filas || [];
+    if (!filas.length) return;
+    var conLectura = filas.find(function (f) { return f.civica_lectura != null; });
+    var elegida = claveSugerida || (conLectura || filas[0]).clave;
+
+    $("danoViaje").innerHTML = filas.map(function (f) {
+      var texto = nombreViaje(f).replace(/^v/, "V") + " · salió " + horaViaje(f) +
+        (f.civica_lectura != null ? " · cívica " + f.civica_lectura : "");
+      return '<option value="' + escapeHtml(f.clave) + '">' + escapeHtml(texto) + "</option>";
+    }).join("");
+    $("danoViaje").value = elegida;
+    $("danoViejo").value = "";
+    $("danoNuevo").value = "";
+    $("danoDescripcion").value = "";
+    ponerFotoDano(null);
+    errorDano("");
+    show($("danoSheet"), true);
+  }
+
+  function cerrarDano() {
+    if (dano.enviando) return;
+    show($("danoSheet"), false);
+    ponerFotoDano(null);
+  }
+
+  // La foto se achica antes de subirla (lado máximo CIVICA_FOTO_LADO_MAX): de
+  // 4 MB a unos 300 KB. Si el teléfono no puede, sube la original.
+  function achicarFoto(archivo) {
+    var lado = cfg.CIVICA_FOTO_LADO_MAX || 1600;
+    return new Promise(function (resolver) {
+      var url = URL.createObjectURL(archivo);
+      var img = new Image();
+      img.onload = function () {
+        var escala = Math.min(1, lado / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+        var lienzo = document.createElement("canvas");
+        lienzo.width = Math.max(1, Math.round(img.naturalWidth * escala));
+        lienzo.height = Math.max(1, Math.round(img.naturalHeight * escala));
+        try {
+          lienzo.getContext("2d").drawImage(img, 0, 0, lienzo.width, lienzo.height);
+        } catch (_) {
+          URL.revokeObjectURL(url);
+          resolver(archivo);
+          return;
+        }
+        URL.revokeObjectURL(url);
+        lienzo.toBlob(function (blob) {
+          resolver(blob && blob.size < archivo.size ? blob : archivo);
+        }, "image/jpeg", 0.82);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); resolver(archivo); };
+      img.src = url;
+    });
+  }
+
+  async function enviarDano(ev) {
+    ev.preventDefault();
+    if (dano.enviando) return;
+    var f = (tarj.filas || []).find(function (x) { return x.clave === $("danoViaje").value; });
+    var viejo = $("danoViejo").value.replace(/\D/g, "");
+    var nuevo = $("danoNuevo").value.replace(/\D/g, "");
+    var que = $("danoDescripcion").value.trim();
+
+    var falla = !f ? "Escoge el viaje en que se dañó."
+      : !nuevo ? "Escribe con qué número arrancó el validador nuevo."
+      : que.length < 5 ? "Cuenta en pocas palabras qué pasó."
+      : !dano.foto ? "Falta la foto del validador."
+      : "";
+    if (falla) { errorDano(falla); return; }
+    errorDano("");
+
+    var boton = $("danoEnviar");
+    dano.enviando = true;
+    boton.disabled = true;
+    boton.textContent = "Enviando…";
+    try {
+      var foto = await achicarFoto(dano.foto);
+      var tipo = foto.type || "image/jpeg";
+      var ext = (tipo.split("/")[1] || "jpg").replace("jpeg", "jpg").replace(/[^a-z0-9]/g, "");
+      var ruta = normalizarInterno(f.interno) + "/" + f.dia + "/" + f.clave + "-" + Date.now() + "." + ext;
+      var subida = await conTiempoLimite(
+        client.storage.from(cfg.BUCKET_CIVICA).upload(ruta, foto, { contentType: tipo, upsert: false }),
+        60000
+      );
+      if (subida.error) throw subida.error;
+
+      var res = await conTiempoLimite(
+        client.from(cfg.TABLA_CIVICA_DANOS).insert({
+          clave_viaje: f.clave, dia: f.dia, interno: f.interno,
+          lectura_final_viejo: viejo ? Number(viejo) : null,
+          lectura_inicial_nuevo: Number(nuevo),
+          descripcion: que, foto: ruta,
+          cedula: state.dni || null, nombre: nombreConductor(), origen: "celular",
+        })
+      );
+      if (res.error) throw res.error;
+
+      dano.enviando = false;
+      cerrarDano();
+      tarj.mensaje = { clave: f.clave, tipo: "ok", texto: "Reporte de daño enviado. El despachador lo revisa." };
+      pintarTarjeta();
+      cargarTarjeta();
+    } catch (err) {
+      errorDano("No se pudo enviar el reporte" + (err && err.message ? " (" + err.message + ")" : "") +
+        ". Intenta otra vez.");
+    } finally {
+      dano.enviando = false;
+      boton.disabled = false;
+      boton.textContent = "Enviar reporte";
+    }
+  }
+
+  function initTarjeta() {
+    $("btnRefrescarTarjeta").addEventListener("click", function () { cargarTarjeta(); });
+    $("tarjetaResumenBody").addEventListener("click", function (ev) {
+      if (ev.target.closest && ev.target.closest("[data-abrir-tarjeta]")) irA("tarjeta");
+    });
+
+    var box = $("tarjetaBody");
+    box.addEventListener("input", function (ev) {
+      var clave = ev.target.getAttribute && ev.target.getAttribute("data-lectura");
+      if (!clave) return;
+      var limpio = ev.target.value.replace(/\D/g, "");
+      if (limpio !== ev.target.value) ev.target.value = limpio;
+      tarj.borrador[clave] = tarj.borrador[clave] || {};
+      tarj.borrador[clave][ev.target.getAttribute("data-campo")] = limpio;
+      if (tarj.mensaje && tarj.mensaje.clave === clave && tarj.mensaje.tipo === "error") {
+        tarj.mensaje = null;
+        var msg = ev.target.closest(".tv") && ev.target.closest(".tv").querySelector(".tv-msg");
+        if (msg) msg.remove();
+      }
+    });
+    box.addEventListener("submit", function (ev) {
+      var form = ev.target.closest ? ev.target.closest(".tv-form") : null;
+      if (!form) return;
+      ev.preventDefault();
+      prepararLectura(form.getAttribute("data-clave"));
+    });
+    box.addEventListener("click", function (ev) {
+      var b = ev.target.closest ? ev.target.closest("button") : null;
+      if (!b || !box.contains(b)) return;
+      if (b.hasAttribute("data-confirmar")) {
+        guardarLectura(b.getAttribute("data-confirmar"));
+      } else if (b.hasAttribute("data-cambiar")) {
+        var clave = b.getAttribute("data-cambiar");
+        tarj.confirmando = null;
+        pintarTarjeta();
+        Array.prototype.some.call(box.querySelectorAll("[data-lectura]"), function (campo) {
+          if (campo.getAttribute("data-lectura") !== clave) return false;
+          campo.focus();
+          return true;
+        });
+      } else if (b.hasAttribute("data-dano")) {
+        abrirDano(b.getAttribute("data-dano") || null);
+      }
+    });
+
+    $("danoSheetClose").addEventListener("click", cerrarDano);
+    $("danoSheet").addEventListener("click", function (ev) {
+      if (ev.target === $("danoSheet")) cerrarDano();
+    });
+    $("danoForm").addEventListener("submit", enviarDano);
+    $("danoFoto").addEventListener("change", function () {
+      ponerFotoDano(this.files && this.files[0] ? this.files[0] : null);
+    });
+    ["danoViejo", "danoNuevo"].forEach(function (id) {
+      $(id).addEventListener("input", function () {
+        var limpio = this.value.replace(/\D/g, "");
+        if (limpio !== this.value) this.value = limpio;
+      });
+    });
+
+    // Con el inicio o la tarjeta a la vista se vuelve a consultar cada 2 min;
+    // mientras confirma o guarda un número, no se le mueve la pantalla.
+    setInterval(function () {
+      if (!state.user || !VISTAS_NATIVAS[state.vista] || document.hidden || $("appView").hidden) return;
+      if (tarj.confirmando || tarj.guardando) return;
+      cargarTarjeta();
+    }, cfg.TARJETA_REFRESCO_MS || 120000);
   }
 
   // ---------------------------------------------------------- mi jornada
@@ -2233,6 +3075,7 @@
   function alRecuperarInternet() {
     show($("sinInternet"), false);
     if (state.user && !$("appView").hidden && state.vista === "inicio") cargarInicio();
+    if (state.user && !$("appView").hidden && state.vista === "tarjeta") cargarTarjeta();
     enviarConfirmacionesPendientes();
   }
 
@@ -3000,6 +3843,7 @@
     initActualizaciones();
     initMensajesModulos();
     initViajes();
+    initTarjeta();
     initConfirmacionTiquetes();
 
     $("btnLogout").addEventListener("click", logout);

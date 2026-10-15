@@ -12,7 +12,7 @@ window.PORTAL_CONFIG = {
   // una nueva no se edita a mano, se corre (desde la carpeta portal):
   //   powershell -ExecutionPolicy Bypass -File .\nueva-version.ps1 1.6.1
   // que la cambia aquí, en sw.js y en index.html a la vez.
-  APP_VERSION: "v1.8.0",
+  APP_VERSION: "v1.9.4",
 
   // Cada cuánto se pregunta al servidor si hay una versión nueva, con el
   // portal a la vista. También se pregunta al abrirlo y al volver a él.
@@ -77,6 +77,29 @@ window.PORTAL_CONFIG = {
   // Despachos repetidos: la misma ruta registrada otra vez dentro de este
   // tiempo (doble registro del despachador) se muestra como un solo viaje.
   VIAJES_REPETIDOS_VENTANA_MS: 15 * 60 * 1000,
+
+  // Tarjeta "Mi tarjeta" del inicio: la tarjeta de despacho del bus del turno
+  // (viajes, pasajeros) y la lectura de la cívica en cada despacho. Las tablas
+  // las crea almacentro/enturnes/sql/tarjeta_despacho.sql y los viajes los
+  // publica el programa de enturnes.
+  //   v_tarjeta_viajes   un renglón por viaje, con su lectura y sus cívicas
+  //   civica_lecturas    el número del validador en cada despacho (una vez)
+  //   civica_danos       los reportes de daño del validador, con foto
+  //   tarjeta_tiquetes   cuántos tiquetes escaneó en cada despacho (una vez)
+  //   tarjeta_pasajeros_conductor  cuántos pasajeros dice que movió en cada
+  //                      despacho (una vez); control lo audita contra el sensor
+  VISTA_TARJETA_VIAJES: "v_tarjeta_viajes",
+  TABLA_CIVICA_LECTURAS: "civica_lecturas",
+  TABLA_TARJETA_TIQUETES: "tarjeta_tiquetes",
+  TABLA_TARJETA_PASAJEROS: "tarjeta_pasajeros_conductor",
+  TABLA_CIVICA_DANOS: "civica_danos",
+  BUCKET_CIVICA: "civica-evidencias",
+  // Con el inicio a la vista se vuelve a pedir cada 2 min: un viaje aparece
+  // un par de minutos después del despacho.
+  TARJETA_REFRESCO_MS: 2 * 60 * 1000,
+  // La foto del validador se achica a este lado antes de subirla: con datos
+  // móviles, una foto de 4 MB no sube.
+  CIVICA_FOTO_LADO_MAX: 1600,
 
   // Tarjeta "Documentos del bus" del inicio: los papeles del vehículo del
   // turno y el estado de la licencia del conductor. Son las mismas tablas

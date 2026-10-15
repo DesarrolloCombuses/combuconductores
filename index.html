@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="./css/portal.css?v=1.8.0">
+  <link rel="stylesheet" href="./css/portal.css?v=1.9.4">
 </head>
 <body>
 
@@ -172,6 +172,17 @@
           </div>
         </article>
 
+        <!-- Mi tarjeta, en corto: qué falta (cívica, pasajeros, tiquetes) y el botón para abrirla.
+             La tarjeta completa está en el menú, en su propia vista. -->
+        <article class="card" id="cardTarjetaResumen">
+          <header class="card-head">
+            <h3>Mi tarjeta de hoy</h3>
+          </header>
+          <div id="tarjetaResumenBody" class="card-body">
+            <div class="skeleton skeleton-linea"></div>
+          </div>
+        </article>
+
         <!-- Viajes de hoy: despachos activos del bus del turno -->
         <article class="card" id="cardViajes">
           <header class="card-head">
@@ -236,6 +247,22 @@
       </div>
     </div>
 
+    <!-- ---- Mi tarjeta (vista nativa): los viajes del bus, la cívica, los pasajeros y los tiquetes ---- -->
+    <div class="module-panel" data-panel="tarjeta" hidden>
+      <div class="home">
+        <article class="card" id="cardTarjeta">
+          <header class="card-head">
+            <h3 id="tarjetaTitulo">Mi tarjeta de hoy</h3>
+            <button id="btnRefrescarTarjeta" class="btn btn-ghost btn-sm" type="button" hidden>Actualizar</button>
+          </header>
+          <div id="tarjetaBody" class="card-body">
+            <div class="skeleton skeleton-bloque"></div>
+          </div>
+        </article>
+        <p class="version-note">Portal del Conductor <span data-version></span></p>
+      </div>
+    </div>
+
     <!-- ---- Módulos embebidos: los iframes los inserta portal.js ---- -->
     <div class="module-panel" data-panel="asistencia" hidden></div>
     <div class="module-panel" data-panel="aeropuerto" hidden></div>
@@ -249,6 +276,10 @@
     <button class="nav-item active" type="button" data-nav="inicio">
       <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M9 22V12h6v10"/></svg>
       <span>Inicio</span>
+    </button>
+    <button class="nav-item" type="button" data-nav="tarjeta">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+      <span>Mi tarjeta</span>
     </button>
     <button class="nav-item" type="button" data-nav="asistencia">
       <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
@@ -304,6 +335,47 @@
       <p id="actualizacionEstado" class="actualizacion-estado" role="status" hidden></p>
       <button id="btnLogoutSheet" class="btn btn-danger btn-block" type="button">Cerrar sesión</button>
     </div>
+  </div>
+</div>
+
+<!-- ============ Reporte de daño del validador de la cívica ============ -->
+<div id="danoSheet" class="sheet-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="danoSheetTitle">
+    <header class="sheet-head">
+      <h3 id="danoSheetTitle">Daño del validador</h3>
+      <button id="danoSheetClose" class="icon-btn" type="button" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <form id="danoForm" class="sheet-body" novalidate>
+      <p class="dano-lead">Si el validador de la cívica se dañó y lo cambiaron, cuéntalo aquí. El despachador lo revisa.</p>
+      <label class="field">
+        <span>¿En qué viaje se dañó?</span>
+        <select id="danoViaje"></select>
+      </label>
+      <label class="field">
+        <span>Número en que quedó el validador dañado</span>
+        <input id="danoViejo" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="9" autocomplete="off" placeholder="Si no se alcanzó a ver, déjalo vacío">
+      </label>
+      <label class="field">
+        <span>Número con que arrancó el validador nuevo</span>
+        <input id="danoNuevo" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="9" autocomplete="off">
+      </label>
+      <label class="field">
+        <span>¿Qué pasó?</span>
+        <textarea id="danoDescripcion" rows="3" maxlength="500" placeholder="Ej. No prendió al salir del aeropuerto y el Metro lo cambió en Almacentro"></textarea>
+      </label>
+      <div class="field">
+        <span>Foto del validador</span>
+        <label class="dano-foto">
+          <input id="danoFoto" type="file" accept="image/*" capture="environment" hidden>
+          <img id="danoFotoVista" alt="Foto del validador" hidden>
+          <span id="danoFotoTexto">Tomar la foto del validador</span>
+        </label>
+      </div>
+      <p id="danoError" class="form-error" role="alert" hidden></p>
+      <button id="danoEnviar" class="btn btn-primary btn-block" type="submit">Enviar reporte</button>
+    </form>
   </div>
 </div>
 
@@ -438,7 +510,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./js/portal-config.js?v=1.8.0"></script>
-<script src="./js/portal.js?v=1.8.0"></script>
+<script src="./js/portal-config.js?v=1.9.4"></script>
+<script src="./js/portal.js?v=1.9.4"></script>
 </body>
 </html>

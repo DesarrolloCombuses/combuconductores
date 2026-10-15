@@ -23,7 +23,7 @@
 // Igual a APP_VERSION de js/portal-config.js. No se cambia a mano: lo hace
 // nueva-version.ps1 en todos los sitios a la vez. Que este archivo cambie es
 // lo que avisa a los teléfonos de que hay una versión nueva.
-const VERSION = "v1.8.0";
+const VERSION = "v1.9.4";
 const CACHE_APP = "portal-app-" + VERSION;
 const CACHE_CDN = "portal-cdn-" + VERSION;
 const CACHE_TILES = "portal-tiles-" + VERSION;

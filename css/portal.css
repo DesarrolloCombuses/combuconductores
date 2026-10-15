@@ -305,7 +305,7 @@ button, a, [role="button"], .quick-action, .nav-item {
 
 /* Los módulos se desplazan dentro de su propio iframe. Si el panel también
    tuviera scroll, iOS encadena los dos rebotes y el contenido se "pega". */
-.module-panel:not([data-panel="inicio"]) { overflow: hidden; }
+.module-panel:not([data-panel="inicio"]):not([data-panel="tarjeta"]) { overflow: hidden; }
 
 .module-panel > iframe {
   display: block;
@@ -623,6 +623,169 @@ button, a, [role="button"], .quick-action, .nav-item {
 
 .viajes-nota { margin: 10px 0 0; font-size: 12px; color: var(--muted); }
 
+/* --- Mi tarjeta ---
+   Un renglón por viaje, del más reciente al más viejo. El que no tiene cívica
+   lleva el campo grande y el botón al lado: se llena con una mano al salir del
+   punto, mirando el validador. */
+.tarj-lista { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
+.tv {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+.tv[data-falta] { border-color: #f0dfb4; background: #fffdf5; }
+.tv-fila { display: flex; align-items: center; gap: 10px; }
+.tv-ruta { flex: 1; min-width: 0; font-size: 13.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+.tv-pas { flex: none; font-size: 11px; color: var(--muted); text-align: right; text-transform: uppercase; letter-spacing: .04em; }
+.tv-pas strong {
+  display: block;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--ink);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.tv-sd {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+
+.tv-civica {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px dashed var(--line-strong);
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.tv-civica b { font-size: 17px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.tv-plata { font-size: 15px; font-weight: 800; color: var(--primary-strong); font-variant-numeric: tabular-nums; }
+.tv-chip {
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.tv-chip[data-nivel="ok"]     { background: var(--soft); color: var(--primary-strong); }
+.tv-chip[data-nivel="espera"] { background: var(--line); color: var(--ink-2); }
+.tv-chip[data-nivel="revisa"] { background: var(--warn-soft); color: var(--warn-ink); }
+.tv-chip[data-nivel="mal"]    { background: var(--danger-soft); color: var(--danger); }
+
+.tv-civica + .tv-civica { margin-top: 6px; padding-top: 0; border-top: 0; }
+
+.tv-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px dashed #f0dfb4;
+}
+.tv-etiqueta { flex-basis: 100%; margin: 0; font-size: 13.5px; font-weight: 750; color: var(--warn-ink); }
+.tv-campo { display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; min-width: 0; }
+.tv-campo-civica { flex: 1 1 100%; }   /* la cívica sola en su fila; pasajeros y tiquetes, juntos debajo */
+.tv-campo-pasajeros,
+.tv-campo-tiquetes { flex: 1 1 90px; }
+.tv-campo span { font-size: 12px; font-weight: 650; color: var(--ink-2); }
+.tv-form input {
+  width: 100%;
+  min-width: 0;
+  min-height: 50px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  font: inherit;
+  font-size: 24px;            /* el número se lee de un vistazo; >=16px evita el zoom de iOS */
+  font-weight: 750;
+  letter-spacing: .04em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.tv-form input::placeholder { font-size: 17px; font-weight: 500; letter-spacing: 0; color: #a3ad9f; }
+.tv-form input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-glow); }
+.tv-guardar { flex-basis: 100%; min-height: 48px; font-size: 15.5px; }
+.tv-ayuda { flex-basis: 100%; margin: 0; font-size: 12.5px; color: var(--muted); }
+
+.tv-confirma {
+  margin-top: 9px;
+  padding: 11px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+}
+.tv-confirma p { margin: 0 0 10px; font-size: 14px; line-height: 1.4; }
+.tv-valores { display: flex; flex-wrap: wrap; gap: 4px 22px; margin: -2px 0 8px; }
+.tv-valores span { display: block; font-size: 12px; font-weight: 650; color: var(--ink-2); }
+.tv-numero { display: block; font-size: 30px; font-weight: 800; line-height: 1.15; color: var(--primary-strong); font-variant-numeric: tabular-nums; }
+.tv-confirma .tv-aviso {
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.tv-confirma .tv-aviso[data-tipo="bajo"] { background: var(--danger-soft); color: var(--danger); }
+.tv-confirma .tv-aviso[data-tipo="nota"] { background: var(--panel); color: var(--ink-2); font-weight: 550; }
+.tv-aviso .btn-link { margin: 4px 0 0; padding: 0; font-size: 13.5px; color: inherit; text-decoration: underline; }
+.tv-acciones { display: flex; flex-wrap: wrap; gap: 8px; }
+.tv-acciones .btn { flex: 1 1 140px; }
+
+.tv-msg { margin: 8px 0 0; font-size: 13px; font-weight: 650; }
+.tv-msg[data-tipo="ok"]    { color: var(--primary-strong); }
+.tv-msg[data-tipo="error"] { color: var(--danger); }
+
+.tarj-danos { display: flex; flex-direction: column; gap: 7px; margin: 14px 0 0; padding: 0; list-style: none; }
+.btn-dano { margin-top: 14px; }
+.btn-dano .ico { width: 20px; height: 20px; }
+
+/* Hoja del reporte de daño */
+.dano-lead { margin: 0 0 4px; font-size: 14px; color: var(--ink-2); }
+.field select,
+.field textarea {
+  width: 100%;
+  min-height: 50px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  font: inherit;
+  font-size: 16px;
+  color: var(--ink);
+}
+.field textarea { resize: vertical; min-height: 80px; }
+.field select:focus,
+.field textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-glow); }
+#danoForm .field { margin-bottom: 0; }
+.dano-foto {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 96px;
+  padding: 10px;
+  border: 2px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--primary-strong);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.dano-foto img { display: block; max-width: 100%; max-height: 220px; border-radius: 8px; }
+
 /* --- Documentos del bus ---
    Un renglón por papel: nombre, qué tan cerca está de vencer y el estado en
    una pastilla de color. Rojo y ámbar tienen que saltar a la vista al sol. */
@@ -799,6 +962,10 @@ button, a, [role="button"], .quick-action, .nav-item {
   background: var(--primary);
 }
 .nav-item:focus-visible { outline: none; box-shadow: inset 0 0 0 3px var(--primary-glow); }
+.nav-item { min-width: 0; padding: 0 2px; }
+.nav-item span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Seis botones en un teléfono angosto: la letra un poco más chica para que quepan. */
+@media (max-width: 400px) { .nav-item { font-size: 10px; letter-spacing: -.01em; } }
 
 /* --------------------------------------------------------- hoja de perfil */
 .sheet-overlay {
