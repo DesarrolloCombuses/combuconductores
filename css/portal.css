@@ -1472,3 +1472,107 @@ button.turno-opcion:focus-visible { outline: none; border-color: var(--primary);
     font-size: 12px;
     font-weight: 600;
 }
+
+/* ===================================================================== gestores
+   El gestor ve solo Mi código, Asistencia y Perfil; el conductor, lo de siempre
+   más la tarjeta "¿Subió un gestor?". Las hojas del código y del lector van por
+   encima de la pantalla de "Sin conexión": funcionan sin internet. */
+body:not(.modo-gestor) .nav-gestor,
+body.modo-gestor .nav-conductor { display: none; }
+.sheet-encima { z-index: 95; }
+
+.card-gestor .gestor-lead { margin: 0 0 12px; font-size: 14.5px; color: var(--ink-2); }
+.card-gestor .btn .ico { width: 20px; height: 20px; margin-right: 6px; vertical-align: -4px; }
+.gestor-resumen { margin: 10px 0 0; font-size: 13px; color: var(--muted); text-align: center; }
+
+.sin-internet .sin-internet-gestor { margin-top: 4px; }
+
+/* El lector: la cámara trasera con un marco donde va el código */
+.lector-camara {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius);
+  background: #0c140e;
+}
+.lector-camara video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lector-marco {
+  position: absolute;
+  inset: 12%;
+  border: 3px solid rgba(255, 255, 255, .9);
+  border-radius: 16px;
+  box-shadow: 0 0 0 999px rgba(0, 0, 0, .28);
+}
+.lector-ayuda { margin: 10px 0; font-size: 14px; color: var(--ink-2); text-align: center; }
+
+.lector-resultado {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 12px;
+  padding: 18px 16px;
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+.lector-resultado[data-ok="true"] { background: var(--soft); color: var(--primary-strong); }
+.lector-resultado[data-ok="false"] { background: var(--danger-soft); color: var(--danger); }
+.lector-resultado .resultado-titulo { margin: 0; font-size: 20px; font-weight: 800; }
+.lector-resultado .resultado-texto { margin: 0; font-size: 15px; color: var(--ink-2); }
+.lector-resultado .resultado-nota { margin: 0; font-size: 12.5px; color: var(--muted); }
+.lector-resultado img {
+  width: 132px;
+  height: 132px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 4px solid var(--primary);
+  background: #fff;
+}
+.lector-resultado .resultado-nombre { margin: 0; font-size: 18px; font-weight: 750; color: var(--ink); }
+
+/* El código del gestor: grande, en blanco y negro, y una barra con el tiempo que le queda */
+.qr-caja {
+  display: grid;
+  place-items: center;
+  padding: 14px;
+  border-radius: var(--radius);
+  background: #fff;
+  border: 1px solid var(--line);
+}
+.qr-caja img, .qr-caja canvas { width: 100%; max-width: 340px; height: auto; image-rendering: pixelated; }
+.qr-caja .qr-vencido { padding: 40px 10px; font-size: 16px; font-weight: 700; color: var(--muted); text-align: center; }
+.qr-nombre { margin: 12px 0 6px; font-size: 17px; font-weight: 750; text-align: center; }
+.qr-tiempo { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.qr-barra { height: 100%; width: 100%; background: var(--primary); transition: width 1s linear; }
+.qr-queda { margin: 6px 0 12px; font-size: 13.5px; color: var(--muted); text-align: center; }
+
+/* Mi código */
+.codigo-estado { display: flex; flex-direction: column; gap: 10px; }
+.codigo-estado p { margin: 0; font-size: 14.5px; color: var(--ink-2); }
+.codigo-estado .codigo-chip {
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.codigo-chip[data-estado="aprobado"] { background: var(--soft); color: var(--primary-strong); }
+.codigo-chip[data-estado="pendiente"] { background: var(--warn-soft); color: var(--warn-ink); }
+.codigo-chip[data-estado="rechazado"],
+.codigo-chip[data-estado="retirado"],
+.codigo-chip[data-estado="no_sirve"] { background: var(--danger-soft); color: var(--danger); }
+.codigo-estado .btn-mostrar { min-height: 64px; font-size: 18px; }
+.codigo-selfie { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 3px solid var(--line); }
+
+/* La selfie para activar el celular */
+.selfie-camara {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  max-width: 300px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  background: #0c140e;
+}
+.selfie-camara video, .selfie-camara img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.selfie-camara video { transform: scaleX(-1); }   /* como un espejo: así se acomoda mejor */

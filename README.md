@@ -221,8 +221,11 @@ del servidor. Una verificación real decide si hay internet, porque
 - Solo cuenta como conectado una respuesta real del servidor (código menor a
   500). Un 5xx de Supabase también bloquea: sin servidor el portal no sirve.
 - Al volver la conexión se quita sola, refresca el inicio y sube las
-  confirmaciones de tiquetes pendientes. Los módulos abiertos no se recargan:
-  si el conductor estaba a mitad de una marca, sigue donde iba.
+  confirmaciones de tiquetes pendientes y los códigos de gestor leídos sin
+  señal. Los módulos abiertos no se recargan: si el conductor estaba a mitad de
+  una marca, sigue donde iba.
+- Lo único que funciona sin internet es el código de los gestores (ver abajo):
+  la pantalla de "Sin conexión" trae su botón.
 - Tiempos en `portal-config.js`: `INTERNET_VERIFICAR_MS`,
   `INTERNET_REINTENTO_MS` y `INTERNET_TIEMPO_LIMITE_MS`.
 
@@ -253,6 +256,39 @@ cerrado o en segundo plano, ni pedir "Permitir siempre". En iPhone la app
 instalada puede volver a preguntar el permiso al abrirse. Seguir la ubicación
 todo el tiempo, con la app cerrada, exige una app nativa (por ejemplo,
 empaquetar el portal con Capacitor).
+
+### Gestores: el código para subir al bus (v1.10.0)
+
+Los gestores se suben a los buses y el sensor de la puerta los cuenta como
+pasajeros. Con su código, la tarjeta los resta del viaje.
+
+- **El gestor** entra con su cédula. El portal lo reconoce por su cargo en
+  `colaboradores` (especialidad "GESTOR...") y le muestra solo **Mi código**,
+  Asistencia y Perfil. Su elección no vence a diario: su celular es suyo.
+  1. **Activar el celular**, una vez y con internet: se toma una selfie y pone la
+     huella (o la cara). El teléfono crea una llave que nunca sale de él
+     (WebAuthn, como las "llaves de acceso") y manda la parte pública con la
+     selfie (`gestor_pedir_celular`). Un despachador lo aprueba en el Portal de
+     Control.
+  2. **Mostrar mi código**, al subir a cada bus: pone la huella y sale un QR
+     firmado que sirve **un minuto y una sola vez**. Funciona sin internet.
+- **El conductor**, en el inicio, toca **Leer código del gestor**: la cámara lee
+  el QR y el celular revisa la firma con la lista de gestores aprobados, que
+  guarda para usarla sin internet (`gestores_aprobados`, cada 2 horas). Ve la
+  **foto y el nombre** del gestor. La lectura queda en cola y sube a
+  `gestores_subidas` cuando hay señal (como las confirmaciones de tiquetes).
+- **Sin internet:** la pantalla de "Sin conexión" trae el botón **Leer código de
+  un gestor** (conductor) o **Mostrar mi código** (gestor), porque eso sí
+  funciona sin red.
+- El programa de la tarjeta vuelve a revisar todo en la oficina (la firma, la
+  hora, una sola vez, no en dos buses a la vez, y que el sensor haya contado
+  esa subida) y lo resta del viaje. Lo que no cuadra queda como sospechoso.
+
+Archivos: `js/gestores.js` (crear la llave, firmar y revisar, sin pantalla),
+la parte de pantalla en `js/portal.js` (bloque GESTORES) y las librerías del QR
+en `js/vendor/` (qrcode-generator y jsQR, dentro del portal para que sirvan sin
+internet; licencias en `js/vendor/LICENCIAS.md`). Las tablas y funciones las
+crea la v8 de `almacentro/enturnes/sql/tarjeta_despacho.sql`.
 
 ### Service worker
 

@@ -41,7 +41,8 @@
   var state = {
     user: null,          // usuario de Supabase Auth
     dni: null,           // cédula del conductor que usa el portal
-    conductor: null,     // fila del CSV de nómina (nombre, base, celular...)
+    rol: "conductor",    // "conductor" o "gestor" (el gestor solo ve Mi código y Asistencia)
+    conductor: null,     // fila del CSV de nómina (nombre, base, celular...); del gestor, su nombre y cargo
     colaboradorId: null, // id en la tabla colaboradores, para leer sus marcas
     turno: null,         // turno elegido (fila de programacion_turnos)
     vehiculo: null,      // número interno que maneja hoy
@@ -414,6 +415,9 @@
     try {
       var sel = JSON.parse(localStorage.getItem(LS_SELECCION) || "null");
       if (!sel) return null;
+      // El gestor no tiene turno ni bus: su celular es suyo (en él vive su llave)
+      // y la elección vale hasta que toque "Cambiar".
+      if (sel.rol === "gestor") return sel;
       var vigente = sel.fecha === hoyColombia() ||
         (sel.finMs != null && Date.now() < sel.finMs + MARGEN_CIERRE_MS);
       return vigente ? sel : null;
@@ -440,6 +444,9 @@
     state.turno = sel ? sel.turnoData || null : null;
     state.turnosVehiculo = sel && sel.turnosVehiculo ? sel.turnosVehiculo : [];
     state.estadoTurno = sel ? sel.estadoTurno || null : null;
+    state.rol = sel && sel.rol === "gestor" ? "gestor" : "conductor";
+    if (state.rol === "gestor") state.conductor = { nombre: sel.nombre || "", cargo: sel.cargo || "", cedula: dni };
+    document.body.classList.toggle("modo-gestor", state.rol === "gestor");
   }
 
   // Turnos que importan ahora: los de hoy y, de ayer, solo el que todavía no
@@ -646,6 +653,7 @@
           return { turnos: [], guardadoEn: null, error: err };
         }),
       consultarEstadoTurno(dni),
+      consultarColaborador(dni),
     ]);
     return {
       conductor: resultados[0],
@@ -653,7 +661,29 @@
       guardadoEn: resultados[1].guardadoEn,
       error: resultados[1].error,
       estado: resultados[2],
+      colaborador: resultados[3],
     };
+  }
+
+  // ¿Es un gestor? Sale de colaboradores (la tabla de la asistencia): ahí está
+  // el cargo, en "especialidad". La nómina de Google Sheets es solo de conductores.
+  async function consultarColaborador(dni) {
+    try {
+      var res = await conTiempoLimite(client.from(cfg.TABLA_COLABORADORES || "colaboradores")
+        .select("dni,nombre,especialidad,estado").eq("dni", dni).limit(1), 10000);
+      if (res.error) throw res.error;
+      var fila = (res.data || [])[0] || null;
+      if (fila) guardarCache("colaborador_" + dni, fila);
+      return fila;
+    } catch (err) {
+      var cache = leerCache("colaborador_" + dni);
+      return cache ? cache.datos : null;
+    }
+  }
+
+  function esGestor(colaborador) {
+    return !!colaborador && /gestor/i.test(colaborador.especialidad || "") &&
+      String(colaborador.estado || "").toUpperCase() === "VINCULADO";
   }
 
   function initIdentify() {
@@ -675,6 +705,12 @@
       btn.textContent = "Buscando tu programación…";
       try {
         var ident = await buscarIdentidad(dni);
+
+        // Un gestor no maneja: no se le busca bus ni turno.
+        if (esGestor(ident.colaborador) && !ident.turnos.length) {
+          mostrarConfirmacionGestor(dni, ident);
+          return;
+        }
 
         if (!ident.conductor && !ident.turnos.length) {
           if (ident.error) {
@@ -711,6 +747,7 @@
 
     // --- Paso 2: confirmar conductor y vehículo ---
     $("btnVolverDeConfirmar").addEventListener("click", function () { mostrarPaso("cedula"); });
+    $("btnContinuarGestor").addEventListener("click", confirmarGestor);
 
     $("turnosLista").addEventListener("click", function (ev) {
       var opcion = ev.target.closest("[data-turno-idx]");
@@ -736,8 +773,41 @@
     window.scrollTo(0, 0);
   }
 
+  function mostrarConfirmacionGestor(dni, ident) {
+    var g = ident.colaborador;
+    identificacion = { dni: dni, gestor: g, conductor: null, turnos: [], estado: null };
+    $("confirmarNombre").textContent = g.nombre || "Gestor";
+    $("confirmarDni").textContent = "Cédula " + dni + " · " + capitalizarPalabras(g.especialidad || "Gestor");
+    $("confirmarPregunta").textContent = "";
+    $("turnosLista").innerHTML = "";
+    show($("sinProgramacionForm"), false);
+    show($("confirmarGestor"), true);
+    mostrarPaso("confirmar");
+  }
+
+  function confirmarGestor() {
+    var id = identificacion;
+    if (!id || !id.gestor) return;
+    cambiarConductor({
+      dni: id.dni,
+      rol: "gestor",
+      nombre: id.gestor.nombre || "",
+      cargo: id.gestor.especialidad || "",
+      vehiculo: null,
+      vehiculoManual: false,
+      fecha: hoyColombia(),
+      turno: null,
+      turnoData: null,
+      turnosVehiculo: [],
+      estadoTurno: null,
+      finMs: null,
+      guardadoEn: Date.now(),
+    });
+  }
+
   function mostrarConfirmacion(dni, ident) {
     identificacion = { dni: dni, conductor: ident.conductor, turnos: ident.turnos, estado: ident.estado };
+    show($("confirmarGestor"), false);
 
     var nombre = (ident.conductor && ident.conductor.nombre) ||
       (ident.turnos[0] && ident.turnos[0].nombre_programacion) || "";
@@ -848,7 +918,7 @@
   // ya con lo que da la programación y el nombre se completa después.
   async function completarConductorEnFondo() {
     var dni = state.dni;
-    if (!dni) return;
+    if (!dni || state.rol === "gestor") return;   // el gestor no está en la nómina de conductores
     var conductor = await buscarConductor(dni);
     if (state.dni !== dni || !conductor) return; // cambió el conductor mientras tanto
     state.conductor = conductor;
@@ -894,6 +964,8 @@
     empujarConductor("asistencia");
     pintarPerfil();
     enviarConfirmacionesPendientes(); // lo confirmado sin señal en la sesión anterior
+    enviarSubidasPendientes();        // los códigos de gestor leídos sin señal
+    if (state.rol !== "gestor") refrescarGestores(false);   // para leer códigos sin internet
 
     // Deja panel, pestaña activa e iframe alineados con la vista guardada
     // (puede venir del hash de un acceso directo del instalador PWA). Si es
@@ -934,15 +1006,21 @@
     aeropuerto: { titulo: "Aeropuerto", sub: "Enturnamiento y mapa en vivo" },
     tiquetes: { titulo: "Tiquetes", sub: "Validación en Distribusion" },
     tarjeta: { titulo: "Mi tarjeta", sub: "Cívica, pasajeros y tiquetes de cada despacho" },
+    codigo: { titulo: "Mi código", sub: "Para subir a los buses" },
   };
 
-  // Vistas del propio portal (sin iframe): Inicio y Mi tarjeta.
-  var VISTAS_NATIVAS = { inicio: true, tarjeta: true };
+  // Vistas del propio portal (sin iframe): Inicio, Mi tarjeta y Mi código.
+  var VISTAS_NATIVAS = { inicio: true, tarjeta: true, codigo: true };
+
+  // El gestor no maneja bus: solo su código y la asistencia (y el perfil).
+  var VISTAS_GESTOR = { codigo: true, asistencia: true };
 
   function irA(vista, desdeHash, confirmado) {
     // El perfil es una hoja, no una vista: no cambia el panel de fondo.
     if (vista === "perfil") { abrirPerfil(); return; }
     if (!TITULOS[vista]) vista = "inicio";
+    if (state.rol === "gestor" && !VISTAS_GESTOR[vista]) vista = "codigo";
+    if (state.rol !== "gestor" && vista === "codigo") vista = "inicio";
 
     // Cada vez que entra a Tiquetes, el conductor confirma primero el vehículo
     // que debe seleccionar en Distribusion (ver pedirConfirmacionTiquetes).
@@ -973,6 +1051,7 @@
     }
     if (vista === "inicio") cargarInicio();
     if (vista === "tarjeta") cargarTarjeta();
+    if (vista === "codigo") cargarCodigo();
 
     if (!desdeHash) {
       try { history.replaceState(null, "", "#/" + vista); } catch (_) {}
@@ -1296,6 +1375,7 @@
     pintarSaludo();
     cargarTurno();
     cargarJornada();
+    pintarResumenGestores();
   }
 
   function pintarSaludo() {
@@ -1741,9 +1821,10 @@
 
   var ICONO_ALERTA = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 9v4m0 4h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>';
 
-  // El día de la tarjeta va de 3 a. m. a 3 a. m., como la de papel: el viaje
-  // de la 1 de la mañana todavía es del día anterior.
-  function diaDeTarjeta() { return fechaColombiaDe(Date.now() - 3 * HORA_MS); }
+  // El día de la tarjeta es el de la empresa: de 2:30 a. m. a 2:30 a. m. del día
+  // siguiente. El viaje de la 1 de la mañana todavía es del día anterior, y el de
+  // las 2:43 ya es el primero del día nuevo.
+  function diaDeTarjeta() { return fechaColombiaDe(Date.now() - 2.5 * HORA_MS); }
 
   function nombreConductor() {
     return (state.conductor && state.conductor.nombre) ||
@@ -2962,6 +3043,11 @@
       (state.conductor && (state.conductor.fleet || state.conductor.base)) || "—";
     $("perfilEmail").textContent = (state.user && state.user.email) || "—";
     $("perfilUbicacion").textContent = textoUbicacionPerfil();
+
+    var gestor = state.rol === "gestor";
+    $("perfilNombre").previousElementSibling.textContent = gestor ? "Gestor" : "Conductor";
+    if (gestor) $("perfilBase").textContent = capitalizarPalabras((state.conductor && state.conductor.cargo) || "Gestor");
+    $("btnCambiarSeleccion").textContent = gestor ? "Cambiar de persona" : "Cambiar de conductor";
   }
 
   function abrirPerfil() {
@@ -2984,6 +3070,583 @@
     $("btnLogoutSheet").addEventListener("click", function () {
       show($("perfilSheet"), false);
       logout();
+    });
+  }
+
+  // ============================================================ GESTORES
+  // Los gestores se suben a los buses y el sensor de la puerta los cuenta como
+  // pasajeros. El gestor muestra un código firmado con la huella de su celular
+  // (js/gestores.js) y el conductor lo lee aquí; la tarjeta lo resta del viaje.
+  //  - Gestor: activa su celular una vez (selfie + huella; lo aprueba control)
+  //    y en cada bus toca "Mostrar mi código" (huella -> QR de un minuto).
+  //  - Conductor: "Leer código del gestor". Funciona sin internet: la lista de
+  //    gestores aprobados queda guardada en el teléfono y lo leído espera en
+  //    cola hasta que haya señal, como las confirmaciones de tiquetes.
+  var LS_GESTOR_CELULAR = "portal_gestor_celular_";       // + cédula: la llave de ESTE celular
+  var LS_GESTORES = "portal_gestores_aprobados";
+  var LS_GESTORES_USADOS = "portal_gestores_usados";
+  var LS_SUBIDAS = "portal_gestores_subidas_pendientes";
+  var LS_SUBIDAS_LEIDAS = "portal_gestores_leidas";
+  var MAX_SUBIDAS_PENDIENTES = 300;
+  var enviandoSubidas = false;
+  var refrescandoGestores = null;
+  var scriptsCargados = {};
+
+  function leerJson(clave, porDefecto) {
+    try {
+      var v = JSON.parse(localStorage.getItem(clave) || "null");
+      return v == null ? porDefecto : v;
+    } catch (_) { return porDefecto; }
+  }
+
+  function guardarJson(clave, valor) {
+    try { localStorage.setItem(clave, JSON.stringify(valor)); return true; } catch (_) { return false; }
+  }
+
+  // Las librerías del QR se cargan solo cuando hacen falta. El service worker
+  // las tiene guardadas, así que también sirven sin internet.
+  function cargarScript(src) {
+    if (!scriptsCargados[src]) {
+      scriptsCargados[src] = new Promise(function (resolver, rechazar) {
+        var s = document.createElement("script");
+        s.src = src;
+        s.onload = resolver;
+        s.onerror = function () {
+          delete scriptsCargados[src];
+          rechazar(new Error("No se pudo cargar " + src));
+        };
+        document.head.appendChild(s);
+      });
+    }
+    return scriptsCargados[src];
+  }
+
+  function apagarCamara(stream) {
+    if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+  }
+
+  function textoErrorHuella(err, inicio) {
+    var nombre = err && err.name;
+    if (nombre === "NotAllowedError") return inicio + ": no se puso la huella o se canceló. Intente otra vez.";
+    if (nombre === "NotSupportedError" || nombre === "SecurityError") {
+      return inicio + ": este celular o navegador no lo permite. Use Chrome (Android) o Safari (iPhone).";
+    }
+    return inicio + ": " + ((err && err.message) || err);
+  }
+
+  // ------------------------------------------------- gestor: Mi código
+  function leerCelularGestor() { return state.dni ? leerJson(LS_GESTOR_CELULAR + state.dni, null) : null; }
+  function guardarCelularGestor(cel) { if (state.dni) guardarJson(LS_GESTOR_CELULAR + state.dni, cel); }
+
+  var TEXTO_ESTADO_CELULAR = {
+    aprobado: "Celular aprobado",
+    pendiente: "Esperando aprobación",
+    rechazado: "No lo aprobaron",
+    retirado: "Este celular ya no sirve",
+  };
+
+  async function cargarCodigo() {
+    var nombre = (state.conductor && state.conductor.nombre) || "";
+    $("codigoSaludo").textContent = nombre ? "Hola, " + primerNombre(nombre) : "Hola";
+    $("codigoCargo").textContent = capitalizarPalabras((state.conductor && state.conductor.cargo) || "Gestor");
+
+    if (!(await GestoresQR.sirveEsteCelular())) { pintarCodigo("no_sirve"); return; }
+    var cel = leerCelularGestor();
+    pintarCodigo(cel ? cel.estado : "sin_activar", cel);
+    if (!cel || !navigator.onLine || !internet.ok) return;
+
+    // Cómo va la aprobación (o si control le quitó el celular)
+    try {
+      var res = await conTiempoLimite(client.rpc(cfg.RPC_GESTOR_ESTADO_CELULAR, { p_credencial: cel.credencial }), 10000);
+      if (res.error || !res.data) return;
+      if (res.data.estado === "no_esta") {
+        try { localStorage.removeItem(LS_GESTOR_CELULAR + state.dni); } catch (_) {}
+        if (state.vista === "codigo") pintarCodigo("sin_activar");
+        return;
+      }
+      cel.estado = res.data.estado;
+      cel.nota = res.data.nota || "";
+      guardarCelularGestor(cel);
+      if (state.vista === "codigo") pintarCodigo(cel.estado, cel);
+    } catch (_) { /* sin señal: queda lo guardado */ }
+  }
+
+  function pintarCodigo(estado, cel) {
+    var chip = TEXTO_ESTADO_CELULAR[estado]
+      ? '<span class="codigo-chip" data-estado="' + estado + '">' + TEXTO_ESTADO_CELULAR[estado] + "</span>"
+      : "";
+    var html;
+    if (estado === "no_sirve") {
+      html = '<span class="codigo-chip" data-estado="no_sirve">Este celular no sirve</span>' +
+        "<p>Para el código hace falta un celular con huella o reconocimiento de cara, con bloqueo de " +
+        "pantalla, y el portal abierto en Chrome (Android) o Safari (iPhone) actualizados.</p>";
+    } else if (estado === "aprobado") {
+      html = chip +
+        '<button id="btnMostrarCodigo" class="btn btn-primary btn-block btn-mostrar" type="button">Mostrar mi código</button>' +
+        "<p>Cuando el teléfono lo pida, ponga la huella. Cada código sirve un minuto y una sola vez. " +
+        "Funciona sin internet.</p>";
+    } else if (estado === "pendiente") {
+      html = chip +
+        "<p>Control tiene que aprobar este celular. Avísele a un despachador: lo aprueba en el Portal de Control, con su foto.</p>" +
+        '<button id="btnRevisarCelular" class="btn btn-ghost btn-block" type="button">Revisar otra vez</button>';
+    } else if (estado === "rechazado" || estado === "retirado") {
+      html = chip +
+        (cel && cel.nota ? "<p>" + escapeHtml(cel.nota) + "</p>" : "") +
+        "<p>Si cambió de celular o no le aprobaron la foto, actívelo otra vez.</p>" +
+        '<button id="btnActivarCelular" class="btn btn-primary btn-block" type="button">Activar este celular</button>';
+    } else {
+      html = "<p>Para que los conductores lo reconozcan al subir, active este celular una sola vez: " +
+        "se toma una foto y pone la huella. Después control lo aprueba.</p>" +
+        '<button id="btnActivarCelular" class="btn btn-primary btn-block" type="button">Activar este celular</button>' +
+        '<p class="confirma-nota">Solo para activarlo hace falta internet.</p>';
+    }
+    $("codigoBody").innerHTML = '<div class="codigo-estado">' + html + "</div>";
+
+    var b;
+    if ((b = $("btnMostrarCodigo"))) b.addEventListener("click", mostrarMiCodigo);
+    if ((b = $("btnRevisarCelular"))) b.addEventListener("click", cargarCodigo);
+    if ((b = $("btnActivarCelular"))) b.addEventListener("click", abrirSelfie);
+    pintarBotonesSinInternet();
+  }
+
+  // Activar: la selfie (para control y para el conductor) y la huella (la llave).
+  var selfie = { stream: null, foto: null };
+
+  function errorSelfie(texto) {
+    $("selfieError").textContent = texto || "";
+    show($("selfieError"), !!texto);
+  }
+
+  function pasoSelfie(tomada) {
+    show($("selfieVideo"), !tomada);
+    show($("selfieFoto"), tomada);
+    show($("selfieTomar"), !tomada);
+    show($("selfieUsar"), tomada);
+    show($("selfieRepetir"), tomada);
+  }
+
+  async function abrirSelfie() {
+    selfie.foto = null;
+    pasoSelfie(false);
+    errorSelfie("");
+    show($("selfieSheet"), true);
+    var conRed = navigator.onLine && internet.ok;
+    $("selfieTomar").disabled = !conRed;
+    if (!conRed) { errorSelfie("Para activar el celular hace falta internet."); return; }
+    try {
+      selfie.stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 640 } }, audio: false,
+      });
+      if ($("selfieSheet").hidden) { apagarCamara(selfie.stream); selfie.stream = null; return; }
+      var v = $("selfieVideo");
+      v.srcObject = selfie.stream;
+      await v.play();
+    } catch (_) {
+      errorSelfie("No se pudo abrir la cámara. Dele permiso de cámara al portal y vuelva a intentar.");
+    }
+  }
+
+  function cerrarSelfie() {
+    apagarCamara(selfie.stream);
+    selfie.stream = null;
+    show($("selfieSheet"), false);
+  }
+
+  function tomarSelfie() {
+    var v = $("selfieVideo");
+    if (!v.videoWidth) { errorSelfie("La cámara todavía no arranca: espere un segundo."); return; }
+    var lado = Math.min(v.videoWidth, v.videoHeight);
+    var c = document.createElement("canvas");
+    c.width = c.height = 240;   // chica: va en la base y en el celular de cada conductor
+    c.getContext("2d").drawImage(v, (v.videoWidth - lado) / 2, (v.videoHeight - lado) / 2, lado, lado, 0, 0, 240, 240);
+    selfie.foto = c.toDataURL("image/jpeg", 0.75);
+    $("selfieFoto").src = selfie.foto;
+    errorSelfie("");
+    pasoSelfie(true);
+  }
+
+  async function usarSelfie() {
+    if (!selfie.foto) return;
+    var btn = $("selfieUsar");
+    btn.disabled = true;
+    btn.textContent = "Ponga la huella…";
+    errorSelfie("");
+    try {
+      var nombre = (state.conductor && state.conductor.nombre) || "";
+      var llave = await GestoresQR.crearLlave(state.dni, nombre);
+      btn.textContent = "Enviando a control…";
+      var res = await conTiempoLimite(client.rpc(cfg.RPC_GESTOR_PEDIR_CELULAR, {
+        p_dni: state.dni,
+        p_credencial: llave.credencial,
+        p_llave: llave.llave,
+        p_algoritmo: llave.algoritmo,
+        p_selfie: selfie.foto,
+        p_dispositivo: String(navigator.userAgent || "").slice(0, 300),
+      }), 20000);
+      if (res.error) throw res.error;
+      guardarCelularGestor({ credencial: llave.credencial, estado: "pendiente", pedido_en: Date.now(), nota: "" });
+      cerrarSelfie();
+      pintarCodigo("pendiente", leerCelularGestor());
+    } catch (err) {
+      errorSelfie(textoErrorHuella(err, "No se pudo activar"));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Usar esta foto y poner la huella";
+    }
+  }
+
+  // Mostrar: huella -> QR de un minuto, con la barra del tiempo que le queda.
+  var qrGestor = { timer: null, fin: 0 };
+
+  async function mostrarMiCodigo() {
+    var cel = leerCelularGestor();
+    if (!cel || cel.estado !== "aprobado") { irA("codigo"); return; }
+    clearInterval(qrGestor.timer);
+    $("qrCaja").innerHTML = '<p class="qr-vencido">Ponga la huella para hacer el código…</p>';
+    $("qrNombre").textContent = (state.conductor && state.conductor.nombre) || "";
+    $("qrBarra").style.width = "100%";
+    $("qrQueda").textContent = "";
+    show($("qrOtro"), false);
+    show($("qrSheet"), true);
+
+    var firmado;
+    try {
+      firmado = await GestoresQR.firmar(state.dni, cel.credencial);
+      await cargarScript("./js/vendor/qrcode.min.js");
+    } catch (err) {
+      $("qrCaja").innerHTML = '<p class="qr-vencido">' + escapeHtml(textoErrorHuella(err, "No se hizo el código")) + "</p>";
+      show($("qrOtro"), true);
+      return;
+    }
+    if ($("qrSheet").hidden) return;   // lo cerró mientras ponía la huella
+    var q = window.qrcode(0, "L");
+    q.addData(firmado.texto);
+    q.make();
+    $("qrCaja").innerHTML = q.createImgTag(6, 12, "Código del gestor");
+    qrGestor.fin = firmado.t + GestoresQR.MUESTRA_MS;
+    contarQr();
+    qrGestor.timer = setInterval(contarQr, 1000);
+  }
+
+  function contarQr() {
+    var queda = Math.max(0, qrGestor.fin - Date.now());
+    $("qrBarra").style.width = (100 * queda / GestoresQR.MUESTRA_MS) + "%";
+    if (queda <= 0) {
+      clearInterval(qrGestor.timer);
+      $("qrCaja").innerHTML = '<p class="qr-vencido">Este código ya venció.</p>';
+      $("qrQueda").textContent = "";
+      show($("qrOtro"), true);
+      return;
+    }
+    $("qrQueda").textContent = "Sirve " + Math.ceil(queda / 1000) + " segundos más, una sola vez.";
+  }
+
+  function cerrarQr() {
+    clearInterval(qrGestor.timer);
+    $("qrCaja").innerHTML = "";
+    show($("qrSheet"), false);
+  }
+
+  // ---------------------------------------------- conductor: leer el código
+  function listaGestores() {
+    var g = leerJson(LS_GESTORES, null);
+    return g && Array.isArray(g.lista) ? g.lista : [];
+  }
+
+  // Los gestores aprobados, con su llave y su foto: se guardan en el teléfono
+  // para revisar los códigos sin internet.
+  function refrescarGestores(forzar) {
+    var guardado = leerJson(LS_GESTORES, null);
+    var fresco = guardado && Date.now() - guardado.guardadoEn < (cfg.GESTORES_REFRESCAR_MS || 2 * HORA_MS);
+    if (!state.user || !navigator.onLine || (fresco && !forzar)) return Promise.resolve(listaGestores());
+    if (refrescandoGestores) return refrescandoGestores;
+    refrescandoGestores = (async function () {
+      try {
+        var res = await conTiempoLimite(client.rpc(cfg.RPC_GESTORES_APROBADOS), 15000);
+        if (res.error) throw res.error;
+        var lista = (res.data || []).map(function (g) {
+          return {
+            dni: String(g.dni),
+            nombre: g.nombre || "",
+            cargo: g.cargo || "",
+            llave_publica: g.llave_publica,
+            selfie: /^data:image\//.test(g.selfie || "") ? g.selfie : "",
+          };
+        });
+        guardarJson(LS_GESTORES, { guardadoEn: Date.now(), lista: lista });
+        return lista;
+      } catch (err) {
+        console.warn("[portal] lista de gestores:", err && err.message ? err.message : err);
+        return listaGestores();
+      } finally {
+        refrescandoGestores = null;
+      }
+    })();
+    return refrescandoGestores;
+  }
+
+  // Cada código sirve una sola vez: los ya leídos en este celular (un día).
+  function nonceUsado(nonce) {
+    return leerJson(LS_GESTORES_USADOS, []).some(function (u) { return u.n === nonce; });
+  }
+
+  function anotarNonce(nonce) {
+    var desde = Date.now() - DIA_MS;
+    var lista = leerJson(LS_GESTORES_USADOS, []).filter(function (u) { return u.t > desde; });
+    lista.push({ n: nonce, t: Date.now() });
+    guardarJson(LS_GESTORES_USADOS, lista.slice(-500));
+  }
+
+  var lector = { stream: null, activo: false, detector: null, lienzo: null, timer: null };
+
+  async function abrirLector() {
+    show($("lectorResultado"), false);
+    show($("lectorOtro"), false);
+    show($("lectorCamara"), true);
+    show($("lectorAyuda"), true);
+    show($("lectorSheet"), true);
+
+    if (!state.vehiculo) {
+      show($("lectorCamara"), false);
+      show($("lectorAyuda"), false);
+      mostrarResultadoLector(false, "Primero confirme su bus", "",
+        "Toque Perfil, Cambiar de conductor, y escriba el vehículo que maneja hoy.", "");
+      return;
+    }
+    refrescarGestores(false);
+
+    try {
+      lector.stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false,
+      });
+    } catch (_) {
+      show($("lectorCamara"), false);
+      show($("lectorAyuda"), false);
+      mostrarResultadoLector(false, "No se pudo abrir la cámara", "", "Dele permiso de cámara al portal y vuelva a intentar.", "");
+      show($("lectorOtro"), true);
+      return;
+    }
+    if ($("lectorSheet").hidden) { apagarCamara(lector.stream); lector.stream = null; return; }
+    var v = $("lectorVideo");
+    v.srcObject = lector.stream;
+    try { await v.play(); } catch (_) { /* algunos navegadores arrancan solos */ }
+
+    // El lector del propio teléfono si lo tiene (Chrome en Android); si no, jsQR.
+    lector.detector = null;
+    if ("BarcodeDetector" in window) {
+      try {
+        var formatos = await window.BarcodeDetector.getSupportedFormats();
+        if (formatos.indexOf("qr_code") >= 0) lector.detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+      } catch (_) { /* sin lector propio */ }
+    }
+    if (!lector.detector) {
+      try { await cargarScript("./js/vendor/jsQR.min.js"); } catch (err) {
+        pararLector();
+        mostrarResultadoLector(false, "No se pudo abrir el lector", "", String(err && err.message || err), "");
+        return;
+      }
+    }
+    lector.activo = true;
+    buscarCodigo();
+  }
+
+  async function buscarCodigo() {
+    if (!lector.activo) return;
+    var v = $("lectorVideo");
+    var texto = null;
+    try {
+      if (v.readyState >= 2 && v.videoWidth) {
+        if (lector.detector) {
+          var hallados = await lector.detector.detect(v);
+          if (hallados && hallados.length) texto = hallados[0].rawValue;
+        } else if (window.jsQR) {
+          var escala = Math.min(1, 800 / Math.max(v.videoWidth, v.videoHeight));
+          var w = Math.round(v.videoWidth * escala);
+          var h = Math.round(v.videoHeight * escala);
+          lector.lienzo = lector.lienzo || document.createElement("canvas");
+          lector.lienzo.width = w;
+          lector.lienzo.height = h;
+          var ctx = lector.lienzo.getContext("2d", { willReadFrequently: true });
+          ctx.drawImage(v, 0, 0, w, h);
+          var r = window.jsQR(ctx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: "dontInvert" });
+          if (r && r.data) texto = r.data;
+        }
+      }
+    } catch (_) { /* un cuadro malo: se sigue con el próximo */ }
+    if (!lector.activo) return;
+    if (texto) { await procesarCodigo(texto); return; }
+    lector.timer = setTimeout(buscarCodigo, 200);
+  }
+
+  function pararLector() {
+    lector.activo = false;
+    clearTimeout(lector.timer);
+    apagarCamara(lector.stream);
+    lector.stream = null;
+    try { $("lectorVideo").srcObject = null; } catch (_) {}
+  }
+
+  function cerrarLector() {
+    pararLector();
+    show($("lectorSheet"), false);
+    pintarResumenGestores();
+  }
+
+  async function procesarCodigo(texto) {
+    pararLector();
+    show($("lectorCamara"), false);
+    show($("lectorAyuda"), false);
+    show($("lectorOtro"), true);
+
+    var res = await GestoresQR.revisar(texto, listaGestores(), { usado: nonceUsado });
+    if (!res.ok && res.motivo === "no_aprobado" && navigator.onLine) {
+      // Lo pudieron aprobar hace poco: se pide la lista otra vez y se revisa de nuevo.
+      res = await GestoresQR.revisar(texto, await refrescarGestores(true), { usado: nonceUsado });
+    }
+    if (res.motivo === "no_es") {
+      mostrarResultadoLector(false, "No es un código de gestor", "", res.texto,
+        "Pídale que abra Mi código en el Portal del Conductor.");
+      return;
+    }
+    if (res.motivo === "usado") {
+      mostrarResultadoLector(false, "Ese código ya se leyó", "",
+        "Ya quedó guardado en este celular. Cada código sirve una sola vez.", "");
+      return;
+    }
+
+    // Lo demás queda guardado, también lo que no pasó: control revisa los intentos raros.
+    var guardado = guardarSubida(res, texto);
+    if (res.ok) anotarNonce(res.codigo.nonce);
+    var sinSenal = !navigator.onLine || !internet.ok;
+    if (res.ok) {
+      var g = res.gestor;
+      mostrarResultadoLector(true, "Gestor verificado", g.nombre || "Gestor",
+        capitalizarPalabras(g.cargo || "Gestor") + " · subió a las " + horaDeMs(Date.now()) + " al bus " + state.vehiculo,
+        (guardado ? "Quedó guardado" : "No se pudo guardar en el celular") +
+        (sinSenal ? "; se envía solo cuando vuelva la señal." : ".") +
+        " Mire que la foto sea la persona que tiene enfrente.", g.selfie);
+    } else {
+      mostrarResultadoLector(false, "No se pudo verificar", "", res.texto,
+        "Quedó anotado para que control lo revise. Si se sube, cuéntelo como pasajero.");
+    }
+    pintarResumenGestores();
+  }
+
+  function mostrarResultadoLector(ok, titulo, nombre, texto, nota, foto) {
+    var box = $("lectorResultado");
+    box.dataset.ok = String(!!ok);
+    box.innerHTML =
+      (foto ? '<img alt="Foto del gestor">' : "") +
+      '<p class="resultado-titulo">' + (ok ? "✓ " : "✗ ") + escapeHtml(titulo) + "</p>" +
+      (nombre ? '<p class="resultado-nombre">' + escapeHtml(nombre) + "</p>" : "") +
+      (texto ? '<p class="resultado-texto">' + escapeHtml(texto) + "</p>" : "") +
+      (nota ? '<p class="resultado-nota">' + escapeHtml(nota) + "</p>" : "");
+    if (foto) box.querySelector("img").src = foto;   // por propiedad: nunca como HTML
+    show(box, true);
+  }
+
+  function guardarSubida(res, texto) {
+    var c = res.codigo;
+    var pos = ubicacion.posicion && Date.now() - ubicacion.ultimaMs < 3 * 60 * 1000 ? ubicacion.posicion : null;
+    var pendientes = leerJson(LS_SUBIDAS, []);
+    pendientes.push({
+      id_local: idLocal(),
+      dni_gestor: c.dni,
+      codigo: String(texto).slice(0, 4000),
+      marcado_en: new Date(c.t).toISOString(),
+      leido_en: new Date().toISOString(),
+      interno: String(state.vehiculo || "").trim().slice(0, 20),
+      dni_conductor: state.dni || "",
+      lat: pos ? pos.lat : null,
+      lon: pos ? pos.lng : null,
+      precision_m: pos ? pos.precision : null,
+      en_el_bus: res.ok ? "ok" : res.motivo,
+    });
+    var ok = guardarJson(LS_SUBIDAS, pendientes.slice(-MAX_SUBIDAS_PENDIENTES));
+    var hoy = hoyColombia();
+    var leidas = leerJson(LS_SUBIDAS_LEIDAS, []).filter(function (l) { return l.fecha === hoy; });
+    leidas.push({ fecha: hoy, ok: !!res.ok });
+    guardarJson(LS_SUBIDAS_LEIDAS, leidas);
+    enviarSubidasPendientes();
+    return ok;
+  }
+
+  // Como las confirmaciones de tiquetes: en orden, y un duplicado (23505)
+  // cuenta como enviado. Un renglón que la base nunca va a aceptar (dato
+  // inválido) se descarta para no trancar los demás.
+  async function enviarSubidasPendientes() {
+    if (enviandoSubidas || !navigator.onLine || !state.user) return;
+    if (!leerJson(LS_SUBIDAS, []).length) return;
+
+    enviandoSubidas = true;
+    try {
+      while (true) {
+        var pendientes = leerJson(LS_SUBIDAS, []);
+        if (!pendientes.length) break;
+        var registro = pendientes[0];
+        var res = await conTiempoLimite(client.from(cfg.TABLA_GESTORES_SUBIDAS).insert(registro), 10000);
+        var codigo = res.error ? String(res.error.code || "") : "";
+        if (res.error && codigo !== "23505" && !/^22|^23514$/.test(codigo)) {
+          console.warn("[portal] código de gestor en espera:", res.error.message || res.error);
+          break;
+        }
+        if (res.error && codigo !== "23505") console.warn("[portal] código de gestor descartado:", res.error.message);
+        guardarJson(LS_SUBIDAS, leerJson(LS_SUBIDAS, []).filter(function (r) { return r.id_local !== registro.id_local; }));
+      }
+    } catch (err) {
+      console.warn("[portal] código de gestor en espera:", err && err.message ? err.message : err);
+    } finally {
+      enviandoSubidas = false;
+      pintarResumenGestores();
+    }
+  }
+
+  function pintarResumenGestores() {
+    var el = $("gestorResumen");
+    if (!el) return;
+    var hoy = hoyColombia();
+    var leidos = leerJson(LS_SUBIDAS_LEIDAS, []).filter(function (l) { return l.fecha === hoy && l.ok; }).length;
+    var pendientes = leerJson(LS_SUBIDAS, []).length;
+    var partes = [];
+    if (leidos) partes.push(leidos === 1 ? "Hoy leyó 1 gestor" : "Hoy leyó " + leidos + " gestores");
+    if (pendientes) partes.push(pendientes === 1 ? "1 por enviar" : pendientes + " por enviar");
+    el.textContent = partes.join(" · ");
+    show(el, partes.length > 0);
+  }
+
+  // En la pantalla de "Sin conexión": lo de los gestores sí funciona sin internet.
+  function pintarBotonesSinInternet() {
+    var enApp = !!state.user && !!state.dni && !$("appView").hidden;
+    var gestor = state.rol === "gestor";
+    var cel = gestor ? leerCelularGestor() : null;
+    show($("btnSinInternetLeer"), enApp && !gestor);
+    show($("btnSinInternetCodigo"), enApp && gestor && !!cel && cel.estado === "aprobado");
+  }
+
+  function initGestores() {
+    $("btnLeerGestor").addEventListener("click", abrirLector);
+    $("btnSinInternetLeer").addEventListener("click", abrirLector);
+    $("btnSinInternetCodigo").addEventListener("click", mostrarMiCodigo);
+    $("lectorCerrar").addEventListener("click", cerrarLector);
+    $("lectorListo").addEventListener("click", cerrarLector);
+    $("lectorOtro").addEventListener("click", function () { pararLector(); abrirLector(); });
+    $("qrCerrar").addEventListener("click", cerrarQr);
+    $("qrListo").addEventListener("click", cerrarQr);
+    $("qrOtro").addEventListener("click", mostrarMiCodigo);
+    $("selfieCerrar").addEventListener("click", cerrarSelfie);
+    $("selfieTomar").addEventListener("click", tomarSelfie);
+    $("selfieRepetir").addEventListener("click", function () { selfie.foto = null; pasoSelfie(false); });
+    $("selfieUsar").addEventListener("click", usarSelfie);
+
+    window.addEventListener("online", enviarSubidasPendientes);
+    // La lista de gestores aprobados se mantiene al día mientras el portal está abierto.
+    setInterval(function () {
+      if (!document.hidden && state.user && state.rol !== "gestor") refrescarGestores(false);
+    }, 15 * 60 * 1000);
+    // En segundo plano no se deja la cámara prendida.
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden && !$("lectorSheet").hidden) cerrarLector();
+      if (document.hidden && !$("selfieSheet").hidden) cerrarSelfie();
     });
   }
 
@@ -3065,6 +3728,7 @@
   }
 
   function alPerderInternet() {
+    pintarBotonesSinInternet();
     show($("sinInternet"), true);
     try { $("btnReintentarInternet").focus(); } catch (_) {}
   }
@@ -3076,7 +3740,10 @@
     show($("sinInternet"), false);
     if (state.user && !$("appView").hidden && state.vista === "inicio") cargarInicio();
     if (state.user && !$("appView").hidden && state.vista === "tarjeta") cargarTarjeta();
+    if (state.user && !$("appView").hidden && state.vista === "codigo") cargarCodigo();
     enviarConfirmacionesPendientes();
+    enviarSubidasPendientes();
+    if (state.user && state.rol !== "gestor") refrescarGestores(false);
   }
 
   function pintarVerificando(activo) {
@@ -3845,6 +4512,7 @@
     initViajes();
     initTarjeta();
     initConfirmacionTiquetes();
+    initGestores();
 
     $("btnLogout").addEventListener("click", logout);
     $("btnReloadModule").addEventListener("click", recargarModulo);

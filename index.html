@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="./css/portal.css?v=1.9.4">
+  <link rel="stylesheet" href="./css/portal.css?v=1.10.0">
 </head>
 <body>
 
@@ -97,6 +97,12 @@
       <p id="confirmarPregunta" class="confirmar-pregunta"></p>
       <div id="turnosLista" class="turnos-lista"></div>
 
+      <!-- Solo gestores: no manejan bus; usan Mi código (para subir a los buses) y la asistencia -->
+      <div id="confirmarGestor" class="confirma-bloque" hidden>
+        <p class="confirma-lead">Usted entra como <strong>gestor</strong>: tiene su código para subir a los buses y la asistencia.</p>
+        <button id="btnContinuarGestor" class="btn btn-primary btn-block" type="button">Continuar como gestor</button>
+      </div>
+
       <!-- Solo cuando no tiene programación hoy -->
       <form id="sinProgramacionForm" class="sin-programacion" autocomplete="off" hidden>
         <label class="field">
@@ -169,6 +175,21 @@
           <div id="turnoBody" class="card-body">
             <div class="skeleton skeleton-titulo"></div>
             <div class="skeleton skeleton-bloque"></div>
+          </div>
+        </article>
+
+        <!-- ¿Subió un gestor? El conductor lee su código, también sin señal: así no queda contado como pasajero -->
+        <article class="card card-gestor" id="cardGestor">
+          <header class="card-head">
+            <h3>¿Subió un gestor?</h3>
+          </header>
+          <div class="card-body">
+            <p class="gestor-lead">Pídale su código y léalo aquí, con el bus detenido. Así no queda contado como pasajero.</p>
+            <button id="btnLeerGestor" class="btn btn-primary btn-block" type="button">
+              <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>
+              Leer código del gestor
+            </button>
+            <p id="gestorResumen" class="gestor-resumen" hidden></p>
           </div>
         </article>
 
@@ -263,6 +284,31 @@
       </div>
     </div>
 
+    <!-- ---- Mi código (vista nativa, solo gestores): el QR firmado con la huella de su celular ---- -->
+    <div class="module-panel" data-panel="codigo" hidden>
+      <div class="home">
+        <div class="home-greeting">
+          <h2 id="codigoSaludo">Hola</h2>
+          <p id="codigoCargo" class="home-date"></p>
+        </div>
+        <article class="card" id="cardCodigo">
+          <header class="card-head">
+            <h3>Mi código para subir al bus</h3>
+          </header>
+          <div id="codigoBody" class="card-body">
+            <div class="skeleton skeleton-bloque"></div>
+          </div>
+        </article>
+        <div class="quick-actions">
+          <button class="quick-action" type="button" data-goto="asistencia">
+            <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+            <span>Marcar asistencia</span>
+          </button>
+        </div>
+        <p class="version-note">Portal del Conductor <span data-version></span></p>
+      </div>
+    </div>
+
     <!-- ---- Módulos embebidos: los iframes los inserta portal.js ---- -->
     <div class="module-panel" data-panel="asistencia" hidden></div>
     <div class="module-panel" data-panel="aeropuerto" hidden></div>
@@ -272,12 +318,17 @@
   </main>
 
   <!-- Navegación inferior (móvil) / lateral (escritorio) -->
+  <!-- nav-conductor: solo conductores. nav-gestor: solo gestores (ver body.modo-gestor) -->
   <nav class="navbar" aria-label="Secciones del portal">
-    <button class="nav-item active" type="button" data-nav="inicio">
+    <button class="nav-item nav-gestor" type="button" data-nav="codigo">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>
+      <span>Mi código</span>
+    </button>
+    <button class="nav-item nav-conductor active" type="button" data-nav="inicio">
       <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M9 22V12h6v10"/></svg>
       <span>Inicio</span>
     </button>
-    <button class="nav-item" type="button" data-nav="tarjeta">
+    <button class="nav-item nav-conductor" type="button" data-nav="tarjeta">
       <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
       <span>Mi tarjeta</span>
     </button>
@@ -285,11 +336,11 @@
       <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
       <span>Asistencia</span>
     </button>
-    <button class="nav-item" type="button" data-nav="aeropuerto">
+    <button class="nav-item nav-conductor" type="button" data-nav="aeropuerto">
       <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M17.8 19.8 16 14l-4 1-4-1-1.8 5.8"/><path d="M22 12c0-1.1-.9-2-2-2h-3l-4-7h-2l1.5 7H8L6 8H4l1 4-1 4h2l2-2h4.5L11 21h2l4-7h3c1.1 0 2-.9 2-2Z"/></svg>
       <span>Aeropuerto</span>
     </button>
-    <button class="nav-item" type="button" data-nav="tiquetes">
+    <button class="nav-item nav-conductor" type="button" data-nav="tiquetes">
       <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M3 9a3 3 0 0 0 0 6v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a3 3 0 0 0 0-6V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2Z"/><path d="M13 5v2M13 11v2M13 17v2"/></svg>
       <span>Tiquetes</span>
     </button>
@@ -471,6 +522,73 @@
   </div>
 </div>
 
+<!-- ============ Gestores: el conductor lee el código (también sin señal) ============ -->
+<!-- sheet-encima: va sobre la pantalla de "Sin conexión", porque esto funciona sin internet -->
+<div id="lectorSheet" class="sheet-overlay sheet-encima" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="lectorTitulo">
+    <header class="sheet-head">
+      <h3 id="lectorTitulo">Código del gestor</h3>
+      <button id="lectorCerrar" class="icon-btn" type="button" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <div id="lectorCamara" class="lector-camara">
+        <video id="lectorVideo" playsinline muted></video>
+        <div class="lector-marco" aria-hidden="true"></div>
+      </div>
+      <p id="lectorAyuda" class="lector-ayuda">Apunte la cámara al código del celular del gestor.</p>
+      <div id="lectorResultado" class="lector-resultado" role="status" hidden></div>
+      <button id="lectorOtro" class="btn btn-primary btn-block" type="button" hidden>Leer otro código</button>
+      <button id="lectorListo" class="btn btn-ghost btn-block" type="button">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Gestores: el gestor muestra su código ============ -->
+<div id="qrSheet" class="sheet-overlay sheet-encima" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="qrTitulo">
+    <header class="sheet-head">
+      <h3 id="qrTitulo">Muéstreselo al conductor</h3>
+      <button id="qrCerrar" class="icon-btn" type="button" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <div id="qrCaja" class="qr-caja" aria-label="Código del gestor"></div>
+      <p id="qrNombre" class="qr-nombre"></p>
+      <div class="qr-tiempo" aria-hidden="true"><div id="qrBarra" class="qr-barra"></div></div>
+      <p id="qrQueda" class="qr-queda" role="status"></p>
+      <button id="qrOtro" class="btn btn-primary btn-block" type="button" hidden>Hacer otro código</button>
+      <button id="qrListo" class="btn btn-ghost btn-block" type="button">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Gestores: activar el celular (selfie + huella) ============ -->
+<div id="selfieSheet" class="sheet-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="selfieTitulo">
+    <header class="sheet-head">
+      <h3 id="selfieTitulo">Activar este celular</h3>
+      <button id="selfieCerrar" class="icon-btn" type="button" aria-label="Cancelar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <p class="dano-lead">Tómese una foto de frente, con buena luz. Control la usa para aprobar su celular y el conductor la ve cuando lee su código.</p>
+      <div class="selfie-camara">
+        <video id="selfieVideo" playsinline muted></video>
+        <img id="selfieFoto" alt="Su foto" hidden>
+      </div>
+      <p id="selfieError" class="form-error" role="alert" hidden></p>
+      <button id="selfieTomar" class="btn btn-primary btn-block" type="button">Tomar la foto</button>
+      <button id="selfieUsar" class="btn btn-primary btn-block" type="button" hidden>Usar esta foto y poner la huella</button>
+      <button id="selfieRepetir" class="btn btn-ghost btn-block" type="button" hidden>Repetir la foto</button>
+      <p class="confirma-nota">Cuando el teléfono lo pida, ponga la huella o mire la cámara, como para desbloquearlo.</p>
+    </div>
+  </div>
+</div>
+
 <!-- ============ Sin internet: el portal exige conexión ============ -->
 <div id="sinInternet" class="sin-internet" role="alertdialog" aria-modal="true"
      aria-labelledby="sinInternetTitulo" aria-describedby="sinInternetTexto" hidden>
@@ -482,6 +600,9 @@
     <p id="sinInternetTexto">Para usar el portal debe estar conectado a internet. Revise los datos móviles o el Wi-Fi.</p>
     <button id="btnReintentarInternet" class="btn btn-primary btn-block" type="button">Reintentar</button>
     <p class="sin-internet-nota">Se vuelve a intentar solo cada pocos segundos.</p>
+    <!-- El código de los gestores sí funciona sin internet: portal.js muestra el que toca -->
+    <button id="btnSinInternetLeer" class="btn btn-ghost btn-block sin-internet-gestor" type="button" hidden>Leer código de un gestor</button>
+    <button id="btnSinInternetCodigo" class="btn btn-ghost btn-block sin-internet-gestor" type="button" hidden>Mostrar mi código</button>
   </div>
 </div>
 
@@ -510,7 +631,8 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./js/portal-config.js?v=1.9.4"></script>
-<script src="./js/portal.js?v=1.9.4"></script>
+<script src="./js/portal-config.js?v=1.10.0"></script>
+<script src="./js/gestores.js?v=1.10.0"></script>
+<script src="./js/portal.js?v=1.10.0"></script>
 </body>
 </html>

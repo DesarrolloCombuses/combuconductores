@@ -23,7 +23,7 @@
 // Igual a APP_VERSION de js/portal-config.js. No se cambia a mano: lo hace
 // nueva-version.ps1 en todos los sitios a la vez. Que este archivo cambie es
 // lo que avisa a los teléfonos de que hay una versión nueva.
-const VERSION = "v1.9.4";
+const VERSION = "v1.10.0";
 const CACHE_APP = "portal-app-" + VERSION;
 const CACHE_CDN = "portal-cdn-" + VERSION;
 const CACHE_TILES = "portal-tiles-" + VERSION;
@@ -39,6 +39,10 @@ const APP_SHELL = [
   "./css/portal.css",
   "./js/portal-config.js",
   "./js/portal.js",
+  "./js/gestores.js",
+  // El código de los gestores funciona sin internet: generarlo (gestor) y leerlo (conductor)
+  "./js/vendor/qrcode.min.js",
+  "./js/vendor/jsQR.min.js",
   "./manifest.webmanifest",
   "./assets/logo-combuses.webp",
   "./assets/icon-192.png",
