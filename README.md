@@ -257,38 +257,55 @@ instalada puede volver a preguntar el permiso al abrirse. Seguir la ubicación
 todo el tiempo, con la app cerrada, exige una app nativa (por ejemplo,
 empaquetar el portal con Capacitor).
 
-### Gestores: el código para subir al bus (v1.10.0)
+### Gestores: el código para subir al bus (v1.10.0; su propia app desde la v1.11.0)
 
 Los gestores se suben a los buses y el sensor de la puerta los cuenta como
 pasajeros. Con su código, la tarjeta los resta del viaje.
 
-- **El gestor** entra con su cédula. El portal lo reconoce por su cargo en
-  `colaboradores` (especialidad "GESTOR...") y le muestra solo **Mi código**,
-  Asistencia y Perfil. Su elección no vence a diario: su celular es suyo.
-  1. **Activar el celular**, una vez y con internet: se toma una selfie y pone la
+- **El gestor usa SU PROPIA app** (`gestores/`, publicada en
+  `https://desarrollocombuses.github.io/combuconductores/gestores/`), **sin
+  correo ni clave**: escribe su cédula y usa la huella de su celular. Así los
+  gestores no tienen el usuario Combuses, que es el mismo con que se abre el
+  Portal de Control. Si un gestor escribe su cédula aquí, en el portal del
+  conductor, le sale el botón **Abrir la app de gestores** y no entra.
+  1. **La cédula**, una vez en ese celular: la app pregunta a Supabase si es de
+     un gestor vinculado (`gestor_quien_soy`, que solo dice el primer nombre y
+     el cargo) y él confirma "¿Usted es María?".
+  2. **Activar el celular**, una vez y con internet: se toma una selfie y pone la
      huella (o la cara). El teléfono crea una llave que nunca sale de él
      (WebAuthn, como las "llaves de acceso") y manda la parte pública con la
-     selfie (`gestor_pedir_celular`). Un despachador lo aprueba en el Portal de
-     Control.
-  2. **Mostrar mi código**, al subir a cada bus: pone la huella y sale un QR
-     firmado que sirve **un minuto y una sola vez**. Funciona sin internet.
+     selfie (`gestor_pedir_celular`, máximo 5 pedidos por cédula al día). Un
+     despachador lo aprueba en el Portal de Control.
+  3. **Mostrar mi código**, al subir a cada bus: pone la huella y sale un QR
+     firmado que sirve **un minuto y una sola vez**. Funciona sin internet (la
+     app tiene su propio service worker, solo para su carpeta).
 - **El conductor**, en el inicio, toca **Leer código del gestor**: la cámara lee
   el QR y el celular revisa la firma con la lista de gestores aprobados, que
   guarda para usarla sin internet (`gestores_aprobados`, cada 2 horas). Ve la
   **foto y el nombre** del gestor. La lectura queda en cola y sube a
   `gestores_subidas` cuando hay señal (como las confirmaciones de tiquetes).
 - **Sin internet:** la pantalla de "Sin conexión" trae el botón **Leer código de
-  un gestor** (conductor) o **Mostrar mi código** (gestor), porque eso sí
-  funciona sin red.
+  un gestor**, porque eso sí funciona sin red.
 - El programa de la tarjeta vuelve a revisar todo en la oficina (la firma, la
   hora, una sola vez, no en dos buses a la vez, y que el sensor haya contado
   esa subida) y lo resta del viaje. Lo que no cuadra queda como sospechoso.
+- La app de los gestores y el portal están en el mismo sitio
+  (`desarrollocombuses.github.io`), así que la firma de una sirve en la otra.
 
-Archivos: `js/gestores.js` (crear la llave, firmar y revisar, sin pantalla),
-la parte de pantalla en `js/portal.js` (bloque GESTORES) y las librerías del QR
-en `js/vendor/` (qrcode-generator y jsQR, dentro del portal para que sirvan sin
-internet; licencias en `js/vendor/LICENCIAS.md`). Las tablas y funciones las
-crea la v8 de `almacentro/enturnes/sql/tarjeta_despacho.sql`.
+Archivos: `js/gestores.js` (crear la llave, firmar y revisar, sin pantalla; lo
+usan las dos apps), la app de los gestores en `gestores/` (`index.html`,
+`gestores-app.js`, `gestores.css`, `sw.js`, su manifest y sus iconos morados;
+usa `css/portal.css` y la llave pública de `js/portal-config.js`), la parte
+del conductor en `js/portal.js` (bloque GESTORES) y las librerías del QR en
+`js/vendor/` (qrcode-generator y jsQR; licencias en `js/vendor/LICENCIAS.md`).
+Las tablas y funciones las crea la v8 de
+`almacentro/enturnes/sql/tarjeta_despacho.sql`; lo de usarlas sin sesión, la
+v9 (`gestores_sin_clave.sql`).
+
+La versión de la app de los gestores va aparte (`g1.0.0`): está en
+`gestores/gestores-app.js`, en `gestores/sw.js` y en los `?v=` de
+`gestores/index.html`. Si cambia `js/gestores.js` o `css/portal.css`, hay que
+subirla también, o los celulares de los gestores siguen con los guardados.
 
 ### Service worker
 

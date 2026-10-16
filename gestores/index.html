@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Gestores · Combuses</title>
+  <!-- La app de los GESTORES, aparte del Portal del Conductor: sin correo ni clave (cédula + huella
+       del celular), así los gestores no tienen el usuario Combuses con que se abre Control. -->
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#5b21b6">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Gestores">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./assets/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="../css/portal.css?v=g1.0.0">
+  <link rel="stylesheet" href="./gestores.css?v=g1.0.0">
+</head>
+<body class="app-gestores">
+
+<!-- ============ 1. ¿Quién es? (la cédula, una sola vez en este celular) ============ -->
+<section id="vistaCedula" class="view login-view" hidden>
+  <form id="cedulaForm" class="login-card" autocomplete="off" novalidate>
+    <img class="login-logo" src="../assets/logo-combuses.webp" alt="Combuses">
+    <h1 class="login-title">Gestores</h1>
+    <p class="login-subtitle">Su código para subir a los buses</p>
+
+    <div id="pasoCedula">
+      <label class="field">
+        <span>Cédula</span>
+        <input id="cedulaInput" class="input-dni" type="text" inputmode="numeric" pattern="[0-9.]*"
+               placeholder="Escriba su número de cédula" autocomplete="off" required>
+      </label>
+      <p id="cedulaError" class="form-error" role="alert" hidden></p>
+      <button id="cedulaBoton" class="btn btn-primary btn-block" type="submit">Continuar</button>
+    </div>
+
+    <div id="pasoConfirmar" class="confirma-bloque" hidden>
+      <p class="confirma-lead">¿Usted es <strong id="confirmarNombre"></strong>?</p>
+      <p id="confirmarCargo" class="confirma-meta"></p>
+      <button id="confirmarSi" class="btn btn-primary btn-block" type="button">Sí, soy yo</button>
+      <button id="confirmarNo" class="btn btn-ghost btn-block" type="button">No, escribir otra cédula</button>
+    </div>
+
+    <p class="version-note">Gestores Combuses <span data-version></span></p>
+  </form>
+</section>
+
+<!-- ============ 2. Mi código ============ -->
+<section id="vistaCodigo" class="view" hidden>
+  <div class="home">
+    <div class="home-greeting">
+      <h2 id="codigoSaludo">Hola</h2>
+      <p id="codigoCargo" class="home-date"></p>
+    </div>
+
+    <p id="sinRed" class="aviso-sin-red" role="status" hidden></p>
+
+    <article class="card" id="cardCodigo">
+      <header class="card-head">
+        <h3>Mi código para subir al bus</h3>
+      </header>
+      <div id="codigoBody" class="card-body">
+        <div class="skeleton skeleton-bloque"></div>
+      </div>
+    </article>
+
+    <article class="card">
+      <header class="card-head">
+        <h3>Cómo funciona</h3>
+      </header>
+      <div class="card-body">
+        <ol class="pasos-gestor">
+          <li><strong>Una sola vez:</strong> active este celular. Se toma una foto y pone la huella (o la cara).</li>
+          <li><strong>Control lo aprueba</strong> mirando su foto. Desde ahí su código sirve en todos los buses.</li>
+          <li><strong>Al subir a un bus:</strong> toque <em>Mostrar mi código</em>, ponga la huella y muéstreselo al conductor.
+            Él lo lee con su celular y así usted no queda contado como pasajero.</li>
+        </ol>
+        <p class="nota-gestor">Cada código sirve un minuto y una sola vez. Funciona sin internet.</p>
+      </div>
+    </article>
+
+    <button id="btnCambiarCedula" class="btn-link btn-link-muted" type="button">No soy yo: cambiar la cédula</button>
+    <p class="version-note">Gestores Combuses <span data-version></span></p>
+  </div>
+</section>
+
+<!-- ============ El código QR (lo muestra el gestor al conductor) ============ -->
+<div id="qrSheet" class="sheet-overlay sheet-encima" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="qrTitulo">
+    <header class="sheet-head">
+      <h3 id="qrTitulo">Muéstreselo al conductor</h3>
+      <button id="qrCerrar" class="icon-btn" type="button" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <div id="qrCaja" class="qr-caja" aria-label="Código del gestor"></div>
+      <p id="qrNombre" class="qr-nombre"></p>
+      <div class="qr-tiempo" aria-hidden="true"><div id="qrBarra" class="qr-barra"></div></div>
+      <p id="qrQueda" class="qr-queda" role="status"></p>
+      <button id="qrOtro" class="btn btn-primary btn-block" type="button" hidden>Hacer otro código</button>
+      <button id="qrListo" class="btn btn-ghost btn-block" type="button">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Activar el celular (selfie + huella) ============ -->
+<div id="selfieSheet" class="sheet-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="selfieTitulo">
+    <header class="sheet-head">
+      <h3 id="selfieTitulo">Activar este celular</h3>
+      <button id="selfieCerrar" class="icon-btn" type="button" aria-label="Cancelar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <p class="dano-lead">Tómese una foto de frente, con buena luz. Control la usa para aprobar su celular y el conductor la ve cuando lee su código.</p>
+      <div class="selfie-camara">
+        <video id="selfieVideo" playsinline muted></video>
+        <img id="selfieFoto" alt="Su foto" hidden>
+      </div>
+      <p id="selfieError" class="form-error" role="alert" hidden></p>
+      <button id="selfieTomar" class="btn btn-primary btn-block" type="button">Tomar la foto</button>
+      <button id="selfieUsar" class="btn btn-primary btn-block" type="button" hidden>Usar esta foto y poner la huella</button>
+      <button id="selfieRepetir" class="btn btn-ghost btn-block" type="button" hidden>Repetir la foto</button>
+      <p class="confirma-nota">Cuando el teléfono lo pida, ponga la huella o mire la cámara, como para desbloquearlo.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Solo la dirección de Supabase y la llave pública (la misma del portal); no inicia sesión. -->
+<script src="../js/portal-config.js?v=g1.0.0"></script>
+<script src="../js/gestores.js?v=g1.0.0"></script>
+<script src="../js/vendor/qrcode.min.js?v=g1.0.0"></script>
+<script src="./gestores-app.js?v=g1.0.0"></script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+/* App de los gestores: usa el estilo del Portal del Conductor (../css/portal.css) con el
+   morado de los gestores (el mismo de su punto en el mapa de Control), para que no se
+   confunda con la app del conductor. */
+.app-gestores {
+  --bg: #f1eef8;
+  --primary: #5b21b6;
+  --primary-strong: #4c1d95;
+  --primary-ink: #f3eefc;
+  --primary-glow: rgba(91, 33, 182, .22);
+  --soft: #efe9fb;
+  --line: #e2dcef;
+  --line-strong: #cbc1e3;
+  --muted: #6b6380;
+  --ink-2: #3f3a4d;
+}
+
+.app-gestores .home { padding-top: calc(18px + env(safe-area-inset-top)); }
+
+.aviso-sin-red {
+  margin: 0;
+  padding: 10px 13px;
+  border-radius: var(--radius);
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pasos-gestor {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14.5px;
+  color: var(--ink-2);
+}
+
+.nota-gestor { margin: 12px 0 0; font-size: 13px; color: var(--muted); }
+
+.app-gestores .btn-link { align-self: center; }

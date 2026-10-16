@@ -117,6 +117,7 @@ button, a, [role="button"], .quick-action, .nav-item {
 .btn-danger:hover:not(:disabled) { background: #f8d7d3; }
 
 .btn-block { width: 100%; }
+a.btn { text-decoration: none; }   /* un enlace con cara de botón (ej. Abrir la app de gestores) */
 .btn-sm { min-height: 36px; padding: 7px 13px; font-size: 13.5px; }
 
 .icon-btn {
@@ -1477,8 +1478,6 @@ button.turno-opcion:focus-visible { outline: none; border-color: var(--primary);
    El gestor ve solo Mi código, Asistencia y Perfil; el conductor, lo de siempre
    más la tarjeta "¿Subió un gestor?". Las hojas del código y del lector van por
    encima de la pantalla de "Sin conexión": funcionan sin internet. */
-body:not(.modo-gestor) .nav-gestor,
-body.modo-gestor .nav-conductor { display: none; }
 .sheet-encima { z-index: 95; }
 
 .card-gestor .gestor-lead { margin: 0 0 12px; font-size: 14.5px; color: var(--ink-2); }
