@@ -1,8 +1,9 @@
 /* ==========================================================================
-   Service Worker de la app de los GESTORES (aparte del Portal del Conductor)
+   Service Worker de la app del PERSONAL DE LA EMPRESA (aparte del Portal del Conductor)
 
    Su alcance es solo esta carpeta (gestores/), así que no se mete con el del
-   portal. Guarda la app para que "Mostrar mi código" funcione sin internet.
+   portal. Guarda la app para que "Leer código del bus" funcione sin internet
+   (el registro queda en el celular y se manda cuando vuelve la señal).
      - Páginas ........................... red primero, cae a la guardada
      - Archivos de la app (aquí y del portal) cache primero (se buscan sin el ?v=)
      - Supabase .......................... siempre a la red, nunca se guarda
@@ -12,7 +13,7 @@
 
 // Igual a VERSION de gestores-app.js y a los ?v= de index.html. Que este
 // archivo cambie es lo que avisa a los teléfonos de que hay una versión nueva.
-const VERSION = "g1.0.0";
+const VERSION = "g2.0.0";
 const CACHE = "gestores-" + VERSION;
 
 const ARCHIVOS = [
@@ -27,8 +28,7 @@ const ARCHIVOS = [
   "./assets/apple-touch-icon.png",
   "../css/portal.css",
   "../js/portal-config.js",
-  "../js/gestores.js",
-  "../js/vendor/qrcode.min.js",
+  "../js/vendor/jsQR.min.js",
   "../assets/logo-combuses.webp",
 ];
 

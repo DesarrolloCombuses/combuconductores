@@ -12,7 +12,7 @@ window.PORTAL_CONFIG = {
   // una nueva no se edita a mano, se corre (desde la carpeta portal):
   //   powershell -ExecutionPolicy Bypass -File .\nueva-version.ps1 1.6.1
   // que la cambia aquí, en sw.js y en index.html a la vez.
-  APP_VERSION: "v1.11.0",
+  APP_VERSION: "v1.12.0",
 
   // Cada cuánto se pregunta al servidor si hay una versión nueva, con el
   // portal a la vista. También se pregunta al abrirlo y al volver a él.
@@ -124,17 +124,14 @@ window.PORTAL_CONFIG = {
   // supabase/migrations/20260913120000_confirmaciones_tiquetes.sql.
   TABLA_CONFIRMACIONES_TIQUETES: "portal_confirmaciones_tiquetes",
 
-  // Gestores (v1.10.0): el gestor muestra un código QR firmado con la huella de
-  // su celular y el conductor lo lee, también sin señal (ver js/gestores.js).
-  // Las tablas y funciones las crea la v8 de sql/tarjeta_despacho.sql. Desde la
-  // v1.11.0 el gestor usa su propia app (gestores/, sin clave: la v9); aquí solo
-  // queda lo del conductor.
-  //   colaboradores ........ de ahí sale si la cédula es de un gestor (especialidad)
-  //   gestores_subidas ..... lo que lee el conductor (cola local si no hay señal)
+  // Personal de la empresa (v1.12.0): el conductor muestra un código QR que
+  // cambia cada 20 s y la persona (gestora, auxiliar...) lo lee con la app del
+  // personal (gestores/). Suma en los pasajeros del viaje pero no se cobra. Lo
+  // crea la v10 de sql/tarjeta_despacho.sql (personal_empresa.sql).
+  //   colaboradores ..... si la cédula es de un gestor: va a la app del personal
+  //   personal_del_bus .. quiénes se registraron en el bus (sin cédula ni selfie)
   TABLA_COLABORADORES: "colaboradores",
-  TABLA_GESTORES_SUBIDAS: "gestores_subidas",
-  RPC_GESTORES_APROBADOS: "gestores_aprobados",
-  GESTORES_REFRESCAR_MS: 2 * 60 * 60 * 1000,   // la lista de gestores aprobados, cada 2 horas
+  RPC_PERSONAL_DEL_BUS: "personal_del_bus",
 
   // Internet obligatorio: el portal no se usa sin conexión. La verificación
   // consulta el endpoint de salud de Supabase (~100 bytes) en vez de fiarse de

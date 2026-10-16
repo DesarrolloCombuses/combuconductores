@@ -1,8 +1,8 @@
 {
-  "id": "/gestores-combuses/",
-  "name": "Gestores · Combuses",
-  "short_name": "Gestores",
-  "description": "El código del gestor para subir a los buses, con la huella del celular.",
+  "id": "/personal-combuses/",
+  "name": "Personal · Combuses",
+  "short_name": "Personal",
+  "description": "Para que el personal de la empresa se registre al subir a un bus: lee el código del conductor y se toma una selfie.",
   "start_url": "./index.html?source=pwa",
   "scope": "./",
   "display": "standalone",
@@ -11,10 +11,28 @@
   "theme_color": "#5b21b6",
   "lang": "es-CO",
   "dir": "ltr",
-  "categories": ["productivity", "business"],
+  "categories": [
+    "productivity",
+    "business"
+  ],
   "icons": [
-    { "src": "./assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "./assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "./assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "./assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

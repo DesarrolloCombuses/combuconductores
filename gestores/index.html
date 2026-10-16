@@ -3,23 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Gestores · Combuses</title>
-  <!-- La app de los GESTORES, aparte del Portal del Conductor: sin correo ni clave (cédula + huella
-       del celular), así los gestores no tienen el usuario Combuses con que se abre Control. -->
+  <title>Personal · Combuses</title>
+  <!-- La app del PERSONAL DE LA EMPRESA (gestoras, auxiliares, mecánicos...), aparte del Portal del
+       Conductor y sin correo ni clave: al subir a un bus leen el código que les muestra el conductor y se
+       toman una selfie. Quedan en el viaje: suman en los pasajeros pero no se cobran. -->
   <link rel="manifest" href="./manifest.webmanifest">
   <meta name="theme-color" content="#5b21b6">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Gestores">
+  <meta name="apple-mobile-web-app-title" content="Personal">
   <meta name="format-detection" content="telephone=no">
   <link rel="apple-touch-icon" sizes="180x180" href="./assets/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./assets/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="../css/portal.css?v=g1.0.0">
-  <link rel="stylesheet" href="./gestores.css?v=g1.0.0">
+  <link rel="stylesheet" href="../css/portal.css?v=g2.0.0">
+  <link rel="stylesheet" href="./gestores.css?v=g2.0.0">
 </head>
 <body class="app-gestores">
 
@@ -27,8 +28,8 @@
 <section id="vistaCedula" class="view login-view" hidden>
   <form id="cedulaForm" class="login-card" autocomplete="off" novalidate>
     <img class="login-logo" src="../assets/logo-combuses.webp" alt="Combuses">
-    <h1 class="login-title">Gestores</h1>
-    <p class="login-subtitle">Su código para subir a los buses</p>
+    <h1 class="login-title">Personal de la empresa</h1>
+    <p class="login-subtitle">Para registrarse al subir a un bus</p>
 
     <div id="pasoCedula">
       <label class="field">
@@ -47,26 +48,31 @@
       <button id="confirmarNo" class="btn btn-ghost btn-block" type="button">No, escribir otra cédula</button>
     </div>
 
-    <p class="version-note">Gestores Combuses <span data-version></span></p>
+    <p class="version-note">Personal Combuses <span data-version></span></p>
   </form>
 </section>
 
-<!-- ============ 2. Mi código ============ -->
-<section id="vistaCodigo" class="view" hidden>
+<!-- ============ 2. Inicio: leer el código del bus ============ -->
+<section id="vistaInicio" class="view" hidden>
   <div class="home">
     <div class="home-greeting">
-      <h2 id="codigoSaludo">Hola</h2>
-      <p id="codigoCargo" class="home-date"></p>
+      <h2 id="inicioSaludo">Hola</h2>
+      <p id="inicioCargo" class="home-date"></p>
     </div>
 
     <p id="sinRed" class="aviso-sin-red" role="status" hidden></p>
 
-    <article class="card" id="cardCodigo">
+    <button id="btnLeerBus" class="btn btn-primary btn-block btn-leer-bus" type="button">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>
+      Leer código del bus
+    </button>
+
+    <article class="card">
       <header class="card-head">
-        <h3>Mi código para subir al bus</h3>
+        <h3>Mis registros de hoy</h3>
       </header>
-      <div id="codigoBody" class="card-body">
-        <div class="skeleton skeleton-bloque"></div>
+      <div class="card-body">
+        <ul id="registrosHoy" class="registros-hoy"></ul>
       </div>
     </article>
 
@@ -76,68 +82,60 @@
       </header>
       <div class="card-body">
         <ol class="pasos-gestor">
-          <li><strong>Una sola vez:</strong> active este celular. Se toma una foto y pone la huella (o la cara).</li>
-          <li><strong>Control lo aprueba</strong> mirando su foto. Desde ahí su código sirve en todos los buses.</li>
-          <li><strong>Al subir a un bus:</strong> toque <em>Mostrar mi código</em>, ponga la huella y muéstreselo al conductor.
-            Él lo lee con su celular y así usted no queda contado como pasajero.</li>
+          <li><strong>Al subir al bus</strong>, pídale al conductor que toque <em>Registrar personal de la empresa</em>: su celular muestra un código.</li>
+          <li>Toque <strong>Leer código del bus</strong> y apunte la cámara a ese código.</li>
+          <li><strong>Tómese una foto</strong> y toque <em>Registrarme</em>. Queda en el viaje de ese bus: cuenta como pasajero, pero no se cobra.</li>
         </ol>
-        <p class="nota-gestor">Cada código sirve un minuto y una sola vez. Funciona sin internet.</p>
+        <p class="nota-gestor">Si no hay señal, queda guardado en su celular y se envía solo cuando vuelva.</p>
       </div>
     </article>
 
     <button id="btnCambiarCedula" class="btn-link btn-link-muted" type="button">No soy yo: cambiar la cédula</button>
-    <p class="version-note">Gestores Combuses <span data-version></span></p>
+    <p class="version-note">Personal Combuses <span data-version></span></p>
   </div>
 </section>
 
-<!-- ============ El código QR (lo muestra el gestor al conductor) ============ -->
-<div id="qrSheet" class="sheet-overlay sheet-encima" hidden>
-  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="qrTitulo">
+<!-- ============ Leer el código del bus, la selfie y el resultado ============ -->
+<div id="registroSheet" class="sheet-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="registroTitulo">
     <header class="sheet-head">
-      <h3 id="qrTitulo">Muéstreselo al conductor</h3>
-      <button id="qrCerrar" class="icon-btn" type="button" aria-label="Cerrar">
+      <h3 id="registroTitulo">Leer código del bus</h3>
+      <button id="registroCerrar" class="icon-btn" type="button" aria-label="Cerrar">
         <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
     </header>
     <div class="sheet-body">
-      <div id="qrCaja" class="qr-caja" aria-label="Código del gestor"></div>
-      <p id="qrNombre" class="qr-nombre"></p>
-      <div class="qr-tiempo" aria-hidden="true"><div id="qrBarra" class="qr-barra"></div></div>
-      <p id="qrQueda" class="qr-queda" role="status"></p>
-      <button id="qrOtro" class="btn btn-primary btn-block" type="button" hidden>Hacer otro código</button>
-      <button id="qrListo" class="btn btn-ghost btn-block" type="button">Listo</button>
-    </div>
-  </div>
-</div>
-
-<!-- ============ Activar el celular (selfie + huella) ============ -->
-<div id="selfieSheet" class="sheet-overlay" hidden>
-  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="selfieTitulo">
-    <header class="sheet-head">
-      <h3 id="selfieTitulo">Activar este celular</h3>
-      <button id="selfieCerrar" class="icon-btn" type="button" aria-label="Cancelar">
-        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-    </header>
-    <div class="sheet-body">
-      <p class="dano-lead">Tómese una foto de frente, con buena luz. Control la usa para aprobar su celular y el conductor la ve cuando lee su código.</p>
-      <div class="selfie-camara">
-        <video id="selfieVideo" playsinline muted></video>
-        <img id="selfieFoto" alt="Su foto" hidden>
+      <!-- Paso 1: el código del bus (cámara de atrás) -->
+      <div id="pasoLeer">
+        <div class="lector-camara">
+          <video id="lectorVideo" playsinline muted></video>
+          <div class="lector-marco" aria-hidden="true"></div>
+        </div>
+        <p id="lectorAyuda" class="lector-ayuda">Apunte la cámara al código del celular del conductor.</p>
       </div>
-      <p id="selfieError" class="form-error" role="alert" hidden></p>
-      <button id="selfieTomar" class="btn btn-primary btn-block" type="button">Tomar la foto</button>
-      <button id="selfieUsar" class="btn btn-primary btn-block" type="button" hidden>Usar esta foto y poner la huella</button>
-      <button id="selfieRepetir" class="btn btn-ghost btn-block" type="button" hidden>Repetir la foto</button>
-      <p class="confirma-nota">Cuando el teléfono lo pida, ponga la huella o mire la cámara, como para desbloquearlo.</p>
+      <!-- Paso 2: la selfie (cámara de adelante) -->
+      <div id="pasoSelfie" hidden>
+        <p id="selfieBus" class="selfie-bus"></p>
+        <div class="selfie-camara">
+          <video id="selfieVideo" playsinline muted></video>
+          <img id="selfieFoto" alt="Su foto" hidden>
+        </div>
+        <p class="confirma-nota">Una foto de frente: control la ve en la tarjeta del viaje.</p>
+        <button id="selfieTomar" class="btn btn-primary btn-block" type="button">Tomar la foto</button>
+        <button id="selfieRegistrar" class="btn btn-primary btn-block" type="button" hidden>Registrarme</button>
+        <button id="selfieRepetir" class="btn btn-ghost btn-block" type="button" hidden>Repetir la foto</button>
+      </div>
+      <!-- Paso 3: cómo quedó -->
+      <div id="registroResultado" class="lector-resultado" role="status" hidden></div>
+      <p id="registroError" class="form-error" role="alert" hidden></p>
+      <button id="registroListo" class="btn btn-ghost btn-block" type="button">Cerrar</button>
     </div>
   </div>
 </div>
 
 <!-- Solo la dirección de Supabase y la llave pública (la misma del portal); no inicia sesión. -->
-<script src="../js/portal-config.js?v=g1.0.0"></script>
-<script src="../js/gestores.js?v=g1.0.0"></script>
-<script src="../js/vendor/qrcode.min.js?v=g1.0.0"></script>
-<script src="./gestores-app.js?v=g1.0.0"></script>
+<script src="../js/portal-config.js?v=g2.0.0"></script>
+<script src="../js/vendor/jsQR.min.js?v=g2.0.0"></script>
+<script src="./gestores-app.js?v=g2.0.0"></script>
 </body>
 </html>

@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="./css/portal.css?v=1.11.0">
+  <link rel="stylesheet" href="./css/portal.css?v=1.12.0">
 </head>
 <body>
 
@@ -97,10 +97,10 @@
       <p id="confirmarPregunta" class="confirmar-pregunta"></p>
       <div id="turnosLista" class="turnos-lista"></div>
 
-      <!-- Solo gestores: no manejan bus. Tienen su propia app (gestores/), sin correo ni clave -->
+      <!-- Solo gestores: no manejan bus. Usan la app del personal (gestores/), sin correo ni clave -->
       <div id="confirmarGestor" class="confirma-bloque" hidden>
-        <p class="confirma-lead">Usted es <strong>gestor</strong>. Los gestores tienen su propia aplicación para el código de subir a los buses.</p>
-        <a id="linkAppGestores" class="btn btn-primary btn-block" href="./gestores/">Abrir la app de gestores</a>
+        <p class="confirma-lead">Usted es <strong>gestor</strong>. Para registrarse al subir a un bus use la app del personal de la empresa.</p>
+        <a id="linkAppGestores" class="btn btn-primary btn-block" href="./gestores/">Abrir la app del personal</a>
       </div>
 
       <!-- Solo cuando no tiene programación hoy -->
@@ -178,18 +178,18 @@
           </div>
         </article>
 
-        <!-- ¿Subió un gestor? El conductor lee su código, también sin señal: así no queda contado como pasajero -->
-        <article class="card card-gestor" id="cardGestor">
+        <!-- ¿Subió alguien de la empresa? El conductor muestra el código del bus y la persona lo lee con su app -->
+        <article class="card card-gestor" id="cardPersonal">
           <header class="card-head">
-            <h3>¿Subió un gestor?</h3>
+            <h3>¿Subió alguien de la empresa?</h3>
           </header>
           <div class="card-body">
-            <p class="gestor-lead">Pídale su código y léalo aquí, con el bus detenido. Así no queda contado como pasajero.</p>
-            <button id="btnLeerGestor" class="btn btn-primary btn-block" type="button">
-              <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>
-              Leer código del gestor
+            <p class="gestor-lead">Si se sube una gestora u otra persona de la empresa, muéstrele este código. Ella lo lee con la app del personal y queda en su viaje: cuenta como pasajero, pero no se le cobra.</p>
+            <button id="btnRegistrarPersonal" class="btn btn-primary btn-block" type="button">
+              <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>
+              Registrar personal de la empresa
             </button>
-            <p id="gestorResumen" class="gestor-resumen" hidden></p>
+            <p id="personalResumen" class="gestor-resumen" hidden></p>
           </div>
         </article>
 
@@ -492,25 +492,25 @@
   </div>
 </div>
 
-<!-- ============ Gestores: el conductor lee el código (también sin señal) ============ -->
-<!-- sheet-encima: va sobre la pantalla de "Sin conexión", porque esto funciona sin internet -->
-<div id="lectorSheet" class="sheet-overlay sheet-encima" hidden>
-  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="lectorTitulo">
+<!-- ============ Personal de la empresa: el conductor muestra el código del bus (también sin señal) ============ -->
+<!-- sheet-encima: va sobre la pantalla de "Sin conexión", porque el código sale sin internet -->
+<div id="personalSheet" class="sheet-overlay sheet-encima" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="personalTitulo">
     <header class="sheet-head">
-      <h3 id="lectorTitulo">Código del gestor</h3>
-      <button id="lectorCerrar" class="icon-btn" type="button" aria-label="Cerrar">
+      <h3 id="personalTitulo">Registrar personal de la empresa</h3>
+      <button id="personalCerrar" class="icon-btn" type="button" aria-label="Cerrar">
         <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
     </header>
     <div class="sheet-body">
-      <div id="lectorCamara" class="lector-camara">
-        <video id="lectorVideo" playsinline muted></video>
-        <div class="lector-marco" aria-hidden="true"></div>
-      </div>
-      <p id="lectorAyuda" class="lector-ayuda">Apunte la cámara al código del celular del gestor.</p>
-      <div id="lectorResultado" class="lector-resultado" role="status" hidden></div>
-      <button id="lectorOtro" class="btn btn-primary btn-block" type="button" hidden>Leer otro código</button>
-      <button id="lectorListo" class="btn btn-ghost btn-block" type="button">Cerrar</button>
+      <p class="dano-lead">Que la persona abra la <b>app del personal</b>, toque <b>Leer código del bus</b> y apunte aquí.</p>
+      <div id="personalQr" class="qr-caja" aria-label="Código del bus"></div>
+      <p id="personalBus" class="qr-nombre"></p>
+      <div class="qr-tiempo" aria-hidden="true"><div id="personalBarra" class="qr-barra"></div></div>
+      <p id="personalQueda" class="qr-queda" role="status"></p>
+      <h4 class="personal-titulo">Se registraron en este bus</h4>
+      <ul id="personalLista" class="personal-lista" aria-live="polite"></ul>
+      <button id="personalListo" class="btn btn-ghost btn-block" type="button">Listo</button>
     </div>
   </div>
 </div>
@@ -526,8 +526,8 @@
     <p id="sinInternetTexto">Para usar el portal debe estar conectado a internet. Revise los datos móviles o el Wi-Fi.</p>
     <button id="btnReintentarInternet" class="btn btn-primary btn-block" type="button">Reintentar</button>
     <p class="sin-internet-nota">Se vuelve a intentar solo cada pocos segundos.</p>
-    <!-- Leer el código de un gestor sí funciona sin internet -->
-    <button id="btnSinInternetLeer" class="btn btn-ghost btn-block sin-internet-gestor" type="button" hidden>Leer código de un gestor</button>
+    <!-- El código del bus para el personal de la empresa sí sale sin internet -->
+    <button id="btnSinInternetPersonal" class="btn btn-ghost btn-block sin-internet-gestor" type="button" hidden>Registrar personal de la empresa</button>
   </div>
 </div>
 
@@ -556,8 +556,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./js/portal-config.js?v=1.11.0"></script>
-<script src="./js/gestores.js?v=1.11.0"></script>
-<script src="./js/portal.js?v=1.11.0"></script>
+<script src="./js/portal-config.js?v=1.12.0"></script>
+<script src="./js/portal.js?v=1.12.0"></script>
 </body>
 </html>

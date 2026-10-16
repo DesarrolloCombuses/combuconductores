@@ -257,55 +257,52 @@ instalada puede volver a preguntar el permiso al abrirse. Seguir la ubicación
 todo el tiempo, con la app cerrada, exige una app nativa (por ejemplo,
 empaquetar el portal con Capacitor).
 
-### Gestores: el código para subir al bus (v1.10.0; su propia app desde la v1.11.0)
+### Personal de la empresa que se sube al bus (v1.12.0)
 
-Los gestores se suben a los buses y el sensor de la puerta los cuenta como
-pasajeros. Con su código, la tarjeta los resta del viaje.
+El personal de la empresa (gestoras, auxiliares, mecánicos, un conductor que va
+de pasajero...) se sube a los buses y el sensor de la puerta lo cuenta. Desde la
+v1.12.0 (16-oct-2026, a pedido del usuario) **suma en los pasajeros del viaje
+pero no se cobra**, y en las observaciones queda quién fue.
 
-- **El gestor usa SU PROPIA app** (`gestores/`, publicada en
-  `https://desarrollocombuses.github.io/combuconductores/gestores/`), **sin
-  correo ni clave**: escribe su cédula y usa la huella de su celular. Así los
-  gestores no tienen el usuario Combuses, que es el mismo con que se abre el
-  Portal de Control. Si un gestor escribe su cédula aquí, en el portal del
-  conductor, le sale el botón **Abrir la app de gestores** y no entra.
-  1. **La cédula**, una vez en ese celular: la app pregunta a Supabase si es de
-     un gestor vinculado (`gestor_quien_soy`, que solo dice el primer nombre y
-     el cargo) y él confirma "¿Usted es María?".
-  2. **Activar el celular**, una vez y con internet: se toma una selfie y pone la
-     huella (o la cara). El teléfono crea una llave que nunca sale de él
-     (WebAuthn, como las "llaves de acceso") y manda la parte pública con la
-     selfie (`gestor_pedir_celular`, máximo 5 pedidos por cédula al día). Un
-     despachador lo aprueba en el Portal de Control.
-  3. **Mostrar mi código**, al subir a cada bus: pone la huella y sale un QR
-     firmado que sirve **un minuto y una sola vez**. Funciona sin internet (la
-     app tiene su propio service worker, solo para su carpeta).
-- **El conductor**, en el inicio, toca **Leer código del gestor**: la cámara lee
-  el QR y el celular revisa la firma con la lista de gestores aprobados, que
-  guarda para usarla sin internet (`gestores_aprobados`, cada 2 horas). Ve la
-  **foto y el nombre** del gestor. La lectura queda en cola y sube a
-  `gestores_subidas` cuando hay señal (como las confirmaciones de tiquetes).
-- **Sin internet:** la pantalla de "Sin conexión" trae el botón **Leer código de
-  un gestor**, porque eso sí funciona sin red.
-- El programa de la tarjeta vuelve a revisar todo en la oficina (la firma, la
-  hora, una sola vez, no en dos buses a la vez, y que el sensor haya contado
-  esa subida) y lo resta del viaje. Lo que no cuadra queda como sospechoso.
-- La app de los gestores y el portal están en el mismo sitio
-  (`desarrollocombuses.github.io`), así que la firma de una sirve en la otra.
+- **El conductor**, en el inicio, toca **Registrar personal de la empresa**: su
+  celular muestra un código QR que **cambia cada 20 segundos**
+  (`CBP1.<bus>.<cédula del conductor>.<hora ms>.<al azar>`) y, debajo, quiénes se
+  registraron en su bus en las últimas 4 horas (`personal_del_bus`). El código
+  sale también sin internet (botón en la pantalla de "Sin conexión").
+- **La persona** usa la **app del personal** (`gestores/`, publicada en
+  `https://desarrollocombuses.github.io/combuconductores/gestores/`), **sin correo
+  ni clave**: escribe su cédula una vez (`personal_quien_soy`: cualquier persona
+  vinculada en `colaboradores`), y al subir toca **Leer código del bus**, apunta
+  la cámara, se toma una **selfie** y toca **Registrarme**
+  (`personal_registrar_subida`, con dónde estaba si el celular lo permite). Sin
+  señal queda guardado en su celular y se manda solo cuando vuelve.
+  No tiene el usuario Combuses: no tiene con qué abrir Control.
+- **Supabase** pega cada registro al viaje de ese bus (desde 30 minutos antes del
+  despacho hasta que llega): `v_tarjeta_viajes.personal` y `personal_detalle`; la
+  plata del conductor y la del sensor ya no lo cobran. Lo calculan las vistas: el
+  programa de la oficina no cambia.
+- **Mi tarjeta** muestra en el viaje *"Personal de la empresa 1 · Va en tus
+  pasajeros, no se cobra"* y quién fue, y la plata sin él. Si la base todavía no
+  tiene la v10, la tarjeta se pide sin esas columnas y sirve igual.
+- Si un gestor escribe su cédula en el portal del conductor, le sale el botón
+  **Abrir la app del personal** y no entra.
 
-Archivos: `js/gestores.js` (crear la llave, firmar y revisar, sin pantalla; lo
-usan las dos apps), la app de los gestores en `gestores/` (`index.html`,
-`gestores-app.js`, `gestores.css`, `sw.js`, su manifest y sus iconos morados;
-usa `css/portal.css` y la llave pública de `js/portal-config.js`), la parte
-del conductor en `js/portal.js` (bloque GESTORES) y las librerías del QR en
-`js/vendor/` (qrcode-generator y jsQR; licencias en `js/vendor/LICENCIAS.md`).
-Las tablas y funciones las crea la v8 de
-`almacentro/enturnes/sql/tarjeta_despacho.sql`; lo de usarlas sin sesión, la
-v9 (`gestores_sin_clave.sql`).
+Archivos: el bloque PERSONAL DE LA EMPRESA de `js/portal.js` (el código del bus,
+con `js/vendor/qrcode.min.js`), la app del personal en `gestores/`
+(`index.html`, `gestores-app.js`, `gestores.css`, `sw.js` propio, su manifest y
+sus iconos; usa `css/portal.css`, `js/vendor/jsQR.min.js` y la llave pública de
+`js/portal-config.js`). Lo de Supabase lo crea la v10 de
+`almacentro/enturnes/sql/tarjeta_despacho.sql` (para pasar de la v9:
+`personal_empresa.sql`).
 
-La versión de la app de los gestores va aparte (`g1.0.0`): está en
+La versión de la app del personal va aparte (`g2.0.0`): está en
 `gestores/gestores-app.js`, en `gestores/sw.js` y en los `?v=` de
-`gestores/index.html`. Si cambia `js/gestores.js` o `css/portal.css`, hay que
-subirla también, o los celulares de los gestores siguen con los guardados.
+`gestores/index.html`. Si cambia `css/portal.css` o `js/vendor/jsQR.min.js`, hay
+que subirla también, o los celulares siguen con los guardados.
+
+Antes (v1.10.0 y v1.11.0) el gestor mostraba un código firmado con la huella de
+su celular, que control tenía que aprobar, y el conductor lo leía. Eso se quitó:
+la v10 cierra esas funciones para quien no tiene sesión.
 
 ### Service worker
 

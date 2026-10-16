@@ -939,8 +939,6 @@
     empujarConductor("asistencia");
     pintarPerfil();
     enviarConfirmacionesPendientes(); // lo confirmado sin señal en la sesión anterior
-    enviarSubidasPendientes();        // los códigos de gestor leídos sin señal
-    refrescarGestores(false);         // para leer códigos de gestor sin internet
 
     // Deja panel, pestaña activa e iframe alineados con la vista guardada
     // (puede venir del hash de un acceso directo del instalador PWA). Si es
@@ -1343,7 +1341,7 @@
     pintarSaludo();
     cargarTurno();
     cargarJornada();
-    pintarResumenGestores();
+    pintarResumenPersonal();
   }
 
   function pintarSaludo() {
@@ -1766,6 +1764,10 @@
   var CAMPOS_TARJETA = "clave,dia,interno,viaje,sin_despacho,hora_salida,pasajeros,subidas,itinerario,ruta," +
     "civica_lectura,civicas,estado_civica,lectura_corregida,tiquetes_escaneados,tiquetes_corregidos,estado_calculo," +
     "pasajeros_conductor,pasajeros_conductor_corregidos,tarifa";
+  // v10: el personal de la empresa que se registró en el viaje (suma en pasajeros, no se cobra).
+  // Si la base todavía no las tiene, la tarjeta se pide sin ellas.
+  var CAMPOS_PERSONAL = ",personal,personal_detalle";
+  var tarjetaConPersonal = true;
 
   var tarj = {
     clave: null, vehiculo: null, dia: null, filas: null, danos: [], guardadoEn: null, error: null,
@@ -1808,7 +1810,7 @@
     var res = await Promise.all([
       conTiempoLimite(
         client.from(cfg.VISTA_TARJETA_VIAJES)
-          .select(CAMPOS_TARJETA)
+          .select(CAMPOS_TARJETA + (tarjetaConPersonal ? CAMPOS_PERSONAL : ""))
           .in("interno", internos)
           .eq("dia", dia)
           .order("hora_salida", { ascending: false })
@@ -1821,6 +1823,10 @@
           .order("reportado_en", { ascending: true })
       ),
     ]);
+    if (res[0].error && tarjetaConPersonal && /personal/.test(res[0].error.message || "")) {
+      tarjetaConPersonal = false;            // la base todavía no tiene la v10
+      return consultarTarjeta(vehiculo, dia);
+    }
     if (res[0].error) throw res[0].error;
     // Los daños son un extra: si esa consulta falla, la tarjeta sirve igual.
     return { filas: res[0].data || [], danos: res[1].error ? [] : (res[1].data || []) };
@@ -1968,12 +1974,18 @@
   function pesos(n) { return "$" + String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, "."); }
 
   // Lo que dice el conductor en el día: sus pasajeros y la plata (pasajeros x
-  // el pasaje). Los viajes en que no ha escrito no cuentan.
+  // el pasaje). Los viajes en que no ha escrito no cuentan. El personal de la
+  // empresa va en sus pasajeros pero no se cobra.
+  function pasajerosQueSeCobran(f) {
+    var n = Number(f.pasajeros_conductor);
+    return n - Math.min(Number(f.personal) || 0, n);
+  }
+
   function totalesDelConductor(filas) {
     return filas.reduce(function (t, f) {
       if (f.pasajeros_conductor == null) return t;
       t.pasajeros += Number(f.pasajeros_conductor);
-      if (f.tarifa != null) { t.plata += Number(f.pasajeros_conductor) * Number(f.tarifa); t.conPlata = true; }
+      if (f.tarifa != null) { t.plata += pasajerosQueSeCobran(f) * Number(f.tarifa); t.conPlata = true; }
       return t;
     }, { pasajeros: 0, plata: 0, conPlata: false });
   }
@@ -2175,9 +2187,17 @@
       html += '<div class="tv-civica">' +
         "<span>Pasajeros que llevaste <b>" + escapeHtml(f.pasajeros_conductor) + "</b></span>" +
         (f.tarifa != null
-          ? '<span class="tv-plata">' + pesos(Number(f.pasajeros_conductor) * Number(f.tarifa)) + "</span>"
+          ? '<span class="tv-plata">' + pesos(pasajerosQueSeCobran(f) * Number(f.tarifa)) + "</span>"
           : "") +
         (f.pasajeros_conductor_corregidos ? '<span class="tv-chip" data-nivel="espera">Corregidos por el despachador</span>' : "") +
+      "</div>";
+    }
+    // v10: el personal de la empresa que se registró en este viaje
+    if (Number(f.personal) > 0) {
+      html += '<div class="tv-civica tv-personal">' +
+        "<span>Personal de la empresa <b>" + escapeHtml(f.personal) + "</b></span>" +
+        '<span class="tv-chip" data-nivel="ok">Va en tus pasajeros, no se cobra</span>' +
+        (f.personal_detalle ? '<span class="tv-personal-quien">' + escapeHtml(f.personal_detalle) + "</span>" : "") +
       "</div>";
     }
     if (!faltaTiquetes) {
@@ -2230,7 +2250,8 @@
         (faltaTiquetes ? campoTarjeta(f, i, "tiquetes", "Tiquetes", "Ej. 12", 3) : "") +
         '<button class="btn btn-primary btn-sm tv-guardar" type="submit">Guardar</button>' +
         (esLaQueSigue && faltaPasajeros
-          ? '<p class="tv-ayuda">Pasajeros: cuántas personas llevaste en este viaje, contadas por ti.</p>'
+          ? '<p class="tv-ayuda">Pasajeros: cuántas personas llevaste en este viaje, contadas por ti. ' +
+            'Cuenta también al personal de la empresa que se registró: no se te cobra.</p>'
           : "") +
         (esLaQueSigue && faltaTiquetes
           ? '<p class="tv-ayuda">Tiquetes: los que escaneaste en Distribusion para este viaje. Si no hubo, pon 0.</p>'
@@ -3036,37 +3057,22 @@
     });
   }
 
-  // ============================================================ GESTORES
-  // Los gestores se suben a los buses y el sensor de la puerta los cuenta como
-  // pasajeros. El gestor muestra un código firmado con la huella de su celular
-  // (js/gestores.js) y el conductor lo lee aquí; la tarjeta lo resta del viaje.
-  //  - Gestor: desde la v1.11.0 usa SU PROPIA app (gestores/), sin correo ni
-  //    clave: así no tiene el usuario Combuses con que se abre Control.
-  //  - Conductor: "Leer código del gestor". Funciona sin internet: la lista de
-  //    gestores aprobados queda guardada en el teléfono y lo leído espera en
-  //    cola hasta que haya señal, como las confirmaciones de tiquetes.
-  var LS_GESTORES = "portal_gestores_aprobados";
-  var LS_GESTORES_USADOS = "portal_gestores_usados";
-  var LS_SUBIDAS = "portal_gestores_subidas_pendientes";
-  var LS_SUBIDAS_LEIDAS = "portal_gestores_leidas";
-  var MAX_SUBIDAS_PENDIENTES = 300;
-  var enviandoSubidas = false;
-  var refrescandoGestores = null;
+  // ============================================================ PERSONAL DE LA EMPRESA
+  // Cuando se sube alguien de la empresa (gestora, auxiliar, mecánico, un
+  // conductor que va de pasajero...), el conductor toca "Registrar personal de
+  // la empresa" y su celular muestra un código QR que cambia cada 20 segundos:
+  //     CBP1.<bus>.<cédula del conductor>.<hora ms>.<al azar>
+  // La persona lo lee con la app del personal (gestores/), se toma una selfie y
+  // queda en el viaje: suma en los pasajeros (el sensor la contó) pero su pasaje
+  // no se cobra (sql/personal_empresa.sql, la v10). El código sale también sin
+  // internet: el registro lo manda el celular de la persona.
+  var PERSONAL_CODIGO_MS = 20 * 1000;      // cada código dura esto en pantalla
+  var PERSONAL_LISTA_MS = 5 * 1000;        // con el código a la vista, la lista se pide así de seguido
+  var personalQr = { reloj: null, lista: null, fin: 0 };
   var scriptsCargados = {};
 
-  function leerJson(clave, porDefecto) {
-    try {
-      var v = JSON.parse(localStorage.getItem(clave) || "null");
-      return v == null ? porDefecto : v;
-    } catch (_) { return porDefecto; }
-  }
-
-  function guardarJson(clave, valor) {
-    try { localStorage.setItem(clave, JSON.stringify(valor)); return true; } catch (_) { return false; }
-  }
-
-  // Las librerías del QR se cargan solo cuando hacen falta. El service worker
-  // las tiene guardadas, así que también sirven sin internet.
+  // La librería del QR se carga solo cuando hace falta. El service worker la
+  // tiene guardada, así que también sirve sin internet.
   function cargarScript(src) {
     if (!scriptsCargados[src]) {
       scriptsCargados[src] = new Promise(function (resolver, rechazar) {
@@ -3083,299 +3089,128 @@
     return scriptsCargados[src];
   }
 
-  function apagarCamara(stream) {
-    if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+  function alAzar(n) {
+    var b = crypto.getRandomValues(new Uint8Array(n));
+    var s = "";
+    for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+    return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
 
-  // ---------------------------------------------- conductor: leer el código
-  function listaGestores() {
-    var g = leerJson(LS_GESTORES, null);
-    return g && Array.isArray(g.lista) ? g.lista : [];
+  function busDelCodigo() {
+    return String(state.vehiculo || "").trim().replace(/[^A-Za-z0-9-]/g, "").slice(0, 20);
   }
 
-  // Los gestores aprobados, con su llave y su foto: se guardan en el teléfono
-  // para revisar los códigos sin internet.
-  function refrescarGestores(forzar) {
-    var guardado = leerJson(LS_GESTORES, null);
-    var fresco = guardado && Date.now() - guardado.guardadoEn < (cfg.GESTORES_REFRESCAR_MS || 2 * HORA_MS);
-    if (!state.user || !navigator.onLine || (fresco && !forzar)) return Promise.resolve(listaGestores());
-    if (refrescandoGestores) return refrescandoGestores;
-    refrescandoGestores = (async function () {
-      try {
-        var res = await conTiempoLimite(client.rpc(cfg.RPC_GESTORES_APROBADOS), 15000);
-        if (res.error) throw res.error;
-        var lista = (res.data || []).map(function (g) {
-          return {
-            dni: String(g.dni),
-            nombre: g.nombre || "",
-            cargo: g.cargo || "",
-            llave_publica: g.llave_publica,
-            selfie: /^data:image\//.test(g.selfie || "") ? g.selfie : "",
-          };
-        });
-        guardarJson(LS_GESTORES, { guardadoEn: Date.now(), lista: lista });
-        return lista;
-      } catch (err) {
-        console.warn("[portal] lista de gestores:", err && err.message ? err.message : err);
-        return listaGestores();
-      } finally {
-        refrescandoGestores = null;
-      }
-    })();
-    return refrescandoGestores;
+  function codigoDelBus() {
+    return ["CBP1", busDelCodigo(), String(state.dni || "").replace(/\D/g, "").slice(0, 15),
+            String(Date.now()), alAzar(9)].join(".");
   }
 
-  // Cada código sirve una sola vez: los ya leídos en este celular (un día).
-  function nonceUsado(nonce) {
-    return leerJson(LS_GESTORES_USADOS, []).some(function (u) { return u.n === nonce; });
-  }
-
-  function anotarNonce(nonce) {
-    var desde = Date.now() - DIA_MS;
-    var lista = leerJson(LS_GESTORES_USADOS, []).filter(function (u) { return u.t > desde; });
-    lista.push({ n: nonce, t: Date.now() });
-    guardarJson(LS_GESTORES_USADOS, lista.slice(-500));
-  }
-
-  var lector = { stream: null, activo: false, detector: null, lienzo: null, timer: null };
-
-  async function abrirLector() {
-    show($("lectorResultado"), false);
-    show($("lectorOtro"), false);
-    show($("lectorCamara"), true);
-    show($("lectorAyuda"), true);
-    show($("lectorSheet"), true);
-
-    if (!state.vehiculo) {
-      show($("lectorCamara"), false);
-      show($("lectorAyuda"), false);
-      mostrarResultadoLector(false, "Primero confirme su bus", "",
-        "Toque Perfil, Cambiar de conductor, y escriba el vehículo que maneja hoy.", "");
+  async function abrirPersonal() {
+    show($("personalSheet"), true);
+    $("personalLista").innerHTML = "";
+    var bus = busDelCodigo();
+    if (!bus) {
+      $("personalQr").innerHTML = '<p class="qr-vencido">Primero confirme su bus en el inicio: el código va con el número del bus.</p>';
+      $("personalBus").textContent = "";
+      $("personalQueda").textContent = "";
       return;
     }
-    refrescarGestores(false);
-
+    $("personalBus").textContent = "Bus " + bus;
     try {
-      lector.stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false,
-      });
+      await cargarScript("./js/vendor/qrcode.min.js");
     } catch (_) {
-      show($("lectorCamara"), false);
-      show($("lectorAyuda"), false);
-      mostrarResultadoLector(false, "No se pudo abrir la cámara", "", "Dele permiso de cámara al portal y vuelva a intentar.", "");
-      show($("lectorOtro"), true);
+      $("personalQr").innerHTML = '<p class="qr-vencido">No se pudo preparar el código. Revise la conexión y vuelva a abrirlo.</p>';
       return;
     }
-    if ($("lectorSheet").hidden) { apagarCamara(lector.stream); lector.stream = null; return; }
-    var v = $("lectorVideo");
-    v.srcObject = lector.stream;
-    try { await v.play(); } catch (_) { /* algunos navegadores arrancan solos */ }
-
-    // El lector del propio teléfono si lo tiene (Chrome en Android); si no, jsQR.
-    lector.detector = null;
-    if ("BarcodeDetector" in window) {
-      try {
-        var formatos = await window.BarcodeDetector.getSupportedFormats();
-        if (formatos.indexOf("qr_code") >= 0) lector.detector = new window.BarcodeDetector({ formats: ["qr_code"] });
-      } catch (_) { /* sin lector propio */ }
-    }
-    if (!lector.detector) {
-      try { await cargarScript("./js/vendor/jsQR.min.js"); } catch (err) {
-        pararLector();
-        mostrarResultadoLector(false, "No se pudo abrir el lector", "", String(err && err.message || err), "");
-        return;
-      }
-    }
-    lector.activo = true;
-    buscarCodigo();
+    if ($("personalSheet").hidden) return;
+    pintarCodigoPersonal();
+    clearInterval(personalQr.reloj);
+    personalQr.reloj = setInterval(contarCodigoPersonal, 1000);
+    cargarListaPersonal();
+    clearInterval(personalQr.lista);
+    personalQr.lista = setInterval(cargarListaPersonal, PERSONAL_LISTA_MS);
   }
 
-  async function buscarCodigo() {
-    if (!lector.activo) return;
-    var v = $("lectorVideo");
-    var texto = null;
+  function pintarCodigoPersonal() {
+    var q = window.qrcode(0, "M");
+    q.addData(codigoDelBus());
+    q.make();
+    $("personalQr").innerHTML = q.createImgTag(6, 12, "Código del bus para el personal de la empresa");
+    personalQr.fin = Date.now() + PERSONAL_CODIGO_MS;
+    contarCodigoPersonal();
+  }
+
+  function contarCodigoPersonal() {
+    var queda = personalQr.fin - Date.now();
+    if (queda <= 0) { pintarCodigoPersonal(); return; }
+    $("personalBarra").style.width = (100 * queda / PERSONAL_CODIGO_MS) + "%";
+    $("personalQueda").textContent = "El código cambia solo en " + Math.ceil(queda / 1000) + " s.";
+  }
+
+  function cerrarPersonal() {
+    clearInterval(personalQr.reloj);
+    clearInterval(personalQr.lista);
+    personalQr.reloj = personalQr.lista = null;
+    $("personalQr").innerHTML = "";
+    show($("personalSheet"), false);
+    pintarResumenPersonal();
+  }
+
+  // Quiénes se registraron en este bus en las últimas horas (lo mandó el
+  // celular de cada persona): sin cédula ni selfie.
+  async function consultarPersonalDelBus() {
+    var bus = busDelCodigo();
+    if (!bus || !state.user || !navigator.onLine) return null;
+    var res = await conTiempoLimite(client.rpc(cfg.RPC_PERSONAL_DEL_BUS, { p_interno: bus, p_horas: 4 }), 10000);
+    if (res.error) throw res.error;
+    return res.data || [];
+  }
+
+  async function cargarListaPersonal() {
+    var ul = $("personalLista");
+    var lista;
     try {
-      if (v.readyState >= 2 && v.videoWidth) {
-        if (lector.detector) {
-          var hallados = await lector.detector.detect(v);
-          if (hallados && hallados.length) texto = hallados[0].rawValue;
-        } else if (window.jsQR) {
-          var escala = Math.min(1, 800 / Math.max(v.videoWidth, v.videoHeight));
-          var w = Math.round(v.videoWidth * escala);
-          var h = Math.round(v.videoHeight * escala);
-          lector.lienzo = lector.lienzo || document.createElement("canvas");
-          lector.lienzo.width = w;
-          lector.lienzo.height = h;
-          var ctx = lector.lienzo.getContext("2d", { willReadFrequently: true });
-          ctx.drawImage(v, 0, 0, w, h);
-          var r = window.jsQR(ctx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: "dontInvert" });
-          if (r && r.data) texto = r.data;
-        }
-      }
-    } catch (_) { /* un cuadro malo: se sigue con el próximo */ }
-    if (!lector.activo) return;
-    if (texto) { await procesarCodigo(texto); return; }
-    lector.timer = setTimeout(buscarCodigo, 200);
-  }
-
-  function pararLector() {
-    lector.activo = false;
-    clearTimeout(lector.timer);
-    apagarCamara(lector.stream);
-    lector.stream = null;
-    try { $("lectorVideo").srcObject = null; } catch (_) {}
-  }
-
-  function cerrarLector() {
-    pararLector();
-    show($("lectorSheet"), false);
-    pintarResumenGestores();
-  }
-
-  async function procesarCodigo(texto) {
-    pararLector();
-    show($("lectorCamara"), false);
-    show($("lectorAyuda"), false);
-    show($("lectorOtro"), true);
-
-    var res = await GestoresQR.revisar(texto, listaGestores(), { usado: nonceUsado });
-    if (!res.ok && res.motivo === "no_aprobado" && navigator.onLine) {
-      // Lo pudieron aprobar hace poco: se pide la lista otra vez y se revisa de nuevo.
-      res = await GestoresQR.revisar(texto, await refrescarGestores(true), { usado: nonceUsado });
+      lista = await consultarPersonalDelBus();
+    } catch (_) {
+      lista = null;
     }
-    if (res.motivo === "no_es") {
-      mostrarResultadoLector(false, "No es un código de gestor", "", res.texto,
-        "Pídale que abra Mi código en el Portal del Conductor.");
+    if ($("personalSheet").hidden) return;
+    if (lista == null) {
+      ul.innerHTML = '<li class="personal-nadie">Sin internet: el código sí sirve. La lista se ve cuando vuelva la señal.</li>';
       return;
     }
-    if (res.motivo === "usado") {
-      mostrarResultadoLector(false, "Ese código ya se leyó", "",
-        "Ya quedó guardado en este celular. Cada código sirve una sola vez.", "");
-      return;
-    }
-
-    // Lo demás queda guardado, también lo que no pasó: control revisa los intentos raros.
-    var guardado = guardarSubida(res, texto);
-    if (res.ok) anotarNonce(res.codigo.nonce);
-    var sinSenal = !navigator.onLine || !internet.ok;
-    if (res.ok) {
-      var g = res.gestor;
-      mostrarResultadoLector(true, "Gestor verificado", g.nombre || "Gestor",
-        capitalizarPalabras(g.cargo || "Gestor") + " · subió a las " + horaDeMs(Date.now()) + " al bus " + state.vehiculo,
-        (guardado ? "Quedó guardado" : "No se pudo guardar en el celular") +
-        (sinSenal ? "; se envía solo cuando vuelva la señal." : ".") +
-        " Mire que la foto sea la persona que tiene enfrente.", g.selfie);
-    } else {
-      mostrarResultadoLector(false, "No se pudo verificar", "", res.texto,
-        "Quedó anotado para que control lo revise. Si se sube, cuéntelo como pasajero.");
-    }
-    pintarResumenGestores();
+    ul.innerHTML = lista.length
+      ? lista.map(function (p) {
+          return '<li><span class="personal-check" aria-hidden="true">✓</span><span><b>' + escapeHtml(p.nombre) +
+            "</b> · " + escapeHtml(capitalizarPalabras(p.cargo || "")) + "</span><span>" +
+            escapeHtml(horaDeMs(Date.parse(p.leido_en))) + "</span></li>";
+        }).join("")
+      : '<li class="personal-nadie">Todavía nadie en las últimas 4 horas.</li>';
   }
 
-  function mostrarResultadoLector(ok, titulo, nombre, texto, nota, foto) {
-    var box = $("lectorResultado");
-    box.dataset.ok = String(!!ok);
-    box.innerHTML =
-      (foto ? '<img alt="Foto del gestor">' : "") +
-      '<p class="resultado-titulo">' + (ok ? "✓ " : "✗ ") + escapeHtml(titulo) + "</p>" +
-      (nombre ? '<p class="resultado-nombre">' + escapeHtml(nombre) + "</p>" : "") +
-      (texto ? '<p class="resultado-texto">' + escapeHtml(texto) + "</p>" : "") +
-      (nota ? '<p class="resultado-nota">' + escapeHtml(nota) + "</p>" : "");
-    if (foto) box.querySelector("img").src = foto;   // por propiedad: nunca como HTML
-    show(box, true);
-  }
-
-  function guardarSubida(res, texto) {
-    var c = res.codigo;
-    var pos = ubicacion.posicion && Date.now() - ubicacion.ultimaMs < 3 * 60 * 1000 ? ubicacion.posicion : null;
-    var pendientes = leerJson(LS_SUBIDAS, []);
-    pendientes.push({
-      id_local: idLocal(),
-      dni_gestor: c.dni,
-      codigo: String(texto).slice(0, 4000),
-      marcado_en: new Date(c.t).toISOString(),
-      leido_en: new Date().toISOString(),
-      interno: String(state.vehiculo || "").trim().slice(0, 20),
-      dni_conductor: state.dni || "",
-      lat: pos ? pos.lat : null,
-      lon: pos ? pos.lng : null,
-      precision_m: pos ? pos.precision : null,
-      en_el_bus: res.ok ? "ok" : res.motivo,
-    });
-    var ok = guardarJson(LS_SUBIDAS, pendientes.slice(-MAX_SUBIDAS_PENDIENTES));
-    var hoy = hoyColombia();
-    var leidas = leerJson(LS_SUBIDAS_LEIDAS, []).filter(function (l) { return l.fecha === hoy; });
-    leidas.push({ fecha: hoy, ok: !!res.ok });
-    guardarJson(LS_SUBIDAS_LEIDAS, leidas);
-    enviarSubidasPendientes();
-    return ok;
-  }
-
-  // Como las confirmaciones de tiquetes: en orden, y un duplicado (23505)
-  // cuenta como enviado. Un renglón que la base nunca va a aceptar (dato
-  // inválido) se descarta para no trancar los demás.
-  async function enviarSubidasPendientes() {
-    if (enviandoSubidas || !navigator.onLine || !state.user) return;
-    if (!leerJson(LS_SUBIDAS, []).length) return;
-
-    enviandoSubidas = true;
-    try {
-      while (true) {
-        var pendientes = leerJson(LS_SUBIDAS, []);
-        if (!pendientes.length) break;
-        var registro = pendientes[0];
-        var res = await conTiempoLimite(client.from(cfg.TABLA_GESTORES_SUBIDAS).insert(registro), 10000);
-        var codigo = res.error ? String(res.error.code || "") : "";
-        if (res.error && codigo !== "23505" && !/^22|^23514$/.test(codigo)) {
-          console.warn("[portal] código de gestor en espera:", res.error.message || res.error);
-          break;
-        }
-        if (res.error && codigo !== "23505") console.warn("[portal] código de gestor descartado:", res.error.message);
-        guardarJson(LS_SUBIDAS, leerJson(LS_SUBIDAS, []).filter(function (r) { return r.id_local !== registro.id_local; }));
-      }
-    } catch (err) {
-      console.warn("[portal] código de gestor en espera:", err && err.message ? err.message : err);
-    } finally {
-      enviandoSubidas = false;
-      pintarResumenGestores();
-    }
-  }
-
-  function pintarResumenGestores() {
-    var el = $("gestorResumen");
+  // En el inicio, debajo del botón: "Hoy se registraron 2: María, Pedro".
+  async function pintarResumenPersonal() {
+    var el = $("personalResumen");
     if (!el) return;
-    var hoy = hoyColombia();
-    var leidos = leerJson(LS_SUBIDAS_LEIDAS, []).filter(function (l) { return l.fecha === hoy && l.ok; }).length;
-    var pendientes = leerJson(LS_SUBIDAS, []).length;
-    var partes = [];
-    if (leidos) partes.push(leidos === 1 ? "Hoy leyó 1 gestor" : "Hoy leyó " + leidos + " gestores");
-    if (pendientes) partes.push(pendientes === 1 ? "1 por enviar" : pendientes + " por enviar");
-    el.textContent = partes.join(" · ");
-    show(el, partes.length > 0);
+    var lista = null;
+    try { lista = await consultarPersonalDelBus(); } catch (_) { lista = null; }
+    if (!lista || !lista.length) { show(el, false); return; }
+    el.textContent = (lista.length === 1 ? "Se registró 1 en las últimas horas: " : "Se registraron " + lista.length +
+      " en las últimas horas: ") + listaY(lista.map(function (p) { return primerNombre(p.nombre); }));
+    show(el, true);
   }
 
-  // En la pantalla de "Sin conexión": leer el código de un gestor sí funciona sin internet.
+  // En la pantalla de "Sin conexión": el código del bus sí sale sin internet.
   function pintarBotonesSinInternet() {
     var enApp = !!state.user && !!state.dni && !$("appView").hidden;
-    show($("btnSinInternetLeer"), enApp);
+    show($("btnSinInternetPersonal"), enApp);
   }
 
-  function initGestores() {
-    $("btnLeerGestor").addEventListener("click", abrirLector);
-    $("btnSinInternetLeer").addEventListener("click", abrirLector);
-    $("lectorCerrar").addEventListener("click", cerrarLector);
-    $("lectorListo").addEventListener("click", cerrarLector);
-    $("lectorOtro").addEventListener("click", function () { pararLector(); abrirLector(); });
-
-    window.addEventListener("online", enviarSubidasPendientes);
-    // La lista de gestores aprobados se mantiene al día mientras el portal está abierto.
-    setInterval(function () {
-      if (!document.hidden && state.user) refrescarGestores(false);
-    }, 15 * 60 * 1000);
-    // En segundo plano no se deja la cámara prendida.
-    document.addEventListener("visibilitychange", function () {
-      if (document.hidden && !$("lectorSheet").hidden) cerrarLector();
-    });
+  function initPersonal() {
+    $("btnRegistrarPersonal").addEventListener("click", abrirPersonal);
+    $("btnSinInternetPersonal").addEventListener("click", abrirPersonal);
+    $("personalCerrar").addEventListener("click", cerrarPersonal);
+    $("personalListo").addEventListener("click", cerrarPersonal);
   }
 
   // ------------------------------------------------- internet obligatorio
@@ -3469,8 +3304,6 @@
     if (state.user && !$("appView").hidden && state.vista === "inicio") cargarInicio();
     if (state.user && !$("appView").hidden && state.vista === "tarjeta") cargarTarjeta();
     enviarConfirmacionesPendientes();
-    enviarSubidasPendientes();
-    if (state.user) refrescarGestores(false);
   }
 
   function pintarVerificando(activo) {
@@ -4239,7 +4072,7 @@
     initViajes();
     initTarjeta();
     initConfirmacionTiquetes();
-    initGestores();
+    initPersonal();
 
     $("btnLogout").addEventListener("click", logout);
     $("btnReloadModule").addEventListener("click", recargarModulo);

@@ -1,5 +1,5 @@
-/* App de los gestores: usa el estilo del Portal del Conductor (../css/portal.css) con el
-   morado de los gestores (el mismo de su punto en el mapa de Control), para que no se
+/* App del personal de la empresa: usa el estilo del Portal del Conductor (../css/portal.css)
+   con el morado de los gestores (el mismo de su punto en el mapa de Control), para que no se
    confunda con la app del conductor. */
 .app-gestores {
   --bg: #f1eef8;
@@ -25,6 +25,32 @@
   font-size: 14px;
   font-weight: 600;
 }
+
+/* El botón grande: lo único que hace falta al subir al bus */
+.btn-leer-bus { min-height: 76px; font-size: 19px; border-radius: var(--radius-lg); }
+.btn-leer-bus .ico { width: 26px; height: 26px; margin-right: 8px; vertical-align: -6px; }
+
+.registros-hoy { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.registros-hoy li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+  font-size: 14.5px;
+  color: var(--ink-2);
+}
+.registros-hoy .registro-nada { background: none; padding: 2px 0; color: var(--muted); font-size: 14px; }
+.registro-chip { padding: 2px 9px; border-radius: var(--radius-pill); font-size: 12.5px; font-weight: 700; }
+.registro-chip[data-estado="ok"] { background: #e3f4e8; color: #0b6b3a; }
+.registro-chip[data-estado="pendiente"] { background: var(--warn-soft); color: var(--warn-ink); }
+.registro-chip[data-estado="error"] { background: var(--danger-soft); color: var(--danger); }
+.registro-motivo { flex-basis: 100%; font-size: 12.5px; color: var(--danger); }
+
+.selfie-bus { margin: 0 0 8px; font-size: 15px; color: var(--ink-2); text-align: center; }
 
 .pasos-gestor {
   margin: 0;
