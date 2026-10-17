@@ -1637,3 +1637,11 @@ button.turno-opcion:focus-visible { outline: none; border-color: var(--primary);
 .grabador-boton { width: 76px; height: 76px; border-radius: 50%; border: 5px solid #fff; background: #e5484d; cursor: pointer; }
 .grabador-boton[data-estado="grabando"] { border-radius: 22px; background: #e5484d; box-shadow: 0 0 0 6px rgba(229, 72, 77, .35); }
 .grabador-boton:disabled { opacity: .5; }
+
+/* v1.14.0: el código del personal y las novedades van dentro de cada viaje de Mi tarjeta */
+.tv-extra { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.tv-extra .btn { flex: 1 1 170px; min-height: 42px; }
+.tv-extra .ico { width: 18px; height: 18px; margin-right: 6px; vertical-align: -4px; }
+.tv-novedades { margin-top: 10px; }
+.novedad-bus { margin: 0; }
+.novedad-conductor { margin: 2px 0 10px; text-align: center; font-size: 14px; color: var(--muted); }

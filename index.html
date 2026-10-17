@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="./css/portal.css?v=1.13.0">
+  <link rel="stylesheet" href="./css/portal.css?v=1.14.0">
 </head>
 <body>
 
@@ -175,36 +175,6 @@
           <div id="turnoBody" class="card-body">
             <div class="skeleton skeleton-titulo"></div>
             <div class="skeleton skeleton-bloque"></div>
-          </div>
-        </article>
-
-        <!-- ¿Subió alguien de la empresa? El conductor muestra el código del bus y la persona lo lee con su app -->
-        <article class="card card-gestor" id="cardPersonal">
-          <header class="card-head">
-            <h3>¿Subió alguien de la empresa?</h3>
-          </header>
-          <div class="card-body">
-            <p class="gestor-lead">Si se sube una gestora u otra persona de la empresa, muéstrele este código. Ella lo lee con la app del personal y queda en su viaje: cuenta como pasajero, pero no se le cobra.</p>
-            <button id="btnRegistrarPersonal" class="btn btn-primary btn-block" type="button">
-              <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>
-              Registrar personal de la empresa
-            </button>
-            <p id="personalResumen" class="gestor-resumen" hidden></p>
-          </div>
-        </article>
-
-        <!-- Novedades: trasbordo, bus varado, accidente u otra, con un video corto (también sin señal) -->
-        <article class="card card-gestor card-novedad" id="cardNovedad">
-          <header class="card-head">
-            <h3>¿Pasó algo en la ruta?</h3>
-          </header>
-          <div class="card-body">
-            <p class="gestor-lead">Reporte un trasbordo, el bus varado, un accidente u otra novedad. Puede grabar un video corto, de máximo 1 minuto.</p>
-            <button id="btnReportarNovedad" class="btn btn-primary btn-block" type="button">
-              <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M15 10l4.55-2.28A1 1 0 0 1 21 8.62v6.76a1 1 0 0 1-1.45.9L15 14"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg>
-              Reportar novedad
-            </button>
-            <div id="novedadesMias" class="novedades-mias" aria-live="polite" hidden></div>
           </div>
         </article>
 
@@ -541,6 +511,7 @@
     </header>
     <form id="novedadForm" class="sheet-body" novalidate>
       <p id="novedadBus" class="qr-nombre novedad-bus"></p>
+      <p id="novedadConductor" class="novedad-conductor"></p>
       <fieldset class="field novedad-tipos">
         <legend>¿Qué pasó?</legend>
         <label class="novedad-tipo"><input type="radio" name="novedadTipo" value="trasbordo"><span><b>Trasbordo</b><small>Recibí pasajeros de otro bus</small></span></label>
@@ -647,7 +618,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./js/portal-config.js?v=1.13.0"></script>
-<script src="./js/portal.js?v=1.13.0"></script>
+<script src="./js/portal-config.js?v=1.14.0"></script>
+<script src="./js/portal.js?v=1.14.0"></script>
 </body>
 </html>

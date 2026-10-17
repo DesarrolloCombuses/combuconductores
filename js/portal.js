@@ -1341,8 +1341,6 @@
     pintarSaludo();
     cargarTurno();
     cargarJornada();
-    pintarResumenPersonal();
-    actualizarNovedadesMias();
     enviarNovedadesPendientes();
   }
 
@@ -1778,6 +1776,8 @@
     confirmando: null, // { clave, civica, pasajeros, tiquetes, avisos }: el "¿Guardar?" a la vista
     guardando: null,   // clave del viaje que se está guardando
     mensaje: null,     // { clave, tipo: ok|error, texto } debajo de un renglón
+    novedades: [],     // v11.1: las novedades que reportó en los viajes de hoy (con su número)
+    novPendientes: [], // las que siguen en el celular, por enviar o subiendo el video
   };
 
   // Lo que dice cada estado de la cívica (estado_civica de la vista), en las
@@ -1824,6 +1824,14 @@
           .eq("dia", dia)
           .order("reportado_en", { ascending: true })
       ),
+      // Las novedades que reportó en cada viaje (sql v11.1). Son un extra: sin ellas la tarjeta sirve igual.
+      conTiempoLimite(
+        client.from(cfg.TABLA_NOVEDADES)
+          .select("numero,id_local,tipo,interno_origen,cantidad,nota,ocurrio_en,video_ruta,anulado_en,anulado_motivo,clave_viaje,viaje")
+          .in("interno", internos)
+          .eq("dia", dia)
+          .order("numero", { ascending: true })
+      ).catch(function () { return { data: [] }; }),
     ]);
     if (res[0].error && tarjetaConPersonal && /personal/.test(res[0].error.message || "")) {
       tarjetaConPersonal = false;            // la base todavía no tiene la v10
@@ -1831,7 +1839,8 @@
     }
     if (res[0].error) throw res[0].error;
     // Los daños son un extra: si esa consulta falla, la tarjeta sirve igual.
-    return { filas: res[0].data || [], danos: res[1].error ? [] : (res[1].data || []) };
+    return { filas: res[0].data || [], danos: res[1].error ? [] : (res[1].data || []),
+      novedades: res[2] && !res[2].error ? (res[2].data || []) : [] };
   }
 
   function cargarTarjeta() {
@@ -1860,6 +1869,7 @@
       tarj.dia = dia;
       tarj.filas = cache && cache.datos ? cache.datos.filas : null;
       tarj.danos = cache && cache.datos ? cache.datos.danos || [] : [];
+      tarj.novedades = cache && cache.datos ? cache.datos.novedades || [] : [];
       tarj.guardadoEn = tarj.filas ? cache.guardadoEn : null;
       tarj.error = null;
       tarj.borrador = {};
@@ -1867,6 +1877,7 @@
       tarj.mensaje = null;
     }
 
+    pintarNovedadesMias();             // las que siguen en el celular (se pintan cuando las lee)
     if (tarj.filas) {
       pintarTarjeta();
     } else if (!navigator.onLine) {
@@ -1886,6 +1897,7 @@
         if (tarj.clave !== clave) return; // cambió el bus o el día mientras tanto
         tarj.filas = datos.filas;
         tarj.danos = datos.danos;
+        tarj.novedades = datos.novedades;
         tarj.guardadoEn = Date.now();
         tarj.error = null;
         guardarCache("tarjeta_" + clave, datos);
@@ -2099,6 +2111,11 @@
       html += '<p class="viajes-nota">Cada viaje aparece aquí un par de minutos después del despacho.</p>';
     }
 
+    var sueltas = novedadesSinViaje(filas);
+    if (sueltas.length) {
+      html += '<h4 class="personal-titulo">Novedades sin viaje</h4><ul class="nov-lista">' + sueltas.map(filaNovedad).join("") + "</ul>";
+    }
+
     if (tarj.danos.length) {
       html += '<ul class="tarj-danos">' + tarj.danos.map(function (d) {
         var f = filas.find(function (x) { return x.clave === d.clave_viaje; });
@@ -2265,6 +2282,15 @@
     if (m && m.clave === f.clave) {
       html += '<p class="tv-msg" data-tipo="' + m.tipo + '" role="status">' + escapeHtml(m.texto) + "</p>";
     }
+
+    // Las novedades de este viaje y los botones: el código del personal va en el último viaje (el que está
+    // haciendo); la novedad, en cualquiera de hoy.
+    var novs = novedadesDeViaje(f.clave);
+    if (novs.length) html += '<ul class="nov-lista tv-novedades">' + novs.map(filaNovedad).join("") + "</ul>";
+    html += '<div class="tv-extra">' +
+      (i === 0 ? '<button class="btn btn-ghost btn-sm" type="button" data-personal-qr>' + ICONO_QR + "Personal de la empresa</button>" : "") +
+      '<button class="btn btn-ghost btn-sm" type="button" data-novedad="' + escapeHtml(f.clave) + '">' + ICONO_NOVEDAD + "Reportar novedad</button>" +
+    "</div>";
     return '<li class="tv"' + (falta ? " data-falta" : "") + ">" + html + "</li>";
   }
 
@@ -2576,6 +2602,12 @@
         });
       } else if (b.hasAttribute("data-dano")) {
         abrirDano(b.getAttribute("data-dano") || null);
+      } else if (b.hasAttribute("data-novedad")) {
+        abrirNovedad(b.getAttribute("data-novedad"));
+      } else if (b.hasAttribute("data-personal-qr")) {
+        abrirPersonal();
+      } else if (b.hasAttribute("data-nov-quitar")) {
+        novBorrar(b.getAttribute("data-nov-quitar")).catch(noHacerNada).then(pintarNovedadesMias);
       }
     });
 
@@ -3155,7 +3187,6 @@
     personalQr.reloj = personalQr.lista = null;
     $("personalQr").innerHTML = "";
     show($("personalSheet"), false);
-    pintarResumenPersonal();
   }
 
   // Quiénes se registraron en este bus en las últimas horas (lo mandó el
@@ -3190,18 +3221,6 @@
       : '<li class="personal-nadie">Todavía nadie en las últimas 4 horas.</li>';
   }
 
-  // En el inicio, debajo del botón: "Hoy se registraron 2: María, Pedro".
-  async function pintarResumenPersonal() {
-    var el = $("personalResumen");
-    if (!el) return;
-    var lista = null;
-    try { lista = await consultarPersonalDelBus(); } catch (_) { lista = null; }
-    if (!lista || !lista.length) { show(el, false); return; }
-    el.textContent = (lista.length === 1 ? "Se registró 1 en las últimas horas: " : "Se registraron " + lista.length +
-      " en las últimas horas: ") + listaY(lista.map(function (p) { return primerNombre(p.nombre); }));
-    show(el, true);
-  }
-
   // En la pantalla de "Sin conexión": el código del bus sí sale sin internet.
   function pintarBotonesSinInternet() {
     var enApp = !!state.user && !!state.dni && !$("appView").hidden;
@@ -3210,7 +3229,6 @@
   }
 
   function initPersonal() {
-    $("btnRegistrarPersonal").addEventListener("click", abrirPersonal);
     $("btnSinInternetPersonal").addEventListener("click", abrirPersonal);
     $("personalCerrar").addEventListener("click", cerrarPersonal);
     $("personalListo").addEventListener("click", cerrarPersonal);
@@ -3238,9 +3256,12 @@
   var NOV_MAX_BYTES = cfg.NOVEDAD_VIDEO_MAX_BYTES || 20 * 1024 * 1024;
   // Un video elegido de la galería más pesado que esto se vuelve a grabar en calidad media.
   var NOV_DIRECTO_BYTES = cfg.NOVEDAD_VIDEO_DIRECTO_BYTES || 8 * 1024 * 1024;
-  var LS_NOV_HECHAS = "portal_novedades_hechas";
-  // enviando: el botón está mandando; ocupada: la novedad que la hoja está subiendo (la cola no la toca)
-  var nov = { video: null, sinVideo: false, enviando: false, ocupada: null, preparando: false, cola: null, grab: null, servidor: null };
+  // Los dos botones de cada viaje de la tarjeta
+  var ICONO_QR = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>';
+  var ICONO_NOVEDAD = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M15 10l4.55-2.28A1 1 0 0 1 21 8.62v6.76a1 1 0 0 1-1.45.9L15 14"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg>';
+  // enviando: el botón está mandando; ocupada: la novedad que la hoja está subiendo (la cola no la toca);
+  // clave: el viaje de la tarjeta desde donde se abrió (sin él, la base la pega al viaje de esa hora)
+  var nov = { video: null, sinVideo: false, enviando: false, ocupada: null, preparando: false, cola: null, grab: null, clave: null };
   var novDb = null;
 
   function noHacerNada() {}
@@ -3277,21 +3298,6 @@
     return novTx("readonly", function (s) { return s.getAll(); }).then(function (l) {
       return (l || []).sort(function (a, b) { return a.creado_ms - b.creado_ms; });
     });
-  }
-
-  // Las que ya llegaron (sin el video): para "Mis novedades" aunque no haya señal.
-  function leerHechas() {
-    try { return JSON.parse(localStorage.getItem(LS_NOV_HECHAS) || "[]") || []; } catch (_) { return []; }
-  }
-
-  function guardarHecha(it) {
-    var l = leerHechas().filter(function (h) { return h.id_local !== it.id_local; });
-    l.unshift({
-      id_local: it.id_local, numero: it.numero, dni: it.datos.p_dni, tipo: it.datos.p_tipo,
-      origen: it.datos.p_interno_origen, cantidad: it.datos.p_cantidad, ms: it.creado_ms,
-      con_video: !!it.video_ruta, video_fallo: it.video_fallo || null,
-    });
-    try { localStorage.setItem(LS_NOV_HECHAS, JSON.stringify(l.slice(0, 20))); } catch (_) {}
   }
 
   // ---- mandarlas
@@ -3350,7 +3356,6 @@
         }
       }
     }
-    guardarHecha(it);
     await novBorrar(it.id_local).catch(noHacerNada);
   }
 
@@ -3382,55 +3387,49 @@
     return nov.cola;
   }
 
-  // ---- "Mis novedades" (en el inicio, debajo del botón)
-  async function cargarNovedadesServidor() {
-    var dni = normalizarDni(state.dni);
-    if (!dni || !state.user || !internet.ok) return;
-    var desde = fechaColombiaDe(Date.now() - 2.5 * HORA_MS - DIA_MS);
-    var r = await conTiempoLimite(client.from(cfg.TABLA_NOVEDADES)
-      .select("numero,id_local,tipo,interno,interno_origen,cantidad,ocurrio_en,video_ruta,anulado_en,anulado_motivo")
-      .eq("dni_conductor", dni).gte("dia", desde).order("numero", { ascending: false }).limit(10), 10000);
-    if (r.error) throw r.error;
-    nov.servidor = { dni: dni, lista: r.data || [] };
-  }
-
+  // ---- las novedades en la tarjeta: cada una en su viaje
+  // Después de mandar: la tarjeta vuelve a traer sus novedades (con el número y si tienen video).
   function actualizarNovedadesMias() {
-    cargarNovedadesServidor().catch(noHacerNada).then(pintarNovedadesMias);
+    pintarNovedadesMias();
+    if (state.user && !$("appView").hidden && state.vista === "tarjeta") cargarTarjeta();
   }
 
+  // Las que siguen en el celular (por enviar o subiendo el video), de este conductor.
   async function pintarNovedadesMias() {
-    var caja = $("novedadesMias");
-    if (!caja) return;
     var dni = normalizarDni(state.dni);
-    var pendientes = [];
-    try { pendientes = await novTodas(); } catch (_) { pendientes = []; }
-    var vistas = {};
-    var filas = [];
-    pendientes.forEach(function (it) {
-      if (normalizarDni(it.datos.p_dni) !== dni) return;
-      vistas[it.id_local] = true;
-      filas.push({ id: it.id_local, numero: it.numero, tipo: it.datos.p_tipo, origen: it.datos.p_interno_origen,
-        cantidad: it.datos.p_cantidad, ms: it.creado_ms, video: !!it.video, error: it.error,
+    var lista = [];
+    try { lista = await novTodas(); } catch (_) { lista = []; }
+    tarj.novPendientes = lista.filter(function (it) { return normalizarDni(it.datos.p_dni) === dni; });
+    if (tarj.filas && state.vista === "tarjeta" && !$("appView").hidden) pintarTarjeta();
+  }
+
+  // Todas las de la tarjeta en el mismo formato: las del servidor y, encima, las que siguen en el celular.
+  function novedadesDeTarjeta() {
+    var porId = {};
+    var lista = [];
+    (tarj.novPendientes || []).forEach(function (it) {
+      porId[it.id_local] = true;
+      lista.push({ id: it.id_local, numero: it.numero, tipo: it.datos.p_tipo, origen: it.datos.p_interno_origen,
+        cantidad: it.datos.p_cantidad, ms: it.creado_ms, video: !!it.video, error: it.error, clave: it.datos.p_clave_viaje || null,
         estado: it.error ? "error" : !it.numero ? "pendiente" : "subiendo" });
     });
-    (nov.servidor && nov.servidor.dni === dni ? nov.servidor.lista : []).forEach(function (s) {
-      if (vistas[s.id_local]) return;
-      vistas[s.id_local] = true;
-      filas.push({ numero: s.numero, tipo: s.tipo, origen: s.interno_origen, cantidad: s.cantidad,
-        ms: Date.parse(s.ocurrio_en), video: !!s.video_ruta, motivo: s.anulado_motivo,
-        estado: s.anulado_en ? "anulada" : "ok" });
+    (tarj.novedades || []).forEach(function (s) {
+      if (porId[s.id_local]) return;
+      lista.push({ numero: s.numero, tipo: s.tipo, origen: s.interno_origen, cantidad: s.cantidad, ms: Date.parse(s.ocurrio_en),
+        video: !!s.video_ruta, motivo: s.anulado_motivo, clave: s.clave_viaje, estado: s.anulado_en ? "anulada" : "ok" });
     });
-    leerHechas().forEach(function (h) {
-      if (vistas[h.id_local] || normalizarDni(h.dni) !== dni || Date.now() - h.ms > 36 * HORA_MS) return;
-      vistas[h.id_local] = true;
-      filas.push({ numero: h.numero, tipo: h.tipo, origen: h.origen, cantidad: h.cantidad, ms: h.ms,
-        video: h.con_video, estado: "ok" });
-    });
-    filas.sort(function (a, b) { return b.ms - a.ms; });
-    if (!filas.length) { caja.innerHTML = ""; show(caja, false); return; }
-    caja.innerHTML = '<h4 class="personal-titulo">Mis novedades</h4><ul class="nov-lista">' +
-      filas.slice(0, 8).map(filaNovedad).join("") + "</ul>";
-    show(caja, true);
+    return lista.sort(function (a, b) { return a.ms - b.ms; });
+  }
+
+  function novedadesDeViaje(clave) {
+    return novedadesDeTarjeta().filter(function (x) { return x.clave === clave; });
+  }
+
+  // Las que no tienen viaje: las reportó desde "Sin conexión" (todavía no se sabe a cuál va) o a una hora sin viaje.
+  function novedadesSinViaje(filas) {
+    var claves = {};
+    filas.forEach(function (f) { claves[f.clave] = true; });
+    return novedadesDeTarjeta().filter(function (x) { return !x.clave || !claves[x.clave]; });
   }
 
   function filaNovedad(f) {
@@ -3465,8 +3464,10 @@
     $("novedadNotaTitulo").textContent = t === "otra" ? "Cuente qué pasó" : "Cuente qué pasó (si quiere)";
   }
 
-  function abrirNovedad() {
+  function abrirNovedad(clave) {
     var bus = busDelCodigo();
+    nov.clave = typeof clave === "string" && clave ? clave : null;
+    var viaje = nov.clave ? (tarj.filas || []).find(function (x) { return x.clave === nov.clave; }) : null;
     $("novedadForm").reset();
     ponerVideoNovedad(null);
     nov.sinVideo = false;
@@ -3474,7 +3475,9 @@
     show($("novedadResultado"), false);
     pintarTipoNovedad();
     var nombre = nombreConductor();
-    $("novedadBus").textContent = bus ? "Bus " + bus + (nombre ? " · " + capitalizarPalabras(nombre) : "") : "";
+    $("novedadBus").textContent = bus ? "Bus " + bus + (viaje ? " · " + nombreViaje(viaje).replace(/^v/, "V") + ", salió " + horaViaje(viaje)
+      : " · va al viaje de esta hora") : "";
+    $("novedadConductor").textContent = nombre ? capitalizarPalabras(nombre) : "";
     errorNovedad(bus ? "" : "Primero confirme su bus en el inicio: la novedad va con el número del bus.");
     $("novedadEnviar").disabled = !bus;
     show($("novedadSheet"), true);
@@ -3859,6 +3862,7 @@
         p_lat: pos ? pos.lat : null,
         p_lon: pos ? pos.lng : null,
         p_precision: pos ? pos.precision : null,
+        p_clave_viaje: nov.clave || null,
       },
       video: nov.video ? nov.video.blob : null,
       video_tipo: nov.video ? nov.video.tipo : null,
@@ -3925,8 +3929,7 @@
   }
 
   function initNovedades() {
-    $("btnReportarNovedad").addEventListener("click", abrirNovedad);
-    $("btnSinInternetNovedad").addEventListener("click", abrirNovedad);
+    $("btnSinInternetNovedad").addEventListener("click", function () { abrirNovedad(null); });
     $("novedadCerrar").addEventListener("click", cerrarNovedad);
     $("novedadListo").addEventListener("click", cerrarNovedad);
     $("novedadForm").addEventListener("submit", enviarNovedad);
@@ -3947,11 +3950,6 @@
       else if (this.dataset.estado === "grabando") pararGrabacion();
     });
     $("grabadorCancelar").addEventListener("click", cerrarGrabador);
-    $("novedadesMias").addEventListener("click", function (ev) {
-      var b = ev.target.closest ? ev.target.closest("[data-nov-quitar]") : null;
-      if (!b) return;
-      novBorrar(b.getAttribute("data-nov-quitar")).catch(noHacerNada).then(pintarNovedadesMias);
-    });
     // Lo que quedó sin enviar se reintenta cada minuto mientras el portal está abierto.
     setInterval(function () {
       if (state.user && internet.ok && !document.hidden) enviarNovedadesPendientes();

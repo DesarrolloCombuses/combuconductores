@@ -264,7 +264,8 @@ de pasajero...) se sube a los buses y el sensor de la puerta lo cuenta. Desde la
 v1.12.0 (16-oct-2026, a pedido del usuario) **suma en los pasajeros del viaje
 pero no se cobra**, y en las observaciones queda quién fue.
 
-- **El conductor**, en el inicio, toca **Registrar personal de la empresa**: su
+- **El conductor**, en **Mi tarjeta**, en el viaje que está haciendo (el último),
+  toca **Personal de la empresa** (desde la v1.14.0; antes estaba en el inicio): su
   celular muestra un código QR que **cambia cada 20 segundos**
   (`CBP1.<bus>.<cédula del conductor>.<hora ms>.<al azar>`) y, debajo, quiénes se
   registraron en su bus en las últimas 4 horas (`personal_del_bus`). El código
@@ -306,9 +307,13 @@ la v10 cierra esas funciones para quien no tiene sesión.
 
 ### Novedades del conductor: trasbordo, varado, accidente u otra (v1.13.0)
 
-En el inicio, la tarjeta **¿Pasó algo en la ruta?** tiene el botón **Reportar
-novedad** (también en la pantalla de "Sin conexión"). El conductor escoge qué
-pasó, completa lo que pide y puede grabar un **video de máximo 1 minuto**:
+**Cada novedad es de un viaje** (v1.14.0, a pedido del usuario: "todo eso es
+dentro de la tarjeta"). En **Mi tarjeta**, cada viaje tiene el botón **Reportar
+novedad**, y debajo salen las novedades de ese viaje con su número, si tienen
+video o si control las anuló. También está en la pantalla de "Sin conexión":
+ahí no se sabe el viaje y la base la pega al viaje de ese bus a esa hora; si no
+hay ninguno, sale en "Novedades sin viaje". El conductor escoge qué pasó,
+completa lo que pide y puede grabar un **video de máximo 1 minuto**:
 
 - **Trasbordo:** de qué bus venían los pasajeros y cuántos recibió. Lo reporta el
   bus que **recibe** (ejemplo: el 722 se vara y sus 15 pasajeros pasan al 735; el
@@ -318,8 +323,7 @@ pasó, completa lo que pide y puede grabar un **video de máximo 1 minuto**:
 - **Bus varado o daño, accidente o incidente:** la nota es opcional; solo quedan
   registrados con su video. **Otra novedad:** la nota es obligatoria.
 - Cada novedad recibe su **número** (N° 1001, 1002...), que le sale al conductor y
-  queda en **Mis novedades** (las de hoy y ayer, con si tiene video o si control la
-  anuló).
+  queda en su viaje de la tarjeta.
 - **El video:** se graba desde la app con la cámara trasera, en 640×480 y unos 600
   kbps (≈ 4,5 MB el minuto); a los 60 s para solo. También se puede **elegir del
   celular**: si pesa más de 8 MB se vuelve a grabar en calidad media (tarda lo que
