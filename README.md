@@ -266,7 +266,7 @@ pero no se cobra**, y en las observaciones queda quién fue.
 
 - **El conductor**, en **Mi tarjeta**, en el viaje que está haciendo (el último),
   toca **Personal de la empresa** (desde la v1.14.0; antes estaba en el inicio): su
-  celular muestra un código QR que **cambia cada 20 segundos**
+  celular muestra un código QR que **cambia cada 15 segundos**
   (`CBP1.<bus>.<cédula del conductor>.<hora ms>.<al azar>`) y, debajo, quiénes se
   registraron en su bus en las últimas 4 horas (`personal_del_bus`). El código
   sale también sin internet (botón en la pantalla de "Sin conexión").

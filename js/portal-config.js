@@ -12,7 +12,7 @@ window.PORTAL_CONFIG = {
   // una nueva no se edita a mano, se corre (desde la carpeta portal):
   //   powershell -ExecutionPolicy Bypass -File .\nueva-version.ps1 1.6.1
   // que la cambia aquí, en sw.js y en index.html a la vez.
-  APP_VERSION: "v1.14.0",
+  APP_VERSION: "v1.14.1",
 
   // Cada cuánto se pregunta al servidor si hay una versión nueva, con el
   // portal a la vista. También se pregunta al abrirlo y al volver a él.
@@ -125,7 +125,7 @@ window.PORTAL_CONFIG = {
   TABLA_CONFIRMACIONES_TIQUETES: "portal_confirmaciones_tiquetes",
 
   // Personal de la empresa (v1.12.0): el conductor muestra un código QR que
-  // cambia cada 20 s y la persona (gestora, auxiliar...) lo lee con la app del
+  // cambia cada 15 s y la persona (gestora, auxiliar...) lo lee con la app del
   // personal (gestores/). Suma en los pasajeros del viaje pero no se cobra. Lo
   // crea la v10 de sql/tarjeta_despacho.sql (personal_empresa.sql).
   //   colaboradores ..... si la cédula es de un gestor: va a la app del personal

@@ -3094,13 +3094,13 @@
   // ============================================================ PERSONAL DE LA EMPRESA
   // Cuando se sube alguien de la empresa (gestora, auxiliar, mecánico, un
   // conductor que va de pasajero...), el conductor toca "Registrar personal de
-  // la empresa" y su celular muestra un código QR que cambia cada 20 segundos:
+  // la empresa" y su celular muestra un código QR que cambia cada 15 segundos:
   //     CBP1.<bus>.<cédula del conductor>.<hora ms>.<al azar>
   // La persona lo lee con la app del personal (gestores/), se toma una selfie y
   // queda en el viaje: suma en los pasajeros (el sensor la contó) pero su pasaje
   // no se cobra (sql/personal_empresa.sql, la v10). El código sale también sin
   // internet: el registro lo manda el celular de la persona.
-  var PERSONAL_CODIGO_MS = 20 * 1000;      // cada código dura esto en pantalla
+  var PERSONAL_CODIGO_MS = 15 * 1000;      // cada código dura esto en pantalla
   var PERSONAL_LISTA_MS = 5 * 1000;        // con el código a la vista, la lista se pide así de seguido
   var personalQr = { reloj: null, lista: null, fin: 0 };
   var scriptsCargados = {};
@@ -3322,6 +3322,8 @@
     if (r.error) throw r.error;
     if (!r.data || !r.data.numero) throw new Error("El servidor no devolvió el número");
     it.numero = r.data.numero;
+    // la mandada sin viaje ("Sin conexión"): la base dice a cuál la pegó y ahí sale de una vez
+    if (r.data.clave_viaje) it.clave_viaje = r.data.clave_viaje;
     await novGuardar(it).catch(noHacerNada);
   }
 
@@ -3410,7 +3412,7 @@
     (tarj.novPendientes || []).forEach(function (it) {
       porId[it.id_local] = true;
       lista.push({ id: it.id_local, numero: it.numero, tipo: it.datos.p_tipo, origen: it.datos.p_interno_origen,
-        cantidad: it.datos.p_cantidad, ms: it.creado_ms, video: !!it.video, error: it.error, clave: it.datos.p_clave_viaje || null,
+        cantidad: it.datos.p_cantidad, ms: it.creado_ms, video: !!it.video, error: it.error, clave: it.clave_viaje || it.datos.p_clave_viaje || null,
         estado: it.error ? "error" : !it.numero ? "pendiente" : "subiendo" });
     });
     (tarj.novedades || []).forEach(function (s) {

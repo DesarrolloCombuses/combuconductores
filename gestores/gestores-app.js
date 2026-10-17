@@ -6,7 +6,7 @@
    el usuario Combuses, con el que se puede abrir Control):
      1. La cédula, una vez en este celular ("¿Usted es María?").
      2. Al subir, el conductor toca "Registrar personal de la empresa" y su
-        celular muestra un código QR que cambia cada 20 segundos:
+        celular muestra un código QR que cambia cada 15 segundos:
             CBP1.<bus>.<cédula del conductor>.<hora ms>.<al azar>
      3. Aquí: "Leer código del bus" -> la cámara lo lee -> una selfie ->
         "Registrarme". Queda en el viaje de ese bus: suma en los pasajeros
