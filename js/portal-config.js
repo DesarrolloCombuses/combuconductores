@@ -12,7 +12,7 @@ window.PORTAL_CONFIG = {
   // una nueva no se edita a mano, se corre (desde la carpeta portal):
   //   powershell -ExecutionPolicy Bypass -File .\nueva-version.ps1 1.6.1
   // que la cambia aquí, en sw.js y en index.html a la vez.
-  APP_VERSION: "v1.12.0",
+  APP_VERSION: "v1.13.0",
 
   // Cada cuánto se pregunta al servidor si hay una versión nueva, con el
   // portal a la vista. También se pregunta al abrirlo y al volver a él.
@@ -132,6 +132,23 @@ window.PORTAL_CONFIG = {
   //   personal_del_bus .. quiénes se registraron en el bus (sin cédula ni selfie)
   TABLA_COLABORADORES: "colaboradores",
   RPC_PERSONAL_DEL_BUS: "personal_del_bus",
+
+  // Novedades del conductor (v1.13.0): trasbordo, bus varado, accidente u
+  // otra, con número y un video de máximo 1 minuto en calidad media que se
+  // guarda 90 días. El trasbordo lo reporta el bus que recibe y va a los
+  // Ajustes de su movilidad. Lo crea sql/novedades.sql (la v11).
+  //   conductor_novedad_reportar ...... guarda la novedad y devuelve su número
+  //   conductor-novedades ............. el depósito privado del video (máx. 20 MB)
+  //   conductor_novedad_video_listo ... avisa que el video subió
+  //   conductor_novedades ............. "Mis novedades" (las de su cédula, hoy y ayer)
+  RPC_NOVEDAD_REPORTAR: "conductor_novedad_reportar",
+  RPC_NOVEDAD_VIDEO_LISTO: "conductor_novedad_video_listo",
+  TABLA_NOVEDADES: "conductor_novedades",
+  BUCKET_NOVEDADES: "conductor-novedades",
+  NOVEDAD_VIDEO_MAX_S: 60,                     // máximo 1 minuto
+  NOVEDAD_VIDEO_BPS: 600000,                   // calidad media: unos 4,5 MB el minuto
+  NOVEDAD_VIDEO_MAX_BYTES: 20 * 1024 * 1024,   // igual que el límite del depósito
+  NOVEDAD_VIDEO_DIRECTO_BYTES: 8 * 1024 * 1024, // de la galería, más pesado que esto se achica
 
   // Internet obligatorio: el portal no se usa sin conexión. La verificación
   // consulta el endpoint de salud de Supabase (~100 bytes) en vez de fiarse de

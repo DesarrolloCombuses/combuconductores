@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="./css/portal.css?v=1.12.0">
+  <link rel="stylesheet" href="./css/portal.css?v=1.13.0">
 </head>
 <body>
 
@@ -190,6 +190,21 @@
               Registrar personal de la empresa
             </button>
             <p id="personalResumen" class="gestor-resumen" hidden></p>
+          </div>
+        </article>
+
+        <!-- Novedades: trasbordo, bus varado, accidente u otra, con un video corto (también sin señal) -->
+        <article class="card card-gestor card-novedad" id="cardNovedad">
+          <header class="card-head">
+            <h3>¿Pasó algo en la ruta?</h3>
+          </header>
+          <div class="card-body">
+            <p class="gestor-lead">Reporte un trasbordo, el bus varado, un accidente u otra novedad. Puede grabar un video corto, de máximo 1 minuto.</p>
+            <button id="btnReportarNovedad" class="btn btn-primary btn-block" type="button">
+              <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M15 10l4.55-2.28A1 1 0 0 1 21 8.62v6.76a1 1 0 0 1-1.45.9L15 14"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg>
+              Reportar novedad
+            </button>
+            <div id="novedadesMias" class="novedades-mias" aria-live="polite" hidden></div>
           </div>
         </article>
 
@@ -515,6 +530,80 @@
   </div>
 </div>
 
+<!-- ============ Novedad: trasbordo, varado, accidente u otra, con video (también sin señal) ============ -->
+<div id="novedadSheet" class="sheet-overlay sheet-encima" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="novedadTitulo">
+    <header class="sheet-head">
+      <h3 id="novedadTitulo">Reportar novedad</h3>
+      <button id="novedadCerrar" class="icon-btn" type="button" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <form id="novedadForm" class="sheet-body" novalidate>
+      <p id="novedadBus" class="qr-nombre novedad-bus"></p>
+      <fieldset class="field novedad-tipos">
+        <legend>¿Qué pasó?</legend>
+        <label class="novedad-tipo"><input type="radio" name="novedadTipo" value="trasbordo"><span><b>Trasbordo</b><small>Recibí pasajeros de otro bus</small></span></label>
+        <label class="novedad-tipo"><input type="radio" name="novedadTipo" value="varado"><span><b>Bus varado o daño</b><small>Mi bus se varó o se dañó</small></span></label>
+        <label class="novedad-tipo"><input type="radio" name="novedadTipo" value="accidente"><span><b>Accidente o incidente</b><small>Choque, pelea, pasajero enfermo…</small></span></label>
+        <label class="novedad-tipo"><input type="radio" name="novedadTipo" value="otra"><span><b>Otra novedad</b><small>Cuente qué pasó</small></span></label>
+      </fieldset>
+      <div id="novedadTrasbordo" class="novedad-trasbordo" hidden>
+        <label class="field">
+          <span>¿De qué bus venían los pasajeros?</span>
+          <input id="novedadOrigen" type="text" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="Ej. 722">
+        </label>
+        <label class="field">
+          <span>¿Cuántos pasajeros recibió?</span>
+          <input id="novedadCantidad" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" placeholder="Ej. 15">
+        </label>
+        <p class="novedad-ayuda">Se descuentan de los ingresos del bus <b id="novedadBusRecibe"></b> en la movilidad de hoy.</p>
+      </div>
+      <label class="field">
+        <span id="novedadNotaTitulo">Cuente qué pasó (si quiere)</span>
+        <textarea id="novedadNota" rows="3" maxlength="500" placeholder="Ej. El 722 se varó en Almacentro y pasé sus pasajeros"></textarea>
+      </label>
+      <div class="field">
+        <span>Video (máximo 1 minuto)</span>
+        <div class="novedad-video">
+          <video id="novedadVideoVista" controls playsinline preload="metadata" hidden></video>
+          <p id="novedadVideoTexto" class="novedad-video-texto">Todavía sin video</p>
+          <div class="novedad-video-botones">
+            <button id="novedadGrabar" class="btn btn-primary" type="button"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M15 10l4.55-2.28A1 1 0 0 1 21 8.62v6.76a1 1 0 0 1-1.45.9L15 14"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg><span id="novedadGrabarTexto">Grabar video</span></button>
+            <label class="btn btn-ghost novedad-elegir">Elegir del celular<input id="novedadArchivo" type="file" accept="video/*" hidden></label>
+          </div>
+          <button id="novedadQuitarVideo" class="btn btn-ghost btn-sm" type="button" hidden>Quitar el video</button>
+        </div>
+      </div>
+      <p id="novedadError" class="form-error" role="alert" hidden></p>
+      <button id="novedadEnviar" class="btn btn-primary btn-block" type="submit">Enviar novedad</button>
+    </form>
+    <div id="novedadResultado" class="sheet-body" hidden>
+      <div id="novedadResultadoCaja" class="lector-resultado" data-ok="true" role="status">
+        <p id="novedadResNumero" class="resultado-titulo"></p>
+        <p id="novedadResTexto" class="resultado-texto"></p>
+        <p id="novedadResVideo" class="resultado-nota"></p>
+      </div>
+      <button id="novedadListo" class="btn btn-primary btn-block" type="button">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- La cámara para grabar el video de la novedad: encima de todo -->
+<div id="grabador" class="grabador" role="dialog" aria-modal="true" aria-label="Grabar video" hidden>
+  <video id="grabadorVista" autoplay playsinline muted></video>
+  <div class="grabador-abajo">
+    <div class="qr-tiempo"><div id="grabadorBarra" class="qr-barra grabador-barra"></div></div>
+    <p id="grabadorTiempo" class="grabador-tiempo">0:00 de 1:00</p>
+    <p id="grabadorAyuda" class="grabador-ayuda"></p>
+    <div class="grabador-botones">
+      <button id="grabadorCancelar" class="btn btn-ghost" type="button">Cancelar</button>
+      <button id="grabadorBoton" class="grabador-boton" type="button" data-estado="preparando" aria-label="Grabar"></button>
+      <span class="grabador-hueco" aria-hidden="true"></span>
+    </div>
+  </div>
+</div>
+
 <!-- ============ Sin internet: el portal exige conexión ============ -->
 <div id="sinInternet" class="sin-internet" role="alertdialog" aria-modal="true"
      aria-labelledby="sinInternetTitulo" aria-describedby="sinInternetTexto" hidden>
@@ -528,6 +617,8 @@
     <p class="sin-internet-nota">Se vuelve a intentar solo cada pocos segundos.</p>
     <!-- El código del bus para el personal de la empresa sí sale sin internet -->
     <button id="btnSinInternetPersonal" class="btn btn-ghost btn-block sin-internet-gestor" type="button" hidden>Registrar personal de la empresa</button>
+    <!-- La novedad también: queda en el celular y se manda cuando vuelva la señal -->
+    <button id="btnSinInternetNovedad" class="btn btn-ghost btn-block sin-internet-gestor" type="button" hidden>Reportar novedad</button>
   </div>
 </div>
 
@@ -556,7 +647,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./js/portal-config.js?v=1.12.0"></script>
-<script src="./js/portal.js?v=1.12.0"></script>
+<script src="./js/portal-config.js?v=1.13.0"></script>
+<script src="./js/portal.js?v=1.13.0"></script>
 </body>
 </html>

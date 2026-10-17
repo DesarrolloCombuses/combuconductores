@@ -1342,6 +1342,8 @@
     cargarTurno();
     cargarJornada();
     pintarResumenPersonal();
+    actualizarNovedadesMias();
+    enviarNovedadesPendientes();
   }
 
   function pintarSaludo() {
@@ -3204,6 +3206,7 @@
   function pintarBotonesSinInternet() {
     var enApp = !!state.user && !!state.dni && !$("appView").hidden;
     show($("btnSinInternetPersonal"), enApp);
+    show($("btnSinInternetNovedad"), enApp);
   }
 
   function initPersonal() {
@@ -3211,6 +3214,748 @@
     $("btnSinInternetPersonal").addEventListener("click", abrirPersonal);
     $("personalCerrar").addEventListener("click", cerrarPersonal);
     $("personalListo").addEventListener("click", cerrarPersonal);
+  }
+
+  // ============================================================ NOVEDADES
+  // El conductor reporta una novedad: trasbordo, bus varado o daño, accidente
+  // o incidente, u otra. Cada una recibe su número (N° 1001...) y puede llevar
+  // un video corto: máximo 1 minuto en calidad media (unos 4 a 5 MB), que se
+  // guarda 90 días (sql/novedades.sql, la v11).
+  //   - Trasbordo: lo reporta el bus que RECIBE ("recibí 15 del 722"). En la
+  //     movilidad de su bus esos pasajeros van a Ajustes. Cuenta de una vez; un
+  //     despachador lo puede anular en Control.
+  //   - Varado, accidente y otra solo quedan registrados, con su video.
+  // Sirve también sin señal: la novedad y el video quedan en el celular
+  // (IndexedDB) y se mandan solos cuando vuelve internet. El número lo pone el
+  // servidor: mientras tanto sale "Por enviar".
+  var NOV_TIPOS = {
+    trasbordo: "Trasbordo",
+    varado: "Bus varado o daño",
+    accidente: "Accidente o incidente",
+    otra: "Otra novedad",
+  };
+  var NOV_MAX_S = cfg.NOVEDAD_VIDEO_MAX_S || 60;
+  var NOV_MAX_BYTES = cfg.NOVEDAD_VIDEO_MAX_BYTES || 20 * 1024 * 1024;
+  // Un video elegido de la galería más pesado que esto se vuelve a grabar en calidad media.
+  var NOV_DIRECTO_BYTES = cfg.NOVEDAD_VIDEO_DIRECTO_BYTES || 8 * 1024 * 1024;
+  var LS_NOV_HECHAS = "portal_novedades_hechas";
+  // enviando: el botón está mandando; ocupada: la novedad que la hoja está subiendo (la cola no la toca)
+  var nov = { video: null, sinVideo: false, enviando: false, ocupada: null, preparando: false, cola: null, grab: null, servidor: null };
+  var novDb = null;
+
+  function noHacerNada() {}
+
+  // ---- la cola en el celular (IndexedDB: guarda también el video)
+  function abrirNovDb() {
+    if (!novDb) {
+      novDb = new Promise(function (resolver, rechazar) {
+        if (!window.indexedDB) { rechazar(new Error("Este navegador no guarda novedades sin señal")); return; }
+        var pedido = indexedDB.open("portal_novedades", 1);
+        pedido.onupgradeneeded = function () { pedido.result.createObjectStore("cola", { keyPath: "id_local" }); };
+        pedido.onsuccess = function () { resolver(pedido.result); };
+        pedido.onerror = function () { rechazar(pedido.error || new Error("No se pudo abrir la cola")); };
+      });
+      novDb.catch(function () { novDb = null; });
+    }
+    return novDb;
+  }
+
+  function novTx(modo, hacer) {
+    return abrirNovDb().then(function (db) {
+      return new Promise(function (resolver, rechazar) {
+        var tx = db.transaction("cola", modo);
+        var pedido = hacer(tx.objectStore("cola"));
+        tx.oncomplete = function () { resolver(pedido ? pedido.result : undefined); };
+        tx.onerror = tx.onabort = function () { rechazar(tx.error || new Error("No se pudo guardar en el celular")); };
+      });
+    });
+  }
+
+  function novGuardar(it) { return novTx("readwrite", function (s) { return s.put(it); }); }
+  function novBorrar(id) { return novTx("readwrite", function (s) { return s.delete(id); }); }
+  function novTodas() {
+    return novTx("readonly", function (s) { return s.getAll(); }).then(function (l) {
+      return (l || []).sort(function (a, b) { return a.creado_ms - b.creado_ms; });
+    });
+  }
+
+  // Las que ya llegaron (sin el video): para "Mis novedades" aunque no haya señal.
+  function leerHechas() {
+    try { return JSON.parse(localStorage.getItem(LS_NOV_HECHAS) || "[]") || []; } catch (_) { return []; }
+  }
+
+  function guardarHecha(it) {
+    var l = leerHechas().filter(function (h) { return h.id_local !== it.id_local; });
+    l.unshift({
+      id_local: it.id_local, numero: it.numero, dni: it.datos.p_dni, tipo: it.datos.p_tipo,
+      origen: it.datos.p_interno_origen, cantidad: it.datos.p_cantidad, ms: it.creado_ms,
+      con_video: !!it.video_ruta, video_fallo: it.video_fallo || null,
+    });
+    try { localStorage.setItem(LS_NOV_HECHAS, JSON.stringify(l.slice(0, 20))); } catch (_) {}
+  }
+
+  // ---- mandarlas
+  // Un "no" del servidor (la regla no la deja pasar) no se arregla
+  // reintentando; una falla de red sí.
+  function esRechazo(err) {
+    return !!(err && /^(P0001|23514|22P02|22003)$/.test(String(err.code || "")));
+  }
+
+  function mensajeDeError(err) {
+    return String((err && err.message) || err || "Error").replace(/^Error:\s*/, "").slice(0, 200);
+  }
+
+  function rutaDelVideo(it) {
+    return fechaColombiaDe(it.creado_ms).slice(0, 7) + "/" + it.numero + "-" + it.id_local + "." + it.video_ext;
+  }
+
+  async function pedirNumero(it) {
+    if (it.numero) return;
+    var r = await conTiempoLimite(client.rpc(cfg.RPC_NOVEDAD_REPORTAR,
+      Object.assign({ p_id_local: it.id_local }, it.datos)), 15000);
+    if (r.error) throw r.error;
+    if (!r.data || !r.data.numero) throw new Error("El servidor no devolvió el número");
+    it.numero = r.data.numero;
+    await novGuardar(it).catch(noHacerNada);
+  }
+
+  // Sube el video (si tiene) y la da por terminada: sale de la cola.
+  async function subirVideoYTerminar(it) {
+    if (it.video && !it.video_ruta && !it.video_fallo) {
+      var blob = it.video instanceof Blob ? it.video : new Blob([it.video], { type: it.video_tipo });
+      var ruta = rutaDelVideo(it);
+      var sub = await conTiempoLimite(client.storage.from(cfg.BUCKET_NOVEDADES).upload(ruta, blob, {
+        contentType: it.video_tipo, upsert: false, cacheControl: "3600",
+      }), 180000);
+      var e = sub.error;
+      var codigo = e ? String(e.statusCode || e.status || "") : "";
+      var yaEstaba = e && (codigo === "409" || /already exists|duplicate/i.test(e.message || ""));
+      if (e && !yaEstaba) {
+        // Muy pesado, de un tipo que no sirve o de una novedad vieja: la novedad queda, sin video.
+        if (/^(400|403|413|415)$/.test(codigo) || /too large|maximum|mime|row-level security/i.test(e.message || "")) {
+          it.video_fallo = mensajeDeError(e);
+        } else {
+          throw e;
+        }
+      } else {
+        var l = await conTiempoLimite(client.rpc(cfg.RPC_NOVEDAD_VIDEO_LISTO, {
+          p_numero: it.numero, p_id_local: it.id_local, p_ruta: ruta, p_bytes: blob.size,
+          p_segundos: it.video_segundos,
+        }), 15000);
+        if (l.error) {
+          if (!esRechazo(l.error)) throw l.error;
+          it.video_fallo = mensajeDeError(l.error);
+        } else {
+          it.video_ruta = ruta;
+        }
+      }
+    }
+    guardarHecha(it);
+    await novBorrar(it.id_local).catch(noHacerNada);
+  }
+
+  function enviarNovedadesPendientes() {
+    if (nov.cola) return nov.cola;
+    nov.cola = (async function () {
+      var lista;
+      try { lista = await novTodas(); } catch (_) { return; }
+      for (var i = 0; i < lista.length; i++) {
+        var it = lista[i];
+        if (it.error || it.id_local === nov.ocupada) continue;
+        if (!state.user || !internet.ok) break;
+        try {
+          await pedirNumero(it);
+          pintarNovedadesMias();
+          await subirVideoYTerminar(it);
+        } catch (err) {
+          if (!esRechazo(err)) break;          // sin señal o el servidor no responde: después
+          it.error = mensajeDeError(err);
+          await novGuardar(it).catch(noHacerNada);
+        }
+      }
+    })().then(function () {
+      nov.cola = null;
+      actualizarNovedadesMias();
+    }, function () {
+      nov.cola = null;
+    });
+    return nov.cola;
+  }
+
+  // ---- "Mis novedades" (en el inicio, debajo del botón)
+  async function cargarNovedadesServidor() {
+    var dni = normalizarDni(state.dni);
+    if (!dni || !state.user || !internet.ok) return;
+    var desde = fechaColombiaDe(Date.now() - 2.5 * HORA_MS - DIA_MS);
+    var r = await conTiempoLimite(client.from(cfg.TABLA_NOVEDADES)
+      .select("numero,id_local,tipo,interno,interno_origen,cantidad,ocurrio_en,video_ruta,anulado_en,anulado_motivo")
+      .eq("dni_conductor", dni).gte("dia", desde).order("numero", { ascending: false }).limit(10), 10000);
+    if (r.error) throw r.error;
+    nov.servidor = { dni: dni, lista: r.data || [] };
+  }
+
+  function actualizarNovedadesMias() {
+    cargarNovedadesServidor().catch(noHacerNada).then(pintarNovedadesMias);
+  }
+
+  async function pintarNovedadesMias() {
+    var caja = $("novedadesMias");
+    if (!caja) return;
+    var dni = normalizarDni(state.dni);
+    var pendientes = [];
+    try { pendientes = await novTodas(); } catch (_) { pendientes = []; }
+    var vistas = {};
+    var filas = [];
+    pendientes.forEach(function (it) {
+      if (normalizarDni(it.datos.p_dni) !== dni) return;
+      vistas[it.id_local] = true;
+      filas.push({ id: it.id_local, numero: it.numero, tipo: it.datos.p_tipo, origen: it.datos.p_interno_origen,
+        cantidad: it.datos.p_cantidad, ms: it.creado_ms, video: !!it.video, error: it.error,
+        estado: it.error ? "error" : !it.numero ? "pendiente" : "subiendo" });
+    });
+    (nov.servidor && nov.servidor.dni === dni ? nov.servidor.lista : []).forEach(function (s) {
+      if (vistas[s.id_local]) return;
+      vistas[s.id_local] = true;
+      filas.push({ numero: s.numero, tipo: s.tipo, origen: s.interno_origen, cantidad: s.cantidad,
+        ms: Date.parse(s.ocurrio_en), video: !!s.video_ruta, motivo: s.anulado_motivo,
+        estado: s.anulado_en ? "anulada" : "ok" });
+    });
+    leerHechas().forEach(function (h) {
+      if (vistas[h.id_local] || normalizarDni(h.dni) !== dni || Date.now() - h.ms > 36 * HORA_MS) return;
+      vistas[h.id_local] = true;
+      filas.push({ numero: h.numero, tipo: h.tipo, origen: h.origen, cantidad: h.cantidad, ms: h.ms,
+        video: h.con_video, estado: "ok" });
+    });
+    filas.sort(function (a, b) { return b.ms - a.ms; });
+    if (!filas.length) { caja.innerHTML = ""; show(caja, false); return; }
+    caja.innerHTML = '<h4 class="personal-titulo">Mis novedades</h4><ul class="nov-lista">' +
+      filas.slice(0, 8).map(filaNovedad).join("") + "</ul>";
+    show(caja, true);
+  }
+
+  function filaNovedad(f) {
+    var detalle = f.tipo === "trasbordo" ? " · " + f.cantidad + " del " + f.origen : "";
+    var estado = f.estado === "pendiente" ? "Por enviar: se manda sola cuando haya señal"
+      : f.estado === "subiendo" ? (f.video ? "Subiendo el video…" : "Enviando…")
+      : f.estado === "error" ? "No se pudo: " + f.error
+      : f.estado === "anulada" ? "Anulada por control" + (f.motivo ? ": " + f.motivo : "")
+      : f.video ? "Con video" : "Sin video";
+    return '<li data-estado="' + f.estado + '"><span class="nov-num">' + (f.numero ? "N° " + f.numero : "—") +
+      '</span><span class="nov-que"><b>' + escapeHtml(NOV_TIPOS[f.tipo] || f.tipo) + "</b>" + escapeHtml(detalle) +
+      " · " + escapeHtml(horaDeMs(f.ms)) + "<small>" + escapeHtml(estado) + "</small></span>" +
+      (f.estado === "error" ? '<button class="btn btn-ghost btn-sm" type="button" data-nov-quitar="' +
+        escapeHtml(f.id) + '">Quitar</button>' : "") + "</li>";
+  }
+
+  // ---- la hoja
+  function errorNovedad(texto) {
+    $("novedadError").textContent = texto || "";
+    show($("novedadError"), !!texto);
+  }
+
+  function tipoNovedad() {
+    var r = document.querySelector('input[name="novedadTipo"]:checked');
+    return r ? r.value : "";
+  }
+
+  function pintarTipoNovedad() {
+    var t = tipoNovedad();
+    show($("novedadTrasbordo"), t === "trasbordo");
+    $("novedadBusRecibe").textContent = busDelCodigo() || "suyo";
+    $("novedadNotaTitulo").textContent = t === "otra" ? "Cuente qué pasó" : "Cuente qué pasó (si quiere)";
+  }
+
+  function abrirNovedad() {
+    var bus = busDelCodigo();
+    $("novedadForm").reset();
+    ponerVideoNovedad(null);
+    nov.sinVideo = false;
+    show($("novedadForm"), true);
+    show($("novedadResultado"), false);
+    pintarTipoNovedad();
+    var nombre = nombreConductor();
+    $("novedadBus").textContent = bus ? "Bus " + bus + (nombre ? " · " + capitalizarPalabras(nombre) : "") : "";
+    errorNovedad(bus ? "" : "Primero confirme su bus en el inicio: la novedad va con el número del bus.");
+    $("novedadEnviar").disabled = !bus;
+    show($("novedadSheet"), true);
+  }
+
+  function cerrarNovedad() {
+    if (nov.enviando || nov.preparando) return;
+    cerrarGrabador();
+    show($("novedadSheet"), false);
+    ponerVideoNovedad(null);
+    pintarNovedadesMias();
+  }
+
+  function megas(b) { return (b / 1048576).toFixed(b < 10 * 1048576 ? 1 : 0).replace(".", ",") + " MB"; }
+  function segundosTexto(s) { s = Math.max(0, Math.round(s || 0)); return Math.floor(s / 60) + ":" + dos(s % 60); }
+
+  function ponerVideoNovedad(v) {
+    if (nov.video && nov.video.url) URL.revokeObjectURL(nov.video.url);
+    nov.video = v || null;
+    var el = $("novedadVideoVista");
+    if (v) {
+      v.url = URL.createObjectURL(v.blob);
+      el.src = v.url;
+      nov.sinVideo = false;
+    } else {
+      el.removeAttribute("src");
+      try { el.load(); } catch (_) {}
+    }
+    show(el, !!v);
+    $("novedadVideoTexto").textContent = v
+      ? "Video de " + (v.segundos ? segundosTexto(v.segundos) : "menos de 1 minuto") + " · " + megas(v.blob.size)
+      : "Todavía sin video";
+    show($("novedadQuitarVideo"), !!v);
+    $("novedadGrabarTexto").textContent = v ? "Grabar otro" : "Grabar video";
+  }
+
+  function pintarPreparando(t, total) {
+    var activo = t != null;
+    $("novedadEnviar").disabled = activo;
+    $("novedadGrabar").disabled = activo;
+    $("novedadArchivo").disabled = activo;
+    if (activo) {
+      $("novedadVideoTexto").textContent = "Preparando el video en calidad media… " + Math.round(t) +
+        (total && isFinite(total) ? " de " + Math.round(total) : "") + " s";
+    }
+  }
+
+  // ---- grabar desde la app: cámara trasera, 640×480, unos 600 kbps (≈ 4,5 MB el minuto)
+  function tipoDeGrabacion() {
+    if (!window.MediaRecorder) return null;
+    if (typeof MediaRecorder.isTypeSupported !== "function") return "";
+    var opciones = ["video/webm;codecs=vp8,opus", "video/webm", "video/mp4;codecs=avc1,mp4a.40.2", "video/mp4"];
+    for (var i = 0; i < opciones.length; i++) {
+      if (MediaRecorder.isTypeSupported(opciones[i])) return opciones[i];
+    }
+    return "";
+  }
+
+  function tipoBase(mime) {
+    var t = String(mime || "").split(";")[0].trim().toLowerCase();
+    return t === "video/webm" || t === "video/mp4" || t === "video/quicktime" ? t : "";
+  }
+
+  function extensionDe(tipo) { return tipo === "video/mp4" ? "mp4" : tipo === "video/quicktime" ? "mov" : "webm"; }
+
+  function opcionesGrabacion() {
+    var o = { videoBitsPerSecond: cfg.NOVEDAD_VIDEO_BPS || 600000, audioBitsPerSecond: 48000 };
+    var mime = tipoDeGrabacion();
+    if (mime) o.mimeType = mime;
+    return o;
+  }
+
+  function pararStream(s) {
+    if (s) s.getTracks().forEach(function (t) { try { t.stop(); } catch (_) {} });
+  }
+
+  function textoCamara(err) {
+    var n = err && err.name;
+    return n === "NotAllowedError" || n === "SecurityError"
+      ? "El celular no dejó usar la cámara. Permítala para el portal en los ajustes del navegador, o use \"Elegir del celular\"."
+      : n === "NotFoundError" ? "No se encontró la cámara. Use \"Elegir del celular\"."
+      : "No se pudo abrir la cámara. Use \"Elegir del celular\".";
+  }
+
+  function pintarGrabador(estado) {
+    var b = $("grabadorBoton");
+    b.dataset.estado = estado;
+    b.disabled = estado === "preparando" || estado === "guardando";
+    b.setAttribute("aria-label", estado === "grabando" ? "Parar" : "Grabar");
+    $("grabadorAyuda").textContent = estado === "preparando" ? "Abriendo la cámara…"
+      : estado === "grabando" ? "Grabando. Toque el botón para parar."
+      : estado === "guardando" ? "Guardando el video…"
+      : "Toque el botón rojo para grabar. Máximo 1 minuto.";
+    if (estado !== "grabando") {
+      $("grabadorTiempo").textContent = "0:00 de " + segundosTexto(NOV_MAX_S);
+      $("grabadorBarra").style.width = "0%";
+    }
+  }
+
+  async function abrirGrabador() {
+    errorNovedad("");
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || tipoDeGrabacion() == null) {
+      errorNovedad("Este celular no deja grabar desde aquí. Use \"Elegir del celular\".");
+      return;
+    }
+    cerrarGrabador();
+    var g = nov.grab = { stream: null, rec: null, partes: [], inicio: 0, reloj: null };
+    show($("grabador"), true);
+    pintarGrabador("preparando");
+    var video = { facingMode: { ideal: "environment" }, width: { ideal: 640 }, height: { ideal: 480 },
+      frameRate: { ideal: 24, max: 30 } };
+    try {
+      g.stream = await navigator.mediaDevices.getUserMedia({ video: video, audio: true });
+    } catch (_) {
+      try {
+        g.stream = await navigator.mediaDevices.getUserMedia({ video: video, audio: false });   // sin micrófono: al menos la imagen
+      } catch (err) {
+        if (nov.grab === g) { cerrarGrabador(); errorNovedad(textoCamara(err)); }
+        return;
+      }
+    }
+    if (nov.grab !== g) { pararStream(g.stream); return; }   // cerró mientras pedía la cámara
+    var vista = $("grabadorVista");
+    vista.srcObject = g.stream;
+    try { await vista.play(); } catch (_) {}
+    pintarGrabador("listo");
+  }
+
+  function empezarGrabacion() {
+    var g = nov.grab;
+    if (!g || !g.stream || g.rec) return;
+    try {
+      g.rec = new MediaRecorder(g.stream, opcionesGrabacion());
+    } catch (_) {
+      try { g.rec = new MediaRecorder(g.stream); } catch (err) {
+        cerrarGrabador();
+        errorNovedad("No se pudo grabar en este celular. Use \"Elegir del celular\".");
+        return;
+      }
+    }
+    g.rec.ondataavailable = function (ev) { if (ev.data && ev.data.size) g.partes.push(ev.data); };
+    g.rec.onstop = function () { terminarGrabacion(g); };
+    g.rec.start(1000);
+    g.inicio = Date.now();
+    g.reloj = setInterval(function () { contarGrabacion(g); }, 250);
+    pintarGrabador("grabando");
+  }
+
+  function contarGrabacion(g) {
+    var s = (Date.now() - g.inicio) / 1000;
+    $("grabadorTiempo").textContent = segundosTexto(Math.min(s, NOV_MAX_S)) + " de " + segundosTexto(NOV_MAX_S);
+    $("grabadorBarra").style.width = Math.min(100, 100 * s / NOV_MAX_S) + "%";
+    if (s >= NOV_MAX_S) pararGrabacion();
+  }
+
+  function pararGrabacion() {
+    var g = nov.grab;
+    if (!g || !g.rec || g.rec.state === "inactive") return;
+    clearInterval(g.reloj);
+    g.segundos = Math.min(NOV_MAX_S, (Date.now() - g.inicio) / 1000);
+    pintarGrabador("guardando");
+    try { g.rec.stop(); } catch (_) { terminarGrabacion(g); }
+  }
+
+  function terminarGrabacion(g) {
+    if (g.cancelado || g.listo) return;
+    g.listo = true;
+    var tipo = tipoBase(g.rec && g.rec.mimeType) || tipoBase(tipoDeGrabacion()) || "video/webm";
+    var blob = new Blob(g.partes, { type: tipo });
+    cerrarGrabador();
+    if (!blob.size) { errorNovedad("El video salió vacío. Intente otra vez."); return; }
+    if (blob.size > NOV_MAX_BYTES) { errorNovedad("El video pesa mucho (" + megas(blob.size) + "). Grábelo más corto."); return; }
+    ponerVideoNovedad({ blob: blob, tipo: tipo, ext: extensionDe(tipo), segundos: g.segundos });
+  }
+
+  function cerrarGrabador() {
+    var g = nov.grab;
+    nov.grab = null;
+    if (g) {
+      clearInterval(g.reloj);
+      if (g.rec && g.rec.state !== "inactive" && !g.listo) {
+        g.cancelado = true;
+        try { g.rec.stop(); } catch (_) {}
+      }
+      pararStream(g.stream);
+    }
+    $("grabadorVista").srcObject = null;
+    show($("grabador"), false);
+  }
+
+  // ---- o elegirlo de la galería
+  function duracionDe(blob) {
+    return new Promise(function (resolver) {
+      var v = document.createElement("video");
+      var url = URL.createObjectURL(blob);
+      var listo = false;
+      function fin(d) {
+        if (listo) return;
+        listo = true;
+        URL.revokeObjectURL(url);
+        resolver(d != null && isFinite(d) ? d : null);
+      }
+      v.preload = "metadata";
+      v.muted = true;
+      v.onloadedmetadata = function () {
+        if (isFinite(v.duration)) { fin(v.duration); return; }
+        // Un webm grabado en un navegador dice "Infinity" hasta que se busca el final.
+        v.ontimeupdate = function () { v.ontimeupdate = null; fin(v.duration); };
+        try { v.currentTime = 1e9; } catch (_) { fin(null); }
+      };
+      v.onerror = function () { fin(null); };
+      setTimeout(function () { fin(null); }, 8000);
+      v.src = url;
+    });
+  }
+
+  // El video de la cámara del celular sale pesado (60 MB el minuto en alta
+  // calidad): se reproduce sin sonido por el parlante y se vuelve a grabar en
+  // 640 px y calidad media. Tarda lo que dura el video.
+  function achicarVideo(archivo, duracion) {
+    return new Promise(function (resolver, rechazar) {
+      var lienzo = document.createElement("canvas");
+      if (tipoDeGrabacion() == null || typeof lienzo.captureStream !== "function") {
+        rechazar(new Error("Este celular no puede achicar videos"));
+        return;
+      }
+      var url = URL.createObjectURL(archivo);
+      var v = document.createElement("video");
+      var partes = [], rec = null, cuadro = 0, audio = null, terminado = false, corte = null;
+      nov.preparando = true;
+      pintarPreparando(0, duracion);
+
+      function fin(res, err) {
+        if (terminado) return;
+        terminado = true;
+        nov.preparando = false;
+        clearTimeout(corte);
+        cancelAnimationFrame(cuadro);
+        try { v.pause(); } catch (_) {}
+        URL.revokeObjectURL(url);
+        if (audio) { try { audio.close(); } catch (_) {} }
+        pintarPreparando(null);
+        if (res) resolver(res); else rechazar(err || new Error("No se pudo achicar el video"));
+      }
+
+      v.playsInline = true;
+      v.preload = "auto";
+      v.onerror = function () { fin(null); };
+      v.onloadedmetadata = async function () {
+        var ancho = v.videoWidth || 640, alto = v.videoHeight || 480;
+        var escala = Math.min(1, 640 / Math.max(ancho, alto));
+        lienzo.width = Math.max(2, Math.round(ancho * escala / 2) * 2);
+        lienzo.height = Math.max(2, Math.round(alto * escala / 2) * 2);
+        var ctx = lienzo.getContext("2d");
+        var stream = lienzo.captureStream(24);
+        try {
+          var Contexto = window.AudioContext || window.webkitAudioContext;
+          audio = new Contexto();
+          var destino = audio.createMediaStreamDestination();
+          audio.createMediaElementSource(v).connect(destino);   // al grabador, no al parlante
+          destino.stream.getAudioTracks().forEach(function (t) { stream.addTrack(t); });
+        } catch (_) {
+          audio = null;
+          v.muted = true;
+        }
+        try { rec = new MediaRecorder(stream, opcionesGrabacion()); } catch (err) { fin(null, err); return; }
+        rec.ondataavailable = function (ev) { if (ev.data && ev.data.size) partes.push(ev.data); };
+        rec.onstop = function () {
+          var tipo = tipoBase(rec.mimeType) || tipoBase(tipoDeGrabacion()) || "video/webm";
+          fin({ blob: new Blob(partes, { type: tipo }), tipo: tipo, ext: extensionDe(tipo),
+            segundos: duracion || v.currentTime });
+        };
+        function dibujar() {
+          if (terminado) return;
+          ctx.drawImage(v, 0, 0, lienzo.width, lienzo.height);
+          pintarPreparando(v.currentTime, duracion || v.duration);
+          if (!v.ended) cuadro = requestAnimationFrame(dibujar);
+        }
+        v.onended = function () { if (rec && rec.state !== "inactive") rec.stop(); };
+        try {
+          if (audio && audio.state === "suspended") await audio.resume();
+          await v.play();
+        } catch (_) {
+          v.muted = true;                     // el navegador no lo deja sonar: va sin sonido
+          try { await v.play(); } catch (err) { fin(null, err); return; }
+        }
+        rec.start(1000);
+        dibujar();
+        corte = setTimeout(function () { if (rec.state !== "inactive") rec.stop(); }, ((duracion || NOV_MAX_S) + 10) * 1000);
+      };
+      v.src = url;
+    });
+  }
+
+  async function elegirVideoNovedad(archivo) {
+    $("novedadArchivo").value = "";
+    if (!archivo || nov.preparando) return;
+    errorNovedad("");
+    var ext = String(archivo.name || "").split(".").pop().toLowerCase();
+    var tipo = tipoBase(archivo.type) ||
+      ({ mp4: "video/mp4", m4v: "video/mp4", mov: "video/quicktime", webm: "video/webm" })[ext] || "";
+    // Otro formato de video (3gp de algunos Android...): se vuelve a grabar en uno que sirva.
+    if (!tipo && !/^video\//i.test(archivo.type || "")) {
+      errorNovedad("Ese archivo no es un video que se pueda subir. Grábelo desde aquí.");
+      return;
+    }
+    var dur = await duracionDe(archivo);
+    if (dur != null && dur > NOV_MAX_S + 1.5) {
+      errorNovedad("El video dura " + segundosTexto(dur) + " y el máximo es 1 minuto. Recórtelo o grábelo desde aquí.");
+      return;
+    }
+    if (tipo && archivo.size <= NOV_DIRECTO_BYTES) {
+      ponerVideoNovedad({ blob: archivo, tipo: tipo, ext: extensionDe(tipo), segundos: dur });
+      return;
+    }
+    var chico = null;
+    try { chico = await achicarVideo(archivo, dur); } catch (_) { chico = null; }
+    if ($("novedadSheet").hidden) return;
+    if (chico && chico.blob.size && (chico.blob.size < archivo.size || !tipo)) { ponerVideoNovedad(chico); return; }
+    if (tipo && archivo.size <= NOV_MAX_BYTES) {
+      ponerVideoNovedad({ blob: archivo, tipo: tipo, ext: extensionDe(tipo), segundos: dur });
+      return;
+    }
+    ponerVideoNovedad(null);
+    errorNovedad(tipo ? "El video pesa " + megas(archivo.size) + " y este celular no lo puede achicar. Grábelo desde aquí: sale más liviano."
+      : "Este celular no puede pasar ese video a un formato que sirva. Grábelo desde aquí.");
+  }
+
+  // ---- enviar
+  function mostrarResultadoNovedad(it, textoVideo) {
+    var tipo = it.datos.p_tipo;
+    $("novedadResNumero").textContent = it.numero ? "Novedad N° " + it.numero : "Novedad guardada en el celular";
+    $("novedadResTexto").textContent = !it.numero
+      ? "Todavía no hay señal. Se envía sola cuando vuelva; el número le sale en \"Mis novedades\"."
+      : tipo === "trasbordo"
+        ? "Quedó registrada. " + (it.datos.p_cantidad === 1 ? "El pasajero del " + it.datos.p_interno_origen + " se descuenta"
+          : "Los " + it.datos.p_cantidad + " pasajeros del " + it.datos.p_interno_origen + " se descuentan") +
+          " de la movilidad del bus " + it.datos.p_interno + "."
+        : "Quedó registrada: " + (NOV_TIPOS[tipo] || tipo).toLowerCase() + ".";
+    $("novedadResVideo").textContent = textoVideo || "";
+    $("novedadResultadoCaja").dataset.ok = it.numero ? "true" : "espera";
+    show($("novedadForm"), false);
+    show($("novedadResultado"), true);
+  }
+
+  async function enviarNovedad(ev) {
+    ev.preventDefault();
+    if (nov.enviando || nov.preparando) return;
+    var tipo = tipoNovedad();
+    var bus = busDelCodigo();
+    var origen = normalizarInterno($("novedadOrigen").value);
+    var cantidad = parseInt($("novedadCantidad").value.replace(/\D/g, ""), 10);
+    var nota = $("novedadNota").value.trim();
+    var falla = !bus ? "Primero confirme su bus en el inicio."
+      : !tipo ? "Escoja qué pasó."
+      : tipo === "trasbordo" && !origen ? "Escriba de qué bus venían los pasajeros."
+      : tipo === "trasbordo" && origen === normalizarInterno(bus) ? "El bus de donde venían no puede ser el suyo (" + bus + ")."
+      : tipo === "trasbordo" && !(cantidad >= 1 && cantidad <= 99) ? "Escriba cuántos pasajeros recibió (de 1 a 99)."
+      : tipo === "otra" && nota.length < 5 ? "Cuente en pocas palabras qué pasó."
+      : "";
+    if (falla) { errorNovedad(falla); return; }
+    if (!nov.video && !nov.sinVideo) {
+      nov.sinVideo = true;
+      errorNovedad("No tiene video. Si puede, grábelo: le sirve de prueba. Para enviarla sin video, toque otra vez \"Enviar novedad\".");
+      return;
+    }
+    errorNovedad("");
+
+    var pos = ubicacion.posicion;
+    var ahora = Date.now();
+    var it = {
+      id_local: alAzar(12),
+      creado_ms: ahora,
+      datos: {
+        p_tipo: tipo,
+        p_interno: bus,
+        p_interno_origen: tipo === "trasbordo" ? origen : null,
+        p_cantidad: tipo === "trasbordo" ? cantidad : null,
+        p_nota: nota || null,
+        p_dni: normalizarDni(state.dni),
+        p_ocurrio_en: new Date(ahora).toISOString(),
+        p_lat: pos ? pos.lat : null,
+        p_lon: pos ? pos.lng : null,
+        p_precision: pos ? pos.precision : null,
+      },
+      video: nov.video ? nov.video.blob : null,
+      video_tipo: nov.video ? nov.video.tipo : null,
+      video_ext: nov.video ? nov.video.ext : null,
+      video_segundos: nov.video && nov.video.segundos ? Math.round(nov.video.segundos * 10) / 10 : null,
+      numero: null, video_ruta: null, video_fallo: null, error: null,
+    };
+
+    var boton = $("novedadEnviar");
+    nov.enviando = true;
+    nov.ocupada = it.id_local;
+    boton.disabled = true;
+    boton.textContent = "Enviando…";
+    var enCola = true;
+    try {
+      await novGuardar(it);
+    } catch (_) {
+      // Algunos Safari no guardan el video tal cual: se guarda como bytes.
+      try {
+        if (it.video) it.video = await it.video.arrayBuffer();
+        await novGuardar(it);
+      } catch (_2) {
+        enCola = false;
+      }
+    }
+    try {
+      if (state.user && internet.ok) await pedirNumero(it);
+    } catch (err) {
+      if (esRechazo(err)) {
+        await novBorrar(it.id_local).catch(noHacerNada);
+        nov.enviando = false;
+        nov.ocupada = null;
+        boton.disabled = false;
+        boton.textContent = "Enviar novedad";
+        errorNovedad("No se pudo: " + mensajeDeError(err));
+        return;
+      }
+    }
+    nov.enviando = false;
+    boton.disabled = false;
+    boton.textContent = "Enviar novedad";
+    if (!it.numero) nov.ocupada = null;
+    if (!it.numero && !enCola) {
+      errorNovedad("No hay señal y este celular no la puede guardar. Inténtelo cuando tenga internet.");
+      return;
+    }
+    ponerVideoNovedad(null);
+    mostrarResultadoNovedad(it, it.numero && it.video ? "Subiendo el video… puede cerrar esta ventana; no cierre el portal." : "");
+    pintarNovedadesMias();
+    if (!it.numero) return;
+    // El video sube por detrás: con señal débil tarda.
+    subirVideoYTerminar(it).then(function () {
+      if (!$("novedadResultado").hidden && it.video) {
+        $("novedadResVideo").textContent = it.video_ruta ? "✓ El video quedó subido." : "La novedad quedó, pero el video no se pudo subir: " + (it.video_fallo || "");
+      }
+    }, function () {
+      if (!$("novedadResultado").hidden && it.video) {
+        $("novedadResVideo").textContent = "El video se sube solo cuando haya buena señal.";
+      }
+    }).then(function () {
+      nov.ocupada = null;
+      actualizarNovedadesMias();
+    });
+  }
+
+  function initNovedades() {
+    $("btnReportarNovedad").addEventListener("click", abrirNovedad);
+    $("btnSinInternetNovedad").addEventListener("click", abrirNovedad);
+    $("novedadCerrar").addEventListener("click", cerrarNovedad);
+    $("novedadListo").addEventListener("click", cerrarNovedad);
+    $("novedadForm").addEventListener("submit", enviarNovedad);
+    $("novedadForm").addEventListener("change", function (ev) {
+      if (ev.target && ev.target.name === "novedadTipo") { pintarTipoNovedad(); errorNovedad(""); }
+    });
+    ["novedadOrigen", "novedadCantidad"].forEach(function (id) {
+      $(id).addEventListener("input", function () {
+        var limpio = id === "novedadCantidad" ? this.value.replace(/\D/g, "") : this.value.replace(/[^0-9A-Za-z]/g, "");
+        if (limpio !== this.value) this.value = limpio;
+      });
+    });
+    $("novedadGrabar").addEventListener("click", abrirGrabador);
+    $("novedadArchivo").addEventListener("change", function () { elegirVideoNovedad(this.files && this.files[0]); });
+    $("novedadQuitarVideo").addEventListener("click", function () { ponerVideoNovedad(null); });
+    $("grabadorBoton").addEventListener("click", function () {
+      if (this.dataset.estado === "listo") empezarGrabacion();
+      else if (this.dataset.estado === "grabando") pararGrabacion();
+    });
+    $("grabadorCancelar").addEventListener("click", cerrarGrabador);
+    $("novedadesMias").addEventListener("click", function (ev) {
+      var b = ev.target.closest ? ev.target.closest("[data-nov-quitar]") : null;
+      if (!b) return;
+      novBorrar(b.getAttribute("data-nov-quitar")).catch(noHacerNada).then(pintarNovedadesMias);
+    });
+    // Lo que quedó sin enviar se reintenta cada minuto mientras el portal está abierto.
+    setInterval(function () {
+      if (state.user && internet.ok && !document.hidden) enviarNovedadesPendientes();
+    }, 60 * 1000);
   }
 
   // ------------------------------------------------- internet obligatorio
@@ -3304,6 +4049,7 @@
     if (state.user && !$("appView").hidden && state.vista === "inicio") cargarInicio();
     if (state.user && !$("appView").hidden && state.vista === "tarjeta") cargarTarjeta();
     enviarConfirmacionesPendientes();
+    enviarNovedadesPendientes();
   }
 
   function pintarVerificando(activo) {
@@ -4073,6 +4819,7 @@
     initTarjeta();
     initConfirmacionTiquetes();
     initPersonal();
+    initNovedades();
 
     $("btnLogout").addEventListener("click", logout);
     $("btnReloadModule").addEventListener("click", recargarModulo);

@@ -1585,3 +1585,55 @@ button.turno-opcion:focus-visible { outline: none; border-color: var(--primary);
 }
 .selfie-camara video, .selfie-camara img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .selfie-camara video { transform: scaleX(-1); }   /* como un espejo: así se acomoda mejor */
+
+/* ===================================================================== novedades
+   Trasbordo, varado, accidente u otra, con un video corto. La hoja va encima de
+   "Sin conexión" (sheet-encima) y la cámara para grabar, encima de todo. */
+.card-novedad { border-left: 4px solid var(--warn-ink); }
+.novedades-mias { margin-top: 12px; }
+.nov-lista { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.nov-lista li { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: var(--radius-sm);
+  background: var(--soft); font-size: 14px; color: var(--ink-2); }
+.nov-lista .nov-num { flex: none; min-width: 64px; font-weight: 800; color: var(--ink); }
+.nov-lista .nov-que { flex: 1; min-width: 0; }
+.nov-lista .nov-que small { display: block; font-size: 12.5px; color: var(--muted); }
+.nov-lista li[data-estado="pendiente"], .nov-lista li[data-estado="subiendo"] { background: var(--warn-soft); }
+.nov-lista li[data-estado="anulada"], .nov-lista li[data-estado="error"] { background: var(--danger-soft); }
+.nov-lista li[data-estado="anulada"] small, .nov-lista li[data-estado="error"] small { color: var(--danger); }
+
+.novedad-bus { margin: 0 0 10px; }
+.novedad-tipos { border: 0; padding: 0; margin: 0 0 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.novedad-tipos legend { padding: 0; margin-bottom: 8px; font-size: 14px; font-weight: 650; color: var(--ink-2); }
+.novedad-tipo { position: relative; display: block; cursor: pointer; }
+.novedad-tipo input { position: absolute; opacity: 0; pointer-events: none; }
+.novedad-tipo > span { display: flex; flex-direction: column; gap: 2px; height: 100%; padding: 10px 12px;
+  border: 2px solid var(--line-strong); border-radius: var(--radius-sm); background: #fff; }
+.novedad-tipo b { font-size: 15px; color: var(--ink); }
+.novedad-tipo small { font-size: 12.5px; color: var(--muted); line-height: 1.3; }
+.novedad-tipo input:checked + span { border-color: var(--primary); background: var(--soft); box-shadow: 0 0 0 3px var(--primary-glow); }
+.novedad-tipo input:focus-visible + span { outline: 2px solid var(--primary); outline-offset: 2px; }
+.novedad-trasbordo { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.novedad-trasbordo .novedad-ayuda { grid-column: 1 / -1; margin: -6px 0 12px; font-size: 13px; color: var(--ink-2); }
+.novedad-trasbordo[hidden] { display: none; }
+.novedad-video { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 2px dashed var(--line-strong);
+  border-radius: var(--radius-sm); background: var(--panel-2); }
+.novedad-video video { width: 100%; max-height: 260px; border-radius: 8px; background: #000; }
+.novedad-video-texto { margin: 0; font-size: 14px; font-weight: 650; color: var(--ink-2); text-align: center; }
+.novedad-video-botones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.novedad-video-botones .btn { min-height: 48px; }
+.novedad-video-botones .ico { width: 20px; height: 20px; margin-right: 6px; vertical-align: -4px; }
+.novedad-elegir { cursor: pointer; }
+.lector-resultado[data-ok="espera"] { background: var(--warn-soft); color: var(--warn-ink); }
+
+.grabador { position: fixed; inset: 0; z-index: 120; display: flex; flex-direction: column; background: #000; }
+.grabador[hidden] { display: none; }
+.grabador video { flex: 1; min-height: 0; width: 100%; object-fit: contain; background: #000; }
+.grabador-abajo { padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); background: rgba(0, 0, 0, .85); color: #fff; }
+.grabador-barra { background: #e5484d; transition: width .25s linear; }
+.grabador-tiempo { margin: 8px 0 0; font-size: 20px; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
+.grabador-ayuda { margin: 2px 0 10px; font-size: 14px; text-align: center; color: #ddd; }
+.grabador-botones { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
+.grabador-botones .btn { color: #fff; border-color: rgba(255, 255, 255, .4); background: transparent; }
+.grabador-boton { width: 76px; height: 76px; border-radius: 50%; border: 5px solid #fff; background: #e5484d; cursor: pointer; }
+.grabador-boton[data-estado="grabando"] { border-radius: 22px; background: #e5484d; box-shadow: 0 0 0 6px rgba(229, 72, 77, .35); }
+.grabador-boton:disabled { opacity: .5; }

@@ -304,6 +304,40 @@ Antes (v1.10.0 y v1.11.0) el gestor mostraba un código firmado con la huella de
 su celular, que control tenía que aprobar, y el conductor lo leía. Eso se quitó:
 la v10 cierra esas funciones para quien no tiene sesión.
 
+### Novedades del conductor: trasbordo, varado, accidente u otra (v1.13.0)
+
+En el inicio, la tarjeta **¿Pasó algo en la ruta?** tiene el botón **Reportar
+novedad** (también en la pantalla de "Sin conexión"). El conductor escoge qué
+pasó, completa lo que pide y puede grabar un **video de máximo 1 minuto**:
+
+- **Trasbordo:** de qué bus venían los pasajeros y cuántos recibió. Lo reporta el
+  bus que **recibe** (ejemplo: el 722 se vara y sus 15 pasajeros pasan al 735; el
+  conductor del 735 reporta "15 del 722"). El sensor del 735 los contó otra vez,
+  así que en la **movilidad** del 735 esos 15 van a **Ajustes**. Cuenta de una vez;
+  un despachador lo puede anular en Control (pestaña Novedades).
+- **Bus varado o daño, accidente o incidente:** la nota es opcional; solo quedan
+  registrados con su video. **Otra novedad:** la nota es obligatoria.
+- Cada novedad recibe su **número** (N° 1001, 1002...), que le sale al conductor y
+  queda en **Mis novedades** (las de hoy y ayer, con si tiene video o si control la
+  anuló).
+- **El video:** se graba desde la app con la cámara trasera, en 640×480 y unos 600
+  kbps (≈ 4,5 MB el minuto); a los 60 s para solo. También se puede **elegir del
+  celular**: si pesa más de 8 MB se vuelve a grabar en calidad media (tarda lo que
+  dura el video); si dura más de 1 minuto no se acepta. El depósito no recibe más
+  de 20 MB ni otra cosa que webm, mp4 o mov. Se borra a los **90 días**.
+- **Sin señal:** la novedad y el video quedan en el celular (IndexedDB) y se
+  mandan solos cuando vuelve internet (al volver, al abrir el inicio y cada
+  minuto). Si la base dice que no (por ejemplo, la cédula no está vinculada), se
+  le muestra al conductor y no queda en la cola.
+
+Supabase lo crea `almacentro/enturnes/sql/novedades.sql` (la v11): la hoja
+`conductor_novedades`, `conductor_novedad_reportar` (devuelve el número; mandarla dos veces no la
+repite), el depósito privado `conductor-novedades` (el celular solo puede subir el
+video de su novedad recién hecha, a `<año-mes>/<número>-<id_local>.<ext>`) y
+`conductor_novedad_video_listo`. Todo va con la sesión del portal. Archivos: el bloque
+NOVEDADES de `js/portal.js`, la hoja `#novedadSheet` y la cámara `#grabador` de
+`index.html`, y lo de `.nov-*`, `.novedad-*` y `.grabador*` en `css/portal.css`.
+
 ### Service worker
 
 Manda uno solo, el del portal, con scope sobre todo el sitio. Los service
