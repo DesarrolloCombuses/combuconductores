@@ -5,7 +5,7 @@
    portal. Guarda la app para que "Leer código del bus" funcione sin internet
    (el registro queda en el celular y se manda cuando vuelve la señal).
      - Páginas ........................... red primero, cae a la guardada
-     - Archivos de la app (aquí y del portal) cache primero (se buscan sin el ?v=)
+     - Archivos de la app (aquí y del portal) cache primero, con su ?v= exacto (sin señal, el guardado)
      - Supabase .......................... siempre a la red, nunca se guarda
    Solo borra sus propias cachés (las que empiezan por "gestores-"): las del
    portal son del service worker del portal.
@@ -13,7 +13,7 @@
 
 // Igual a VERSION de gestores-app.js y a los ?v= de index.html. Que este
 // archivo cambie es lo que avisa a los teléfonos de que hay una versión nueva.
-const VERSION = "g2.2.0";
+const VERSION = "g2.2.1";
 const CACHE = "gestores-" + VERSION;
 
 const ARCHIVOS = [
@@ -79,15 +79,18 @@ async function pagina(req) {
   }
 }
 
+// Con el ?v= exacto primero: así una página nueva nunca recibe el programa de otra versión.
+// Sin señal sí cae a la guardada aunque el ?v= no coincida (para leer el bus sin internet).
 async function cachePrimero(req) {
   const cache = await caches.open(CACHE);
-  const hit = await cache.match(req, { ignoreSearch: true });
+  const hit = await cache.match(req);
   if (hit) return hit;
   try {
     const res = await fetch(req);
     if (res && (res.ok || res.type === "opaque")) cache.put(req, res.clone());
     return res;
   } catch (_) {
-    return new Response("Sin conexión", { status: 503, statusText: "Sin conexión" });
+    return (await cache.match(req, { ignoreSearch: true })) ||
+      new Response("Sin conexión", { status: 503, statusText: "Sin conexión" });
   }
 }

@@ -138,13 +138,33 @@
 .guia-dibujo .g-ok-trazo { stroke: #fff; stroke-width: 3; }
 
 /* --- Se me olvidó marcar la salida (g2.2.0): el cierre declarado --- */
-.btn-olvido { margin-top: 10px; }
+.btn-olvido { margin-top: 10px; gap: 8px; }
+.btn-olvido .ico { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+/* El grande (la entrada vieja tiene bloqueado el marcar): verde de Combuses, que resalte sobre el morado. */
+.app-gestores .card-asistencia .btn-olvido.btn-marcar {
+  border: 1px solid rgba(187, 247, 208, .55);
+  background: linear-gradient(180deg, #34d27a 0%, #16a34a 55%, #12813c 100%);
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(5, 46, 22, .35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 8px 18px -6px rgba(22, 163, 74, .75);
+}
+.app-gestores .card-asistencia .btn-olvido.btn-marcar:hover:not(:disabled) {
+  background: linear-gradient(180deg, #4ade80 0%, #22b357 55%, #15803d 100%);
+}
+.app-gestores .card-asistencia .btn-olvido.btn-marcar:active { transform: translateY(1px); }
+/* El chico (todavía puede marcar la salida normal): verde suave, sin quitarle el puesto a "Marcar SALIDA". */
 .card-asistencia .btn-olvido.btn-ghost {
-  min-height: 42px;
-  background: rgba(255, 255, 255, .12);
-  border-color: rgba(255, 255, 255, .3);
+  min-height: 44px;
+  background: linear-gradient(180deg, #22b357 0%, #15803d 100%);
+  border-color: rgba(187, 247, 208, .45);
   color: #fff;
   font-size: 15px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25);
+}
+.card-asistencia .btn-olvido.btn-ghost:hover:not(:disabled) {
+  background: linear-gradient(180deg, #2fc566 0%, #16893f 100%);
+  border-color: rgba(187, 247, 208, .7);
+  color: #fff;
 }
 .cierre-lead { margin: 0; font-size: 15.5px; color: var(--ink-2); }
 .cierre-ayuda { margin: -4px 0 0; font-size: 13.5px; color: var(--muted); }

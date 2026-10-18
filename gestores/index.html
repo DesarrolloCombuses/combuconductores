@@ -23,8 +23,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="../css/portal.css?v=g2.2.0">
-  <link rel="stylesheet" href="./gestores.css?v=g2.2.0">
+  <link rel="stylesheet" href="../css/portal.css?v=g2.2.1">
+  <link rel="stylesheet" href="./gestores.css?v=g2.2.1">
 </head>
 <body class="app-gestores">
 
@@ -79,7 +79,10 @@
           <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
           <span id="btnMarcarTexto">Marcar ENTRADA</span>
         </button>
-        <button id="btnOlvido" class="btn btn-block btn-olvido" type="button" hidden>Se me olvidó marcar la salida</button>
+        <button id="btnOlvido" class="btn btn-block btn-olvido" type="button" hidden>
+          <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+          <span>Se me olvidó marcar la salida</span>
+        </button>
         <button id="btnAsisOtraVez" class="btn btn-ghost btn-sm" type="button" hidden>Volver a consultar</button>
       </div>
     </article>
@@ -242,8 +245,29 @@
 </div>
 
 <!-- Solo la dirección de Supabase y la llave pública (la misma del portal); no inicia sesión. -->
-<script src="../js/portal-config.js?v=g2.2.0"></script>
-<script src="../js/vendor/jsQR.min.js?v=g2.2.0"></script>
-<script src="./gestores-app.js?v=g2.2.0"></script>
+<script src="../js/portal-config.js?v=g2.2.1"></script>
+<script src="../js/vendor/jsQR.min.js?v=g2.2.1"></script>
+<script src="./gestores-app.js?v=g2.2.1"></script>
+<script>
+  // La primera vez que se abre después de una actualización, el service worker viejo todavía entrega el
+  // programa que tenía guardado (con la g2.0.0 la tarjeta se quedaba en "Consultando…"). Si el programa
+  // que corrió no es de esta página, se espera al service worker nuevo y se recarga (máximo 2 veces).
+  (function () {
+    var esta = "g2.2.1";
+    var corrio = (document.querySelector("[data-version]") || {}).textContent;
+    if (!corrio || corrio === esta || !("serviceWorker" in navigator)) return;
+    var marca = "personal_app_recarga_" + esta;
+    var veces = 0;
+    try { veces = Number(sessionStorage.getItem(marca) || 0); sessionStorage.setItem(marca, String(veces + 1)); } catch (_) { return; }
+    if (veces >= 2) return;
+    var el = document.getElementById("asisEstado");
+    if (el) el.textContent = "Actualizando la app…";
+    var listo = false;
+    function recargar() { if (!listo) { listo = true; location.reload(); } }
+    navigator.serviceWorker.addEventListener("controllerchange", recargar);
+    navigator.serviceWorker.getRegistration().then(function (r) { if (r) r.update(); }).catch(function () {});
+    setTimeout(recargar, 12000);
+  })();
+</script>
 </body>
 </html>
