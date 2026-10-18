@@ -13,7 +13,7 @@
 
 // Igual a VERSION de gestores-app.js y a los ?v= de index.html. Que este
 // archivo cambie es lo que avisa a los teléfonos de que hay una versión nueva.
-const VERSION = "g2.1.0";
+const VERSION = "g2.2.0";
 const CACHE = "gestores-" + VERSION;
 
 const ARCHIVOS = [

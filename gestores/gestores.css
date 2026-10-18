@@ -136,3 +136,30 @@
 .guia-dibujo .g-acento { stroke: #d97706; }
 .guia-dibujo .g-ok { fill: #0b6b3a; stroke: none; }
 .guia-dibujo .g-ok-trazo { stroke: #fff; stroke-width: 3; }
+
+/* --- Se me olvidó marcar la salida (g2.2.0): el cierre declarado --- */
+.btn-olvido { margin-top: 10px; }
+.card-asistencia .btn-olvido.btn-ghost {
+  min-height: 42px;
+  background: rgba(255, 255, 255, .12);
+  border-color: rgba(255, 255, 255, .3);
+  color: #fff;
+  font-size: 15px;
+}
+.cierre-lead { margin: 0; font-size: 15.5px; color: var(--ink-2); }
+.cierre-ayuda { margin: -4px 0 0; font-size: 13.5px; color: var(--muted); }
+.cierre-motivos { display: flex; flex-wrap: wrap; gap: 7px; }
+.motivo-chip {
+  padding: 7px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.motivo-chip:active { background: var(--soft); }
+.cierre-resumen { padding: 11px 13px; border-radius: var(--radius-sm); background: var(--soft); font-size: 14px; color: var(--ink-2); }
+.cierre-resumen ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+.cierre-alerta { color: var(--danger); font-weight: 700; }

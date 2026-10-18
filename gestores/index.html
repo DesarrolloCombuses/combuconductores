@@ -23,8 +23,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="../css/portal.css?v=g2.1.0">
-  <link rel="stylesheet" href="./gestores.css?v=g2.1.0">
+  <link rel="stylesheet" href="../css/portal.css?v=g2.2.0">
+  <link rel="stylesheet" href="./gestores.css?v=g2.2.0">
 </head>
 <body class="app-gestores">
 
@@ -79,6 +79,7 @@
           <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
           <span id="btnMarcarTexto">Marcar ENTRADA</span>
         </button>
+        <button id="btnOlvido" class="btn btn-block btn-olvido" type="button" hidden>Se me olvidó marcar la salida</button>
         <button id="btnAsisOtraVez" class="btn btn-ghost btn-sm" type="button" hidden>Volver a consultar</button>
       </div>
     </article>
@@ -173,6 +174,38 @@
   </div>
 </div>
 
+<!-- ============ Se me olvidó marcar la salida: el cierre declarado del biométrico ============ -->
+<div id="cierreSheet" class="sheet-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="cierreTitulo">
+    <header class="sheet-head">
+      <h3 id="cierreTitulo">Cerrar el turno</h3>
+      <button id="cierreCerrar" class="icon-btn" type="button" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <div id="cierrePaso">
+        <p id="cierreLead" class="cierre-lead"></p>
+        <label class="field">
+          <span>¿A qué hora salió ese día?</span>
+          <input id="cierreHora" type="time" required>
+        </label>
+        <p id="cierreAyuda" class="cierre-ayuda"></p>
+        <label class="field">
+          <span>¿Por qué no quedó marcada?</span>
+          <input id="cierreMotivo" type="text" maxlength="200" placeholder="Elija uno o escríbalo" autocomplete="off">
+        </label>
+        <div id="cierreMotivos" class="cierre-motivos"></div>
+        <div id="cierreResumen" class="cierre-resumen"></div>
+        <button id="cierreEnviar" class="btn btn-primary btn-block" type="button">Cerrar el turno</button>
+      </div>
+      <div id="cierreResultado" class="lector-resultado" role="status" hidden></div>
+      <p id="cierreError" class="form-error" role="alert" hidden></p>
+      <button id="cierreListo" class="btn btn-ghost btn-block" type="button" hidden>Listo</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ ¿Cómo se hace? La guía con dibujos ============ -->
 <div id="guiaSheet" class="sheet-overlay" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="guiaTitulo">
@@ -201,7 +234,7 @@
             <p>El registro del bus se guarda en su celular y se manda solo cuando vuelva. La entrada y la salida sí necesitan internet.</p></div></li>
         <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><rect x="22" y="4" width="36" height="62" rx="7" class="g-fondo"/><circle cx="40" cy="26" r="8"/><path d="M27 50c2-8 8-12 13-12s11 4 13 12"/><circle cx="68" cy="50" r="14" class="g-blanco"/><path d="M68 42v8l5 3"/><path d="M88 14H76M82 8l-6 6 6 6" class="g-acento"/></svg>
           <div><b>Al terminar el día</b>
-            <p>Toque <strong>Marcar SALIDA</strong> con otra foto. Si se le olvidó marcarla, avísele a gestión humana: ellos cierran el turno en el biométrico.</p></div></li>
+            <p>Toque <strong>Marcar SALIDA</strong> con otra foto. Si se le olvidó, al otro día toque <strong>Se me olvidó marcar la salida</strong> y diga a qué hora salió.</p></div></li>
       </ol>
       <button id="guiaListo" class="btn btn-primary btn-block" type="button">Entendido</button>
     </div>
@@ -209,8 +242,8 @@
 </div>
 
 <!-- Solo la dirección de Supabase y la llave pública (la misma del portal); no inicia sesión. -->
-<script src="../js/portal-config.js?v=g2.1.0"></script>
-<script src="../js/vendor/jsQR.min.js?v=g2.1.0"></script>
-<script src="./gestores-app.js?v=g2.1.0"></script>
+<script src="../js/portal-config.js?v=g2.2.0"></script>
+<script src="../js/vendor/jsQR.min.js?v=g2.2.0"></script>
+<script src="./gestores-app.js?v=g2.2.0"></script>
 </body>
 </html>

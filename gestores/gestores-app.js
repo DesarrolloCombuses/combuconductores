@@ -16,6 +16,9 @@
         como en el biométrico: queda en la asistencia y va a Buk. Necesita señal
         (la hora es la del servidor). Solo para cédulas ACTIVAS en la base de
         empleados del biométrico: así se habilita a alguien.
+        Si quedó una entrada de otro día sin salida: "Se me olvidó marcar la
+        salida" (g2.2.0), el cierre declarado del biométrico: dice a qué hora
+        salió y por qué; gestión humana lo revisa y lo pasa a Buk.
      5. ¿Cómo se hace?: la guía con dibujos (sale sola la primera vez).
 
    Sin sesión, la app solo usa dos funciones de Supabase
@@ -29,7 +32,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "g2.1.0";
+  var VERSION = "g2.2.0";
   var cfg = window.PORTAL_CONFIG || {};
   var RPC_QUIEN_SOY = "personal_quien_soy";
   var RPC_REGISTRAR = "personal_registrar_subida";
@@ -40,6 +43,7 @@
   var LS_REGISTROS = "personal_app_registros";   // lo que se ve en "Mis registros de hoy"
   var LS_GUIA = "personal_app_guia_vista";       // ya vio la guía con dibujos
   var LS_MARCA = "personal_app_marca_en_curso";  // { id_local, sentido, dni }: si se cae la señal, se reenvía la misma
+  var LS_CIERRE = "personal_app_cierre_en_curso"; // { id_local, dni, entrada }: lo mismo con "se me olvidó la salida"
   var MAX_PENDIENTES = 30;
   var CODIGO_VENCE_MS = 4 * 60 * 1000;           // el servidor acepta hasta 5 min entre el código y la lectura
 
@@ -48,7 +52,8 @@
   var estado = { yo: null, quien: null, sinRed: false, enviando: false };
   // Mi asistencia: lo que dijo el servidor (qué le toca) y la marca que se está haciendo
   var asis = { toca: null, error: null, sinFuncion: false, cargando: false, consultadoEn: 0,
-    sentido: null, foto: null, stream: null, gps: null, gpsError: null, idLocal: null, enviando: false, reloj: null };
+    sentido: null, foto: null, stream: null, gps: null, gpsError: null, idLocal: null, enviando: false, reloj: null,
+    idCierre: null, cerrando: false };
 
   // --------------------------------------------------------------- ayudas
   function $(id) { return document.getElementById(id); }
@@ -582,10 +587,12 @@
     var btn = $("btnMarcar");
     var aviso = $("asisAviso");
     var chip = $("asisBuk");
+    var olvido = $("btnOlvido");
     show($("btnAsisOtraVez"), false);
     show(chip, false);
     show(aviso, false);
     show(btn, false);
+    show(olvido, false);
     $("cardAsistencia").setAttribute("data-estado", t ? t.siguiente : "nada");
     if (!t) {
       $("asisEstado").textContent = asis.cargando ? "Consultando su asistencia…" : (asis.error ? asis.error.texto : "");
@@ -607,6 +614,10 @@
       chip.setAttribute("data-ok", u.enviado_buk ? "true" : "false");
       show(chip, true);
     }
+    // Una entrada de otro día sin salida: "Se me olvidó marcar la salida" (el botón grande si está bloqueado).
+    olvido.classList.toggle("btn-marcar", !!t.bloqueo);
+    olvido.classList.toggle("btn-ghost", !t.bloqueo);
+    show(olvido, !!t.puede_cerrar);
     if (t.bloqueo) {
       aviso.textContent = t.bloqueo.mensaje;
       show(aviso, true);
@@ -779,6 +790,139 @@
     show($("asistenciaSheet"), false);
   }
 
+  // ------------------------------------- 4b. Se me olvidó marcar la salida
+  // El cierre declarado del biométrico: la persona dice a qué hora salió y por qué no marcó.
+  // Queda como salida declarada (no va a Buk: gestión humana la revisa en Cierres declarados).
+  var MOTIVOS_CIERRE = [
+    "Se me olvidó marcar la salida",
+    "Terminé fuera de la oficina o de la base",
+    "No tenía señal o falló el celular",
+    "Apoyo a otro turno por falta de personal",
+    "Error en la hora de la entrada",
+  ];
+  var LIMITE_HORAS = 16, CIERRE_HORAS_MAX = 20;
+
+  function errorCierre(texto) {
+    $("cierreError").textContent = texto || "";
+    show($("cierreError"), !!texto);
+  }
+
+  // Horas del turno si sale a esa hora; si la hora es igual o anterior a la de la entrada, salió al día siguiente.
+  function turnoHasta(hhmm) {
+    var a = asis.toca && asis.toca.abierta;
+    if (!a || !/^\d{2}:\d{2}$/.test(hhmm || "")) return null;
+    var e = String(a.hora).split(":").map(Number), s = hhmm.split(":").map(Number);
+    var me = e[0] * 60 + e[1], ms = s[0] * 60 + s[1];
+    var otroDia = ms <= me;
+    var fecha = a.fecha;
+    if (otroDia) {
+      var d = new Date(a.fecha + "T12:00:00Z");
+      d.setUTCDate(d.getUTCDate() + 1);
+      fecha = d.toISOString().slice(0, 10);
+    }
+    return { fecha: fecha, horas: Math.round(((otroDia ? ms + 1440 : ms) - me) / 6) / 10 };
+  }
+
+  function pintarResumenCierre() {
+    var hora = $("cierreHora").value;
+    var motivo = $("cierreMotivo").value.trim();
+    var t = turnoHasta(hora);
+    var el = $("cierreResumen");
+    if (!t) { el.innerHTML = "<em>Escriba la hora para ver cómo queda.</em>"; return; }
+    var p = t.fecha.split("-");
+    el.innerHTML = "<strong>Va a quedar así:</strong><ul>" +
+      "<li>SALIDA del <b>" + Number(p[2]) + "-" + MESES[Number(p[1]) - 1] + "</b> a las <b>" + escapeHtml(hora12(hora)) + "</b></li>" +
+      '<li>Turno de <b' + (t.horas > LIMITE_HORAS ? ' class="cierre-alerta"' : "") + ">" + String(t.horas).replace(".", ",") + " horas</b></li>" +
+      (t.horas > LIMITE_HORAS ? '<li class="cierre-alerta">Pasa del máximo de ' + LIMITE_HORAS + " horas de Buk: no entra a nómina y queda como novedad de jornada larga.</li>" : "") +
+      "<li>Motivo: " + (motivo ? "<b>" + escapeHtml(motivo) + "</b>" : "<em>falta</em>") + "</li>" +
+      "<li>Queda como <b>salida declarada</b> (no biométrica): gestión humana la revisa y la pasa a Buk.</li></ul>";
+  }
+
+  function abrirCierre() {
+    var t = asis.toca;
+    if (!t || !t.puede_cerrar || !t.abierta) return;
+    var en = leerJson(LS_CIERRE, null);
+    asis.idCierre = en && en.dni === estado.yo.dni && en.entrada === t.abierta.fecha + " " + t.abierta.hora ? en.id_local : alAzar(12);
+    var p = t.abierta.fecha.split("-");
+    $("cierreTitulo").textContent = "Cerrar el turno del " + Number(p[2]) + "-" + MESES[Number(p[1]) - 1];
+    $("cierreLead").innerHTML = "Marcó ENTRADA <b>" + escapeHtml(cuandoFue(t.abierta.fecha, t.abierta.hora)) + "</b> y no marcó la salida.";
+    var s = t.sugerencia;
+    $("cierreHora").value = s ? s.hora : "";
+    if (s) {
+      var r = s.fecha_ref.split("-");
+      $("cierreAyuda").textContent = "Se propone las " + hora12(s.hora) + " porque es la hora a la que salió el " + Number(r[2]) + "-" +
+        MESES[Number(r[1]) - 1] + ", la última vez que entró a una hora parecida (turno de " + String(s.horas).replace(".", ",") +
+        " horas). Confírmela o corríjala.";
+    } else {
+      $("cierreAyuda").textContent = "Escriba la hora a la que terminó de verdad ese día.";
+    }
+    $("cierreMotivo").value = "";
+    $("cierreMotivos").innerHTML = MOTIVOS_CIERRE.map(function (m) {
+      return '<button type="button" class="motivo-chip">' + escapeHtml(m) + "</button>";
+    }).join("");
+    errorCierre("");
+    show($("cierrePaso"), true);
+    show($("cierreResultado"), false);
+    show($("cierreListo"), false);
+    pintarResumenCierre();
+    show($("cierreSheet"), true);
+  }
+
+  async function enviarCierre() {
+    if (!estado.yo || asis.cerrando) return;
+    var hora = $("cierreHora").value;
+    var motivo = $("cierreMotivo").value.trim();
+    var t = turnoHasta(hora);
+    if (!t) { errorCierre("Escriba la hora a la que salió ese día."); return; }
+    if (t.horas > CIERRE_HORAS_MAX) {
+      errorCierre("Con esa hora el turno daría " + String(t.horas).replace(".", ",") + " horas. Revise la hora.");
+      return;
+    }
+    if (motivo.length < 4) { errorCierre("Diga por qué no quedó marcada la salida, o elija un motivo."); return; }
+    if (!conRed()) { errorCierre("Para cerrar el turno hace falta internet. Revise los datos o el Wi-Fi."); return; }
+    var btn = $("cierreEnviar");
+    asis.cerrando = true;
+    btn.disabled = true;
+    btn.textContent = "Cerrando…";
+    errorCierre("");
+    var a = asis.toca.abierta;
+    guardarJson(LS_CIERRE, { id_local: asis.idCierre, dni: estado.yo.dni, entrada: a.fecha + " " + a.hora });
+    try {
+      var r = await llamarAsistencia({ accion: "cerrar", dni: estado.yo.dni, hora: hora, motivo: motivo, id_local: asis.idCierre }, 30000);
+      if (r.ok) {
+        try { localStorage.removeItem(LS_CIERRE); } catch (_) {}
+        var p = r.fecha.split("-");
+        show($("cierrePaso"), false);
+        var el = $("cierreResultado");
+        el.setAttribute("data-ok", "true");
+        el.innerHTML = '<p class="resultado-titulo">✓ Turno cerrado</p>' +
+          '<p class="resultado-texto">Salida del ' + Number(p[2]) + "-" + MESES[Number(p[1]) - 1] + " a las " + escapeHtml(hora12(r.hora)) + "</p>" +
+          '<p class="resultado-nota">Quedó como salida declarada: gestión humana la revisa y la pasa a Buk. ' +
+          "Ahora ya puede marcar la ENTRADA de hoy.</p>";
+        show(el, true);
+        show($("cierreListo"), true);
+        consultarAsistencia();
+      } else {
+        if (r.codigo !== "servidor") { try { localStorage.removeItem(LS_CIERRE); } catch (_) {} }
+        errorCierre(r.mensaje || "No se pudo cerrar el turno.");
+        if (r.codigo === "sin_turno" || r.codigo === "cambio") consultarAsistencia();
+      }
+    } catch (err) {
+      errorCierre(err.sinRed
+        ? "No se pudo enviar: sin señal. Toque otra vez cuando haya internet; no queda doble."
+        : (err.message || String(err)));
+    } finally {
+      asis.cerrando = false;
+      btn.disabled = false;
+      btn.textContent = "Cerrar el turno";
+    }
+  }
+
+  function cerrarHojaCierre() {
+    errorCierre("");
+    show($("cierreSheet"), false);
+  }
+
   // ------------------------------------------------- 5. ¿Cómo se hace?
   function abrirGuia() {
     show($("guiaSheet"), true);
@@ -813,6 +957,19 @@
     $("asisTomar").addEventListener("click", tomarFotoMarca);
     $("asisRepetir").addEventListener("click", function () { asis.foto = null; errorMarca(""); fotoMarca(false); });
     $("asisEnviar").addEventListener("click", enviarMarca);
+    $("btnOlvido").addEventListener("click", abrirCierre);
+    $("cierreCerrar").addEventListener("click", cerrarHojaCierre);
+    $("cierreListo").addEventListener("click", cerrarHojaCierre);
+    $("cierreEnviar").addEventListener("click", enviarCierre);
+    $("cierreHora").addEventListener("input", function () { errorCierre(""); pintarResumenCierre(); });
+    $("cierreMotivo").addEventListener("input", function () { errorCierre(""); pintarResumenCierre(); });
+    $("cierreMotivos").addEventListener("click", function (ev) {
+      var chip = ev.target.closest(".motivo-chip");
+      if (!chip) return;
+      $("cierreMotivo").value = chip.textContent;   // se puede corregir después
+      errorCierre("");
+      pintarResumenCierre();
+    });
     $("btnGuia").addEventListener("click", abrirGuia);
     $("guiaCerrar").addEventListener("click", cerrarGuia);
     $("guiaListo").addEventListener("click", cerrarGuia);

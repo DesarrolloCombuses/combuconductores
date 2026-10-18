@@ -296,7 +296,7 @@ sus iconos; usa `css/portal.css`, `js/vendor/jsQR.min.js` y la llave pública de
 `almacentro/enturnes/sql/tarjeta_despacho.sql` (para pasar de la v9:
 `personal_empresa.sql`).
 
-La versión de la app del personal va aparte (`g2.1.0`): está en
+La versión de la app del personal va aparte (`g2.2.0`): está en
 `gestores/gestores-app.js`, en `gestores/sw.js` y en los `?v=` de
 `gestores/index.html`. Si cambia `css/portal.css` o `js/vendor/jsQR.min.js`, hay
 que subirla también, o los celulares siguen con los guardados.
@@ -324,8 +324,16 @@ primera vez.
 - Las mismas reglas del biométrico: entrada y salida alternadas (desde el
   9-jul-2026), la salida mínimo 1 hora después de la entrada, nada repetido en 30
   minutos, máximo 6 marcas al día desde la app. Una entrada de **más de 16 horas**
-  sin salida (Buk la rechaza) no se cierra aquí: la cierra gestión humana en el
-  biométrico.
+  sin salida (Buk la rechaza) no deja marcar: hay que cerrarla primero.
+- **Se me olvidó marcar la salida** (g2.2.0): sale con una entrada de otro día sin
+  salida (el botón grande si lleva más de 16 h). Es el **cierre declarado** del
+  biométrico (`cerrar_turno_automatico`): la persona dice a qué hora salió (se le
+  propone la de la última vez que entró a una hora parecida) y por qué no marcó.
+  Queda una salida `cierre_declarado` que **no va a Buk** (gestión humana la revisa
+  en Verificador de horarios › Cierres declarados y la pasa a Buk), su renglón en
+  `cierres_turno` y, si el turno pasa de 16 h, la novedad de `jornadas_excedidas`
+  ya explicada con el mismo motivo. Máximo 20 horas; si la hora es igual o anterior
+  a la de la entrada, la salida es del día siguiente.
 - Si el celular la manda y no le llega la respuesta, al tocar otra vez manda la
   misma (`id_local`): no queda doble ni en la base ni en Buk.
 
@@ -333,8 +341,9 @@ La app no tiene sesión, así que todo eso lo hace la edge function
 **`personal-marcar-asistencia`** (`backend-supabase/supabase/functions/`), con la
 llave de servicio y el mismo secreto de Buk (`CTRLIT_API_TOKEN`) que usa
 `enviar-asistencia-buk` (esa y `consultar-colaborador-buk` exigen sesión).
-Acciones: `{ accion: "estado", dni }` y `{ accion: "marcar", dni, sentido, foto,
-lat, lon, precision, id_local }`. Necesita la revisión de sesión
+Acciones: `{ accion: "estado", dni }`, `{ accion: "marcar", dni, sentido, foto,
+lat, lon, precision, id_local }` y `{ accion: "cerrar", dni, hora, motivo,
+id_local }`. Necesita la revisión de sesión
 ("Enforce JWT verification") apagada. Mientras la función no esté en el servidor,
 la tarjeta dice *"todavía no está habilitada en el servidor"* y lo demás de la app
 funciona igual.
