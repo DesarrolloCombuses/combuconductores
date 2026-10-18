@@ -12,30 +12,43 @@
         "Registrarme". Queda en el viaje de ese bus: suma en los pasajeros
         pero no se cobra, y en las observaciones queda quién fue.
    Sin señal, el registro queda guardado aquí y se manda solo cuando vuelva.
+     4. Mi asistencia (g2.1.0): ENTRADA y SALIDA con una selfie y la ubicación,
+        como en el biométrico: queda en la asistencia y va a Buk. Necesita señal
+        (la hora es la del servidor). Solo para cédulas ACTIVAS en la base de
+        empleados del biométrico: así se habilita a alguien.
+     5. ¿Cómo se hace?: la guía con dibujos (sale sola la primera vez).
 
    Sin sesión, la app solo usa dos funciones de Supabase
    (almacentro/enturnes/sql/personal_empresa.sql, la v10):
      personal_quien_soy          la cédula es de alguien vinculado: primer nombre y cargo
      personal_registrar_subida   el registro, con la selfie y dónde estaba
+   y la edge function personal-marcar-asistencia (backend-supabase), que hace
+   lo del biométrico en el servidor: { accion: "estado" | "marcar" }.
    No lee ninguna hoja.
    ========================================================================== */
 (function () {
   "use strict";
 
-  var VERSION = "g2.0.0";
+  var VERSION = "g2.1.0";
   var cfg = window.PORTAL_CONFIG || {};
   var RPC_QUIEN_SOY = "personal_quien_soy";
   var RPC_REGISTRAR = "personal_registrar_subida";
+  var FN_ASISTENCIA = "personal-marcar-asistencia";
 
   var LS_YO = "personal_app_yo";                 // { dni, nombre, cargo }: quién usa este celular
   var LS_PENDIENTES = "personal_app_pendientes"; // registros sin enviar (sin señal)
   var LS_REGISTROS = "personal_app_registros";   // lo que se ve en "Mis registros de hoy"
+  var LS_GUIA = "personal_app_guia_vista";       // ya vio la guía con dibujos
+  var LS_MARCA = "personal_app_marca_en_curso";  // { id_local, sentido, dni }: si se cae la señal, se reenvía la misma
   var MAX_PENDIENTES = 30;
   var CODIGO_VENCE_MS = 4 * 60 * 1000;           // el servidor acepta hasta 5 min entre el código y la lectura
 
   // sinRed: la última consulta no llegó al servidor. navigator.onLine no basta:
   // dice "conectado" con un Wi-Fi sin salida.
   var estado = { yo: null, quien: null, sinRed: false, enviando: false };
+  // Mi asistencia: lo que dijo el servidor (qué le toca) y la marca que se está haciendo
+  var asis = { toca: null, error: null, sinFuncion: false, cargando: false, consultadoEn: 0,
+    sentido: null, foto: null, stream: null, gps: null, gpsError: null, idLocal: null, enviando: false, reloj: null };
 
   // --------------------------------------------------------------- ayudas
   function $(id) { return document.getElementById(id); }
@@ -224,6 +237,8 @@
     pintarRegistros();
     pintarRed();
     enviarPendientes();
+    consultarAsistencia();
+    if (!leerJson(LS_GUIA, false)) abrirGuia();   // la primera vez, la guía sale sola
   }
 
   function pintarRegistros() {
@@ -487,6 +502,295 @@
     show($("registroSheet"), false);
   }
 
+  // ------------------------------------------------- 4. Mi asistencia
+  // Como el biométrico, pero el que decide es el servidor (personal-marcar-asistencia):
+  // si le toca entrada o salida, la hora, la foto, la asistencia y Buk.
+  function hoyCol() { return new Date().toLocaleDateString("en-CA", { timeZone: "America/Bogota" }); }
+
+  function hora12(hhmm) {
+    var p = String(hhmm || "").split(":");
+    var h = Number(p[0]), m = Number(p[1]);
+    if (!isFinite(h) || !isFinite(m)) return String(hhmm || "");
+    return ((h + 11) % 12 + 1) + ":" + ("0" + m).slice(-2) + (h < 12 ? "\u00a0a.\u00a0m." : "\u00a0p.\u00a0m.");   // sin partirse en dos renglones
+  }
+
+  var MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+  function cuandoFue(fecha, hhmm) {
+    var hoy = hoyCol();
+    var p = String(fecha || "").split("-");
+    var dia = fecha === hoy ? "hoy" : "el " + Number(p[2]) + "-" + MESES[Number(p[1]) - 1];
+    return dia + " a las " + hora12(hhmm);
+  }
+
+  async function llamarAsistencia(cuerpo, limiteMs) {
+    var control = typeof AbortController === "function" ? new AbortController() : null;
+    var corte = setTimeout(function () { if (control) control.abort(); }, limiteMs || 20000);
+    try {
+      var res = await fetch(cfg.SUPABASE_URL + "/functions/v1/" + FN_ASISTENCIA, {
+        method: "POST",
+        headers: { apikey: cfg.SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify(cuerpo),
+        cache: "no-store",
+        signal: control ? control.signal : undefined,
+      });
+      marcarRed(true);
+      var datos = null;
+      try { datos = await res.json(); } catch (_) { datos = null; }
+      // Sin la función en el servidor (o con la revisión de sesión prendida) contesta 404 o 401.
+      if (res.status === 404 || res.status === 401 || res.status === 403) {
+        var e = new Error("La marca de asistencia todavía no está habilitada en el servidor. Avísele a control.");
+        e.sinFuncion = true;
+        throw e;
+      }
+      if (!datos || typeof datos !== "object") throw new Error("El servidor contestó " + res.status + ". Intente otra vez.");
+      return datos;
+    } catch (err) {
+      if (err && (err.name === "AbortError" || err instanceof TypeError)) {
+        marcarRed(false);
+        var sinRed = new Error("Sin conexión con el servidor. Para marcar hace falta internet: revise los datos o el Wi-Fi.");
+        sinRed.sinRed = true;
+        throw sinRed;
+      }
+      throw err;
+    } finally {
+      clearTimeout(corte);
+    }
+  }
+
+  async function consultarAsistencia() {
+    if (!estado.yo || asis.cargando) return;
+    asis.cargando = true;
+    if (!asis.toca) pintarAsistencia();
+    try {
+      var r = await llamarAsistencia({ accion: "estado", dni: estado.yo.dni }, 20000);
+      asis.sinFuncion = false;
+      asis.toca = r.ok ? r : null;
+      asis.error = r.ok ? null : { texto: r.mensaje || "No se pudo consultar.", codigo: r.codigo };
+    } catch (err) {
+      asis.toca = null;
+      asis.sinFuncion = !!err.sinFuncion;
+      asis.error = { texto: err.message || String(err), sinRed: !!err.sinRed };
+    } finally {
+      asis.cargando = false;
+      asis.consultadoEn = Date.now();
+      pintarAsistencia();
+    }
+  }
+
+  function pintarAsistencia() {
+    var t = asis.toca;
+    var btn = $("btnMarcar");
+    var aviso = $("asisAviso");
+    var chip = $("asisBuk");
+    show($("btnAsisOtraVez"), false);
+    show(chip, false);
+    show(aviso, false);
+    show(btn, false);
+    $("cardAsistencia").setAttribute("data-estado", t ? t.siguiente : "nada");
+    if (!t) {
+      $("asisEstado").textContent = asis.cargando ? "Consultando su asistencia…" : (asis.error ? asis.error.texto : "");
+      // Sin señal o el servidor no respondió: se puede volver a consultar. Si la cédula no está activa, no.
+      show($("btnAsisOtraVez"), !asis.cargando && !!asis.error && !asis.sinFuncion &&
+        (asis.error.sinRed || !asis.error.codigo || asis.error.codigo === "servidor"));
+      return;
+    }
+    var u = t.ultima;
+    if (t.siguiente === "salida" && t.abierta) {
+      $("asisEstado").innerHTML = "Está adentro: entró <b>" + escapeHtml(cuandoFue(t.abierta.fecha, t.abierta.hora)) + "</b>";   // termina en "m."
+    } else if (u && u.sentido === "salida" && u.fecha === hoyCol()) {
+      $("asisEstado").innerHTML = "Salió <b>" + escapeHtml(cuandoFue(u.fecha, u.hora)) + "</b>";
+    } else {
+      $("asisEstado").textContent = "Hoy no ha marcado.";
+    }
+    if (u) {
+      chip.textContent = u.enviado_buk ? "En Buk ✓" : "Buk pendiente";
+      chip.setAttribute("data-ok", u.enviado_buk ? "true" : "false");
+      show(chip, true);
+    }
+    if (t.bloqueo) {
+      aviso.textContent = t.bloqueo.mensaje;
+      show(aviso, true);
+      return;
+    }
+    $("btnMarcarTexto").textContent = t.siguiente === "salida" ? "Marcar SALIDA" : "Marcar ENTRADA";
+    btn.disabled = !!t.salida_desde;
+    show(btn, true);
+    if (t.salida_desde) {
+      aviso.textContent = "La salida se puede marcar desde las " + hora12(t.salida_desde);   // termina en "m."
+      show(aviso, true);
+      // A esa hora se vuelve a preguntar solo y el botón se prende.
+      var ahora = new Date().toLocaleTimeString("en-GB", { timeZone: "America/Bogota", hour12: false }).split(":");
+      var p = String(t.salida_desde).split(":");
+      var faltan = ((Number(p[0]) * 60 + Number(p[1])) - (Number(ahora[0]) * 60 + Number(ahora[1])) + 1440) % 1440;
+      clearTimeout(asis.reloj);
+      asis.reloj = setTimeout(consultarAsistencia, (faltan + 0.5) * 60 * 1000);
+    }
+  }
+
+  function errorMarca(texto) {
+    $("asisError").textContent = texto || "";
+    show($("asisError"), !!texto);
+  }
+
+  function pasoMarca(cual) {
+    show($("asisPasoFoto"), cual === "foto");
+    show($("asisResultado"), cual === "resultado");
+    show($("asisListo"), cual === "resultado");
+  }
+
+  function fotoMarca(tomada) {
+    show($("asisVideo"), !tomada);
+    show($("asisFoto"), tomada);
+    show($("asisTomar"), !tomada);
+    show($("asisEnviar"), tomada);
+    show($("asisRepetir"), tomada);
+  }
+
+  // La ubicación es obligatoria (como en el biométrico).
+  function pedirUbicacionMarca() {
+    asis.gps = null;
+    asis.gpsError = null;
+    var el = $("asisUbicacion");
+    el.setAttribute("data-estado", "buscando");
+    el.textContent = "Buscando su ubicación…";
+    if (!navigator.geolocation) {
+      asis.gpsError = "Este celular no da la ubicación.";
+      el.setAttribute("data-estado", "error");
+      el.textContent = asis.gpsError;
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(function (p) {
+      asis.gps = { lat: p.coords.latitude, lon: p.coords.longitude, precision: p.coords.accuracy };
+      el.setAttribute("data-estado", "ok");
+      el.textContent = "✓ Ubicación lista" + (isFinite(p.coords.accuracy) ? " (± " + Math.round(p.coords.accuracy) + " m)" : "");
+    }, function () {
+      asis.gpsError = "No se pudo saber dónde está: active la ubicación del celular y dele permiso a esta app.";
+      el.setAttribute("data-estado", "error");
+      el.textContent = asis.gpsError;
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 });
+  }
+
+  async function abrirMarca() {
+    var t = asis.toca;
+    if (!t || t.bloqueo || t.salida_desde) return;
+    asis.sentido = t.siguiente;
+    asis.foto = null;
+    // Si la anterior no alcanzó a llegar (sin señal), se reenvía la misma: el servidor no la repite.
+    var enCurso = leerJson(LS_MARCA, null);
+    asis.idLocal = enCurso && enCurso.sentido === asis.sentido && enCurso.dni === estado.yo.dni ? enCurso.id_local : alAzar(12);
+    var palabra = asis.sentido === "salida" ? "SALIDA" : "ENTRADA";
+    $("asisTitulo").textContent = "Marcar " + palabra;
+    $("asisEnviar").textContent = "Marcar " + palabra;
+    errorMarca("");
+    pasoMarca("foto");
+    fotoMarca(false);
+    show($("asistenciaSheet"), true);
+    pedirUbicacionMarca();
+    try {
+      asis.stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 640 } }, audio: false,
+      });
+      if ($("asistenciaSheet").hidden) { apagar(asis.stream); asis.stream = null; return; }
+      var v = $("asisVideo");
+      v.srcObject = asis.stream;
+      await v.play();
+    } catch (_) {
+      errorMarca("No se pudo abrir la cámara de adelante. Dele permiso de cámara a esta app.");
+    }
+  }
+
+  // Liviana, como la del biométrico en el celular: 480 px, WebP (o JPEG si el celular no sabe).
+  function tomarFotoMarca() {
+    var v = $("asisVideo");
+    if (!v.videoWidth) { errorMarca("La cámara todavía no arranca: espere un segundo."); return; }
+    var lado = Math.min(v.videoWidth, v.videoHeight);
+    var c = document.createElement("canvas");
+    c.width = c.height = 480;
+    c.getContext("2d").drawImage(v, (v.videoWidth - lado) / 2, (v.videoHeight - lado) / 2, lado, lado, 0, 0, 480, 480);
+    var foto = c.toDataURL("image/webp", 0.6);
+    if (foto.indexOf("data:image/webp") !== 0) foto = c.toDataURL("image/jpeg", 0.72);
+    asis.foto = foto;
+    $("asisFoto").src = foto;
+    errorMarca("");
+    fotoMarca(true);
+  }
+
+  async function enviarMarca() {
+    if (!asis.foto || !estado.yo || asis.enviando) return;
+    if (!asis.gps) {
+      errorMarca(asis.gpsError || "Todavía no está la ubicación: espere unos segundos y toque otra vez.");
+      if (asis.gpsError) pedirUbicacionMarca();
+      return;
+    }
+    if (!conRed()) { errorMarca("Para marcar hace falta internet. Revise los datos o el Wi-Fi."); return; }
+    var btn = $("asisEnviar");
+    var texto = btn.textContent;
+    asis.enviando = true;
+    btn.disabled = true;
+    btn.textContent = "Marcando…";
+    errorMarca("");
+    guardarJson(LS_MARCA, { id_local: asis.idLocal, sentido: asis.sentido, dni: estado.yo.dni });
+    try {
+      var r = await llamarAsistencia({
+        accion: "marcar", dni: estado.yo.dni, sentido: asis.sentido, foto: asis.foto, id_local: asis.idLocal,
+        lat: asis.gps.lat, lon: asis.gps.lon, precision: Math.round(asis.gps.precision || 0),
+      }, 60000);
+      if (r.ok) {
+        try { localStorage.removeItem(LS_MARCA); } catch (_) {}
+        apagar(asis.stream);
+        asis.stream = null;
+        mostrarMarca(r);
+        consultarAsistencia();
+      } else {
+        // Ya no le toca eso (marcó en otro lado), o la base no la aceptó: no se reenvía esa.
+        if (r.codigo !== "servidor") { try { localStorage.removeItem(LS_MARCA); } catch (_) {} }
+        errorMarca(r.mensaje || "No quedó la marca.");
+        if (["cambio", "turno_abierto", "muy_pronto", "doble", "tope", "inactivo"].indexOf(r.codigo) >= 0) consultarAsistencia();
+      }
+    } catch (err) {
+      errorMarca(err.sinRed
+        ? "No se pudo enviar: sin señal. Toque otra vez cuando haya internet; no queda marcada dos veces."
+        : (err.message || String(err)));
+    } finally {
+      asis.enviando = false;
+      btn.disabled = false;
+      btn.textContent = texto;
+    }
+  }
+
+  function mostrarMarca(r) {
+    pasoMarca("resultado");
+    var el = $("asisResultado");
+    var palabra = r.sentido === "salida" ? "SALIDA" : "ENTRADA";
+    el.setAttribute("data-ok", r.enviado_buk ? "true" : "espera");
+    el.innerHTML = '<img src="' + escapeHtml(asis.foto || "") + '" alt="">' +
+      '<p class="resultado-titulo">✓ ' + palabra + " marcada</p>" +
+      '<p class="resultado-texto">' + escapeHtml(cuandoFue(r.fecha, r.hora)) + "</p>" +
+      '<p class="resultado-nota">' + (r.enviado_buk
+        ? "Ya está en la asistencia y en Buk."
+        : "Quedó en la asistencia, pero Buk no la recibió: gestión humana la reenvía desde el biométrico. No tiene que marcar otra vez.") +
+      "</p>";
+  }
+
+  function cerrarMarca() {
+    apagar(asis.stream);
+    asis.stream = null;
+    errorMarca("");
+    show($("asistenciaSheet"), false);
+  }
+
+  // ------------------------------------------------- 5. ¿Cómo se hace?
+  function abrirGuia() {
+    show($("guiaSheet"), true);
+    var cuerpo = $("guiaSheet").querySelector(".sheet-body");
+    if (cuerpo) cuerpo.scrollTop = 0;
+  }
+
+  function cerrarGuia() {
+    guardarJson(LS_GUIA, true);
+    show($("guiaSheet"), false);
+  }
+
   // ------------------------------------------------------------- arranque
   function iniciar() {
     Array.prototype.forEach.call(document.querySelectorAll("[data-version]"), function (el) {
@@ -502,15 +806,33 @@
     $("selfieTomar").addEventListener("click", tomarSelfie);
     $("selfieRepetir").addEventListener("click", function () { selfie.foto = null; pasoFoto(false); });
     $("selfieRegistrar").addEventListener("click", registrarme);
+    $("btnMarcar").addEventListener("click", abrirMarca);
+    $("btnAsisOtraVez").addEventListener("click", consultarAsistencia);
+    $("asisCerrar").addEventListener("click", cerrarMarca);
+    $("asisListo").addEventListener("click", cerrarMarca);
+    $("asisTomar").addEventListener("click", tomarFotoMarca);
+    $("asisRepetir").addEventListener("click", function () { asis.foto = null; errorMarca(""); fotoMarca(false); });
+    $("asisEnviar").addEventListener("click", enviarMarca);
+    $("btnGuia").addEventListener("click", abrirGuia);
+    $("guiaCerrar").addEventListener("click", cerrarGuia);
+    $("guiaListo").addEventListener("click", cerrarGuia);
 
-    window.addEventListener("online", function () { pintarRed(); enviarPendientes(); });
+    window.addEventListener("online", function () {
+      pintarRed();
+      enviarPendientes();
+      if (estado.yo && (!asis.toca || asis.error)) consultarAsistencia();
+    });
     window.addEventListener("offline", pintarRed);
     document.addEventListener("visibilitychange", function () {
       if (document.hidden) {
         if (!$("registroSheet").hidden) cerrarRegistro();   // no dejar la cámara prendida
+        if (!$("asistenciaSheet").hidden && !asis.enviando) cerrarMarca();
         return;
       }
-      if (estado.yo) enviarPendientes();
+      if (estado.yo) {
+        enviarPendientes();
+        if (Date.now() - asis.consultadoEn > 60 * 1000) consultarAsistencia();   // marcó en otro lado, o pasó la hora
+      }
     });
     // Lo que quedó sin señal se reintenta solo cada minuto.
     setInterval(function () {

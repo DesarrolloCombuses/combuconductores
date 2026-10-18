@@ -296,10 +296,48 @@ sus iconos; usa `css/portal.css`, `js/vendor/jsQR.min.js` y la llave pública de
 `almacentro/enturnes/sql/tarjeta_despacho.sql` (para pasar de la v9:
 `personal_empresa.sql`).
 
-La versión de la app del personal va aparte (`g2.0.0`): está en
+La versión de la app del personal va aparte (`g2.1.0`): está en
 `gestores/gestores-app.js`, en `gestores/sw.js` y en los `?v=` de
 `gestores/index.html`. Si cambia `css/portal.css` o `js/vendor/jsQR.min.js`, hay
 que subirla también, o los celulares siguen con los guardados.
+
+#### Mi asistencia: el biométrico del personal (g2.1.0)
+
+Desde la g2.1.0 (17-oct-2026, a pedido del usuario) la persona **marca su ENTRADA
+y su SALIDA** en la app del personal, como en el biométrico (la app de asistencia,
+`modulos/asistencia`), y la app trae **¿Cómo se hace?**, la guía con dibujos
+(la entrada, el bus, el código, la foto, sin señal y la salida), que sale sola la
+primera vez.
+
+- La tarjeta **Mi asistencia** dice qué le toca (*"Hoy no ha marcado"*, *"Está
+  adentro: entró hoy a las 7:02 a. m."*) y el botón **Marcar ENTRADA** o **Marcar
+  SALIDA**; la marca lleva una **selfie de evidencia** (no se compara la cara) y la
+  **ubicación**, las dos obligatorias. Necesita internet: la hora es la del
+  servidor.
+- Queda **completa**: en `asistencias` (origen `app_personal`, foto en
+  `asistencia-fotos` por 15 días) **y en Buk** en el momento. Si Buk no la recibe,
+  la marca queda igual y sale en "Rechazos Buk" del biométrico, donde gestión
+  humana la reenvía; la app dice *"Buk pendiente"*.
+- **Quién puede**: la cédula tiene que estar **activa en la base de empleados**
+  (`employees.activo`, la misma que exige el biométrico) y con ficha en
+  `colaboradores`. Así se habilita o se quita a alguien.
+- Las mismas reglas del biométrico: entrada y salida alternadas (desde el
+  9-jul-2026), la salida mínimo 1 hora después de la entrada, nada repetido en 30
+  minutos, máximo 6 marcas al día desde la app. Una entrada de **más de 16 horas**
+  sin salida (Buk la rechaza) no se cierra aquí: la cierra gestión humana en el
+  biométrico.
+- Si el celular la manda y no le llega la respuesta, al tocar otra vez manda la
+  misma (`id_local`): no queda doble ni en la base ni en Buk.
+
+La app no tiene sesión, así que todo eso lo hace la edge function
+**`personal-marcar-asistencia`** (`backend-supabase/supabase/functions/`), con la
+llave de servicio y el mismo secreto de Buk (`CTRLIT_API_TOKEN`) que usa
+`enviar-asistencia-buk` (esa y `consultar-colaborador-buk` exigen sesión).
+Acciones: `{ accion: "estado", dni }` y `{ accion: "marcar", dni, sentido, foto,
+lat, lon, precision, id_local }`. Necesita la revisión de sesión
+("Enforce JWT verification") apagada. Mientras la función no esté en el servidor,
+la tarjeta dice *"todavía no está habilitada en el servidor"* y lo demás de la app
+funciona igual.
 
 Antes (v1.10.0 y v1.11.0) el gestor mostraba un código firmado con la huella de
 su celular, que control tenía que aprobar, y el conductor lo leía. Eso se quitó:

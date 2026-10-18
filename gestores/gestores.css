@@ -65,3 +65,74 @@
 .nota-gestor { margin: 12px 0 0; font-size: 13px; color: var(--muted); }
 
 .app-gestores .btn-link { align-self: center; }
+
+/* --- Mi asistencia (g2.1.0): el biométrico del personal, en el morado de la app --- */
+.app-gestores .card-turno { background: linear-gradient(160deg, #5b21b6 0%, #4c1d95 100%); }
+.card-asistencia[data-estado="salida"] { background: linear-gradient(160deg, #4c1d95 0%, #2e1065 100%); }
+.asis-estado { margin: 0; font-size: 16px; color: #fff; }
+.asis-estado b { font-weight: 800; }
+.asis-aviso {
+  margin: 10px 0 0;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, .14);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+.asis-buk {
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, .18);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+.asis-buk[data-ok="false"] { background: #fde68a; color: #713f12; }
+.app-gestores .btn-marcar { color: var(--primary-strong); }
+.app-gestores .btn-marcar .ico { margin-right: 6px; vertical-align: -5px; fill: none; stroke: currentColor; }
+.card-asistencia .btn-sm { margin-top: 10px; }
+
+.asis-ubicacion { margin: 0; font-size: 13.5px; text-align: center; color: var(--muted); }
+.asis-ubicacion[data-estado="ok"] { color: #0b6b3a; font-weight: 600; }
+.asis-ubicacion[data-estado="error"] { color: var(--danger); font-weight: 600; }
+
+/* --- ¿Cómo se hace? --- */
+.card-guia {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  text-align: left;
+  font: inherit;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.card-guia .ico { flex: none; width: 30px; height: 30px; fill: none; stroke: var(--primary); stroke-width: 2; stroke-linecap: round; }
+.card-guia b { display: block; font-size: 16px; color: var(--ink); }
+.card-guia small { display: block; margin-top: 2px; font-size: 13px; color: var(--muted); }
+.card-guia:active { transform: translateY(1px); }
+
+.guia { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; counter-reset: paso; }
+.guia-paso {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--soft);
+  counter-increment: paso;
+}
+.guia-paso b { display: block; font-size: 15px; color: var(--ink); }
+.guia-paso b::before { content: counter(paso) ". "; color: var(--primary); }
+.guia-paso p { margin: 3px 0 0; font-size: 14px; line-height: 1.4; color: var(--ink-2); }
+.guia-dibujo { width: 96px; height: 72px; fill: none; stroke: var(--primary); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.guia-dibujo .g-fondo { fill: #fff; }
+.guia-dibujo .g-blanco { fill: #fff; }
+.guia-dibujo .g-relleno { fill: var(--primary); stroke: none; }
+.guia-dibujo .g-acento { stroke: #d97706; }
+.guia-dibujo .g-ok { fill: #0b6b3a; stroke: none; }
+.guia-dibujo .g-ok-trazo { stroke: #fff; stroke-width: 3; }

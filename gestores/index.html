@@ -5,8 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Personal · Combuses</title>
   <!-- La app del PERSONAL DE LA EMPRESA (gestoras, auxiliares, mecánicos...), aparte del Portal del
-       Conductor y sin correo ni clave: al subir a un bus leen el código que les muestra el conductor y se
-       toman una selfie. Quedan en el viaje: suman en los pasajeros pero no se cobran. -->
+       Conductor y sin correo ni clave:
+         - Mi asistencia: marcan ENTRADA y SALIDA con una selfie y la ubicación, como en el biométrico (queda
+           en la asistencia y en Buk, con la función personal-marcar-asistencia de Supabase).
+         - Al subir a un bus leen el código que les muestra el conductor y se toman una selfie. Quedan en el
+           viaje: suman en los pasajeros pero no se cobran.
+         - ¿Cómo se hace?: la guía con dibujos. -->
   <link rel="manifest" href="./manifest.webmanifest">
   <meta name="theme-color" content="#5b21b6">
   <meta name="mobile-web-app-capable" content="yes">
@@ -19,8 +23,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="../css/portal.css?v=g2.0.0">
-  <link rel="stylesheet" href="./gestores.css?v=g2.0.0">
+  <link rel="stylesheet" href="../css/portal.css?v=g2.1.0">
+  <link rel="stylesheet" href="./gestores.css?v=g2.1.0">
 </head>
 <body class="app-gestores">
 
@@ -29,7 +33,7 @@
   <form id="cedulaForm" class="login-card" autocomplete="off" novalidate>
     <img class="login-logo" src="../assets/logo-combuses.webp" alt="Combuses">
     <h1 class="login-title">Personal de la empresa</h1>
-    <p class="login-subtitle">Para registrarse al subir a un bus</p>
+    <p class="login-subtitle">Su entrada, su salida y su registro al subir a un bus</p>
 
     <div id="pasoCedula">
       <label class="field">
@@ -62,6 +66,23 @@
 
     <p id="sinRed" class="aviso-sin-red" role="status" hidden></p>
 
+    <!-- Mi asistencia: el biométrico del personal (entrada y salida con selfie y ubicación) -->
+    <article id="cardAsistencia" class="card card-turno card-asistencia">
+      <header class="card-head">
+        <h3>Mi asistencia</h3>
+        <span id="asisBuk" class="asis-buk" hidden></span>
+      </header>
+      <div class="card-body">
+        <p id="asisEstado" class="asis-estado">Consultando su asistencia…</p>
+        <p id="asisAviso" class="asis-aviso" hidden></p>
+        <button id="btnMarcar" class="btn btn-block btn-marcar" type="button" hidden>
+          <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <span id="btnMarcarTexto">Marcar ENTRADA</span>
+        </button>
+        <button id="btnAsisOtraVez" class="btn btn-ghost btn-sm" type="button" hidden>Volver a consultar</button>
+      </div>
+    </article>
+
     <button id="btnLeerBus" class="btn btn-primary btn-block btn-leer-bus" type="button">
       <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>
       Leer código del bus
@@ -76,19 +97,10 @@
       </div>
     </article>
 
-    <article class="card">
-      <header class="card-head">
-        <h3>Cómo funciona</h3>
-      </header>
-      <div class="card-body">
-        <ol class="pasos-gestor">
-          <li><strong>Al subir al bus</strong>, pídale al conductor que toque <em>Registrar personal de la empresa</em>: su celular muestra un código.</li>
-          <li>Toque <strong>Leer código del bus</strong> y apunte la cámara a ese código.</li>
-          <li><strong>Tómese una foto</strong> y toque <em>Registrarme</em>. Queda en el viaje de ese bus: cuenta como pasajero, pero no se cobra.</li>
-        </ol>
-        <p class="nota-gestor">Si no hay señal, queda guardado en su celular y se envía solo cuando vuelva.</p>
-      </div>
-    </article>
+    <button id="btnGuia" class="card card-guia" type="button">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.3 2.4c-.5.2-.8.6-.8 1.1v.5M12 16.5v.5"/></svg>
+      <span><b>¿Cómo se hace?</b><small>La guía con dibujos: la entrada, el bus y la salida</small></span>
+    </button>
 
     <button id="btnCambiarCedula" class="btn-link btn-link-muted" type="button">No soy yo: cambiar la cédula</button>
     <p class="version-note">Personal Combuses <span data-version></span></p>
@@ -133,9 +145,72 @@
   </div>
 </div>
 
+<!-- ============ Marcar ENTRADA o SALIDA: la selfie, la ubicación y cómo quedó ============ -->
+<div id="asistenciaSheet" class="sheet-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="asisTitulo">
+    <header class="sheet-head">
+      <h3 id="asisTitulo">Marcar ENTRADA</h3>
+      <button id="asisCerrar" class="icon-btn" type="button" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <div id="asisPasoFoto">
+        <p class="selfie-bus">Una foto de frente: es la evidencia de su marca.</p>
+        <div class="selfie-camara">
+          <video id="asisVideo" playsinline muted></video>
+          <img id="asisFoto" alt="Su foto" hidden>
+        </div>
+        <p id="asisUbicacion" class="asis-ubicacion" data-estado="buscando">Buscando su ubicación…</p>
+        <button id="asisTomar" class="btn btn-primary btn-block" type="button">Tomar la foto</button>
+        <button id="asisEnviar" class="btn btn-primary btn-block" type="button" hidden>Marcar ENTRADA</button>
+        <button id="asisRepetir" class="btn btn-ghost btn-block" type="button" hidden>Repetir la foto</button>
+      </div>
+      <div id="asisResultado" class="lector-resultado" role="status" hidden></div>
+      <p id="asisError" class="form-error" role="alert" hidden></p>
+      <button id="asisListo" class="btn btn-ghost btn-block" type="button" hidden>Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ¿Cómo se hace? La guía con dibujos ============ -->
+<div id="guiaSheet" class="sheet-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="guiaTitulo">
+    <header class="sheet-head">
+      <h3 id="guiaTitulo">¿Cómo se hace?</h3>
+      <button id="guiaCerrar" class="icon-btn" type="button" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <ol class="guia">
+        <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><rect x="22" y="4" width="36" height="62" rx="7" class="g-fondo"/><circle cx="40" cy="26" r="8"/><path d="M27 50c2-8 8-12 13-12s11 4 13 12"/><circle cx="68" cy="50" r="14" class="g-blanco"/><path d="M68 42v8l5 3"/><path d="M76 14h12M82 8l6 6-6 6" class="g-acento"/></svg>
+          <div><b>Al llegar a trabajar</b>
+            <p>Toque <strong>Marcar ENTRADA</strong> y tómese una foto de frente. Queda la hora y dónde está, y se manda a Buk, igual que en el biométrico.</p></div></li>
+        <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><rect x="3" y="12" width="50" height="42" rx="7" class="g-fondo"/><rect x="9" y="18" width="38" height="15" rx="3" class="g-blanco"/><path d="M9 43h8M39 43h8"/><circle cx="15" cy="56" r="5" class="g-blanco"/><circle cx="41" cy="56" r="5" class="g-blanco"/><rect x="60" y="6" width="32" height="54" rx="6" class="g-blanco"/><rect x="67" y="16" width="18" height="18" rx="2"/><path d="M71 20h3v3h-3zM78 20h3v3h-3zM71 27h3v3h-3zM78 27h3v3h-3z" class="g-relleno"/><path d="M68 44h16M71 50h10"/></svg>
+          <div><b>Al subir a un bus de Combuses</b>
+            <p>Salude y pídale al conductor que, en <strong>Mi tarjeta</strong>, toque <strong>Personal de la empresa</strong>. Su celular le muestra un código que cambia cada 15 segundos.</p></div></li>
+        <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><rect x="28" y="3" width="40" height="66" rx="7" class="g-fondo"/><path d="M35 17v-5h5M56 12h5v5M61 41v5h-5M40 46h-5v-5"/><rect x="41" y="21" width="14" height="14" rx="2" class="g-blanco"/><path d="M44 24h3v3h-3zM49 29h3v3h-3z" class="g-relleno"/><path d="M31 29h34" class="g-acento"/><path d="M40 57h16"/></svg>
+          <div><b>Lea el código</b>
+            <p>Toque <strong>Leer código del bus</strong> y apunte la cámara al código del celular del conductor.</p></div></li>
+        <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><circle cx="42" cy="36" r="30" class="g-fondo"/><circle cx="42" cy="29" r="9"/><path d="M26 55c3-9 9-13 16-13s13 4 16 13"/><circle cx="74" cy="52" r="13" class="g-ok"/><path d="M68 52l4 4 8-8" class="g-ok-trazo"/></svg>
+          <div><b>Su foto y listo</b>
+            <p>Tómese una foto y toque <strong>Registrarme</strong>. Queda en el viaje de ese bus: cuenta como pasajero, pero no se le cobra.</p></div></li>
+        <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><path d="M20 30a40 40 0 0 1 56 0M29 39a27 27 0 0 1 38 0M38 48a14 14 0 0 1 20 0"/><circle cx="48" cy="57" r="3.5" class="g-relleno"/><path d="M22 66L74 10" class="g-acento"/></svg>
+          <div><b>Si no hay señal</b>
+            <p>El registro del bus se guarda en su celular y se manda solo cuando vuelva. La entrada y la salida sí necesitan internet.</p></div></li>
+        <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><rect x="22" y="4" width="36" height="62" rx="7" class="g-fondo"/><circle cx="40" cy="26" r="8"/><path d="M27 50c2-8 8-12 13-12s11 4 13 12"/><circle cx="68" cy="50" r="14" class="g-blanco"/><path d="M68 42v8l5 3"/><path d="M88 14H76M82 8l-6 6 6 6" class="g-acento"/></svg>
+          <div><b>Al terminar el día</b>
+            <p>Toque <strong>Marcar SALIDA</strong> con otra foto. Si se le olvidó marcarla, avísele a gestión humana: ellos cierran el turno en el biométrico.</p></div></li>
+      </ol>
+      <button id="guiaListo" class="btn btn-primary btn-block" type="button">Entendido</button>
+    </div>
+  </div>
+</div>
+
 <!-- Solo la dirección de Supabase y la llave pública (la misma del portal); no inicia sesión. -->
-<script src="../js/portal-config.js?v=g2.0.0"></script>
-<script src="../js/vendor/jsQR.min.js?v=g2.0.0"></script>
-<script src="./gestores-app.js?v=g2.0.0"></script>
+<script src="../js/portal-config.js?v=g2.1.0"></script>
+<script src="../js/vendor/jsQR.min.js?v=g2.1.0"></script>
+<script src="./gestores-app.js?v=g2.1.0"></script>
 </body>
 </html>

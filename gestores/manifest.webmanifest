@@ -2,7 +2,7 @@
   "id": "/personal-combuses/",
   "name": "Personal · Combuses",
   "short_name": "Personal",
-  "description": "Para que el personal de la empresa se registre al subir a un bus: lee el código del conductor y se toma una selfie.",
+  "description": "El personal de la empresa marca su entrada y su salida, y se registra al subir a un bus leyendo el código del conductor.",
   "start_url": "./index.html?source=pwa",
   "scope": "./",
   "display": "standalone",
