@@ -32,7 +32,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "g2.3.0";
+  var VERSION = "g2.3.1";
   var cfg = window.PORTAL_CONFIG || {};
   var RPC_QUIEN_SOY = "personal_quien_soy";
   var RPC_REGISTRAR = "personal_registrar_subida";
@@ -688,10 +688,31 @@
     return m >= 1000 ? (m / 1000).toFixed(1).replace(".", ",") + " km" : Math.round(m) + " m";
   }
 
+  // Lejos (o sin GPS): los lugares autorizados, a cuánto queda cada uno, y "revisar otra vez".
+  function pintarLugaresMarca(desde) {
+    var vistos = {};
+    var lugares = PUNTOS_MARCA.filter(function (p) { if (vistos[p.nombre]) return false; vistos[p.nombre] = true; return true; });
+    var caja = $("asisLugares");
+    caja.innerHTML = '<p class="asis-lugares-titulo">Lugares autorizados para marcar:</p><ul>' +
+      lugares.map(function (l) {
+        return "<li><b>" + escapeHtml(l.nombre) + "</b>" +
+          (desde ? "<span>a " + escapeHtml(distanciaTexto(metrosEntre(desde.lat, desde.lon, l.lat, l.lon))) + "</span>" : "") +
+          '<a href="https://www.google.com/maps/search/?api=1&query=' + l.lat + "," + l.lon + '" target="_blank" rel="noopener">Ver en el mapa</a></li>';
+      }).join("") + "</ul>" +
+      '<button id="asisReintentarGps" class="btn btn-ghost btn-block" type="button">Ya llegué: revisar otra vez</button>';
+    show(caja, true);
+    $("asisPasoFoto").setAttribute("data-lejos", "true");     // sin la cámara grande: primero el aviso y los lugares
+    $("asisReintentarGps").addEventListener("click", pedirUbicacionMarca);
+  }
+
   // La ubicación es obligatoria (como en el biométrico) y tiene que ser en uno de los puntos.
+  // La foto no se deja tomar hasta saber que está en uno: así no hace todo para enterarse al final.
   function pedirUbicacionMarca() {
     asis.gps = null;
     asis.gpsError = null;
+    $("asisTomar").disabled = true;
+    show($("asisLugares"), false);
+    $("asisPasoFoto").removeAttribute("data-lejos");
     var el = $("asisUbicacion");
     el.setAttribute("data-estado", "buscando");
     el.textContent = "Buscando su ubicación…";
@@ -699,6 +720,7 @@
       asis.gpsError = "Este celular no da la ubicación.";
       el.setAttribute("data-estado", "error");
       el.textContent = asis.gpsError;
+      pintarLugaresMarca(null);
       return;
     }
     navigator.geolocation.getCurrentPosition(function (p) {
@@ -710,15 +732,18 @@
             " m): salga a cielo abierto o prenda el GPS." : "");
         el.setAttribute("data-estado", "error");
         el.textContent = asis.gpsError;
+        pintarLugaresMarca({ lat: p.coords.latitude, lon: p.coords.longitude });
         return;
       }
       asis.gps = { lat: p.coords.latitude, lon: p.coords.longitude, precision: p.coords.accuracy };
+      $("asisTomar").disabled = false;
       el.setAttribute("data-estado", "ok");
       el.textContent = "✓ Está en " + punto.nombre + (isFinite(p.coords.accuracy) ? " (± " + Math.round(p.coords.accuracy) + " m)" : "");
     }, function () {
       asis.gpsError = "No se pudo saber dónde está: active la ubicación del celular y dele permiso a esta app.";
       el.setAttribute("data-estado", "error");
       el.textContent = asis.gpsError;
+      pintarLugaresMarca(null);
     }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });   // la de ahora: si se acercó al punto, que cuente
   }
 

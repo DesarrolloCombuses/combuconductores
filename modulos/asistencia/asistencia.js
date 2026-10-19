@@ -231,6 +231,7 @@ const elements = {
   searchButton: $("#searchButton"),
   collaboratorBox: $("#collaboratorBox"),
   driverGreetingCard: $("#driverGreetingCard"),
+  puntoAviso: $("#puntoAviso"),
   turnoStatusBanner: $("#turnoStatusBanner"),
   reportDateInput: $("#reportDateInput"),
   reportTimeInput: $("#reportTimeInput"),
@@ -5716,6 +5717,7 @@ function mostrarInstruccionesUbicacionDenegada() {
 
 async function captureCurrentLocation() {
   if (!requireOnline()) return null;
+  state.fueraDePunto = null;
 
   // Verifica el permiso antes de intentar: si esta bloqueado, guia para habilitarlo.
   const permiso = await estadoPermisoUbicacion();
@@ -5768,7 +5770,8 @@ async function captureCurrentLocation() {
     state.fueraDePunto = {
       nombre: point.name,
       distancia: point.distance,
-      mensaje: `Está a ${distanciaTexto(point.distance)} de ${point.name}. La asistencia solo se marca en ${lista}.` +
+      posicion: { latitud: location.latitud, longitud: location.longitud },
+      mensaje: `Estás a ${distanciaTexto(point.distance)} de ${point.name}. La asistencia solo se marca en ${lista}.` +
         (precision > 200 ? ` El GPS ubica con poca precisión (± ${precision} m): sal a cielo abierto o prende el GPS y toca 'Reintentar ubicación'.` : "")
     };
     elements.locationStatus.textContent = state.fueraDePunto.mensaje;
@@ -6759,6 +6762,7 @@ function getOpenAttendanceInfo() {
 
 function hideDriverGreetingCard() {
   state.identidadConfirmada = false;
+  elements.puntoAviso?.classList.add("hidden");
   if (!elements.driverGreetingCard) return;
   elements.driverGreetingCard.classList.add("hidden");
   elements.driverGreetingCard.innerHTML = "";
@@ -6799,14 +6803,21 @@ function renderDriverGreetingCard() {
       </div>
     `;
   } else {
+    // Sin estar en un punto autorizado no se pasa de aqui (ver revisarPuntoDeMarca).
+    const bloqueoPunto = hayPuntosDeMarca() && !state.currentLocation;
+    const textoSi = !bloqueoPunto
+      ? `Sí, soy yo · registrar mi ${sentido.toUpperCase()}`
+      : state.revisandoPunto
+        ? "Revisando tu ubicación…"
+        : state.fueraDePunto ? "Acércate a un lugar autorizado para seguir" : "Activa la ubicación para seguir";
     cuerpo = `
       <p class="driver-greeting-question">
         Verifica el nombre y el tipo de marca antes de continuar.
       </p>
       <div class="driver-greeting-actions">
-        <button id="confirmIdentityYesButton" class="primary wide" type="button">
-          <i data-lucide="check-circle-2"></i>
-          Sí, soy yo · registrar mi ${sentido.toUpperCase()}
+        <button id="confirmIdentityYesButton" class="primary wide" type="button"${bloqueoPunto ? " disabled" : ""}>
+          <i data-lucide="${bloqueoPunto ? "map-pin-off" : "check-circle-2"}"></i>
+          ${escapeHtml(textoSi)}
         </button>
         <button id="confirmIdentityNoButton" class="secondary wide" type="button">
           <i data-lucide="x-circle"></i>
@@ -6850,9 +6861,93 @@ function mostrarConfirmacionIdentidad() {
     elements.stepGuideText.textContent = "Confirma que eres tú y el tipo de marca para continuar.";
   }
   setMessage(elements.formMessage, "Confirma tu identidad y el tipo de marca para continuar.", "success");
+  revisarPuntoDeMarca();
+}
+
+// ---- Donde se puede marcar: se revisa apenas se valida la cedula, para no
+// hacer la foto y todo el proceso y enterarse al final de que ahi no se puede.
+function hayPuntosDeMarca() {
+  return Array.isArray(config.PUNTOS_OPERATIVOS) && config.PUNTOS_OPERATIVOS.length > 0;
+}
+
+// Un renglon por lugar (el primer centro de cada nombre), para la lista de autorizados.
+function lugaresAutorizados() {
+  const vistos = new Map();
+  (config.PUNTOS_OPERATIVOS || []).forEach((p) => {
+    const nombre = p.nombre || p.name;
+    if (nombre && !vistos.has(nombre)) {
+      vistos.set(nombre, { nombre, latitud: Number(p.latitud ?? p.lat), longitud: Number(p.longitud ?? p.lng) });
+    }
+  });
+  return [...vistos.values()];
+}
+
+async function revisarPuntoDeMarca() {
+  if (!hayPuntosDeMarca() || !elements.puntoAviso) return;
+  state.revisandoPunto = true;
+  pintarPuntoAviso();
+  renderDriverGreetingCard();
+  try {
+    await captureCurrentLocation();
+  } finally {
+    state.revisandoPunto = false;
+  }
+  pintarPuntoAviso();
+  renderDriverGreetingCard();
+}
+
+function pintarPuntoAviso() {
+  const el = elements.puntoAviso;
+  if (!el) return;
+  const lugares = lugaresAutorizados();
+  const nombres = lugares.map((l) => l.nombre);
+  const listaTexto = nombres.length > 1 ? `${nombres.slice(0, -1).join(", ")} o ${nombres[nombres.length - 1]}` : nombres.join("");
+  const desde = state.fueraDePunto?.posicion;
+  const listaHtml = `
+    <p class="punto-aviso-sub">Lugares autorizados para marcar:</p>
+    <ul class="punto-aviso-lugares">
+      ${lugares.map((l) => `
+        <li>
+          <strong>${escapeHtml(l.nombre)}</strong>
+          ${desde ? `<span>a ${escapeHtml(distanciaTexto(calculateDistanceMeters(desde.latitud, desde.longitud, l.latitud, l.longitud)))}</span>` : ""}
+          <a href="https://www.google.com/maps/search/?api=1&query=${l.latitud},${l.longitud}" target="_blank" rel="noopener">Ver en el mapa</a>
+        </li>`).join("")}
+    </ul>
+    <button id="puntoReintentarButton" class="secondary wide" type="button">
+      <i data-lucide="refresh-cw"></i>
+      Ya llegué: revisar otra vez
+    </button>`;
+
+  if (state.revisandoPunto) {
+    el.className = "punto-aviso revisando";
+    el.innerHTML = `<strong><i data-lucide="map-pin"></i> Revisando dónde estás…</strong>
+      <p>Solo se puede marcar en ${escapeHtml(listaTexto)}.</p>`;
+  } else if (state.currentLocation) {
+    el.className = "punto-aviso dentro";
+    el.innerHTML = `<strong><i data-lucide="check-circle-2"></i> Estás en ${escapeHtml(state.currentLocation.punto_operativo || "un lugar autorizado")}</strong>
+      <p>Puedes marcar aquí.</p>`;
+  } else if (state.fueraDePunto) {
+    el.className = "punto-aviso fuera";
+    el.innerHTML = `<strong><i data-lucide="map-pin-off"></i> Aquí no se puede marcar</strong>
+      <p>${escapeHtml(state.fueraDePunto.mensaje)}</p>${listaHtml}`;
+  } else {
+    el.className = "punto-aviso sin-ubicacion";
+    el.innerHTML = `<strong><i data-lucide="map-pin-off"></i> No sabemos dónde estás</strong>
+      <p>Activa la ubicación del celular y dale permiso a esta app. Solo se puede marcar en ${escapeHtml(listaTexto)}.</p>${listaHtml}`;
+  }
+  el.classList.remove("hidden");
+  if (window.lucide?.createIcons) window.lucide.createIcons();
+  $("#puntoReintentarButton")?.addEventListener("click", revisarPuntoDeMarca);
 }
 
 async function confirmarIdentidadYContinuar() {
+  if (hayPuntosDeMarca() && !state.currentLocation) {
+    await revisarPuntoDeMarca();
+    if (!state.currentLocation) {
+      elements.puntoAviso?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+  }
   // Segunda confirmacion, aparte de "soy yo": el tipo de marca (ENTRADA/SALIDA) es
   // justo lo que mas se presta a error/toque accidental, asi que pide un tap extra
   // y explicito antes de abrir la camara.

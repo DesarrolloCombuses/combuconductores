@@ -278,6 +278,12 @@ personal (`PUNTOS_MARCA` en `gestores/gestores-app.js` y en la función
 A cada radio se le suma lo que el celular diga que se puede equivocar, hasta 50 m.
 Si la precisión pasa de 200 m, el aviso pide salir a cielo abierto o prender el GPS.
 
+Desde la v1.15.1 (y g2.3.1) se avisa **antes** de hacer el proceso: en el portal, apenas
+se valida la cédula sale "Estás en …" o "Aquí no se puede marcar" con los lugares
+autorizados (a cuánto queda cada uno y su mapa) y "Ya llegué: revisar otra vez"; lejos,
+"Sí, soy yo" queda bloqueado. En la app del personal, la foto no se deja tomar hasta
+saber que está en un punto.
+
 ### Personal de la empresa que se sube al bus (v1.12.0)
 
 El personal de la empresa (gestoras, auxiliares, mecánicos, un conductor que va
@@ -317,7 +323,7 @@ sus iconos; usa `css/portal.css`, `js/vendor/jsQR.min.js` y la llave pública de
 `almacentro/enturnes/sql/tarjeta_despacho.sql` (para pasar de la v9:
 `personal_empresa.sql`).
 
-La versión de la app del personal va aparte (`g2.3.0`): está en
+La versión de la app del personal va aparte (`g2.3.1`): está en
 `gestores/gestores-app.js`, en `gestores/sw.js` y en los `?v=` y el `esta` del
 final de `gestores/index.html`. Si cambia `css/portal.css` o `js/vendor/jsQR.min.js`, hay
 que subirla también, o los celulares siguen con los guardados.

@@ -664,6 +664,42 @@ svg {
   margin-bottom: 4px;
 }
 
+/* Donde se puede marcar: sale apenas se valida la cedula (revisarPuntoDeMarca). */
+.punto-aviso {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  background: var(--panel-2);
+  color: var(--ink);
+}
+.punto-aviso.hidden { display: none; }
+.punto-aviso > strong { display: flex; align-items: center; gap: 8px; font-size: 1.02rem; }
+.punto-aviso > strong svg { width: 20px; height: 20px; flex: none; }
+.punto-aviso p { margin: 0; font-size: 0.93rem; line-height: 1.4; }
+.punto-aviso.revisando { color: var(--muted); }
+.punto-aviso.dentro { border-color: #9ec5ba; background: #e7f5ec; color: #064526; }
+.punto-aviso.fuera { border-color: #f1b8b2; background: #fdecea; color: #7a1a12; }
+.punto-aviso.sin-ubicacion { border-color: #f0d28a; background: #fff6e3; color: #7a5200; }
+.punto-aviso-sub { margin-top: 4px !important; font-weight: 700; color: var(--ink); }
+.punto-aviso-lugares { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.punto-aviso-lugares li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+.punto-aviso-lugares li span { color: var(--muted); font-size: 0.9rem; }
+.punto-aviso-lugares li a { margin-left: auto; color: var(--primary); font-weight: 600; font-size: 0.9rem; }
+.punto-aviso button { margin-top: 4px; }
+
 /* Tarjeta de confirmacion: nombre del colaborador (para confirmar identidad de
    un vistazo), el sentido grande (ENTRADA/SALIDA) que va a quedar registrado y,
    mientras no se confirme, los botones que bloquean el paso a la camara. */
