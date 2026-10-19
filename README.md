@@ -267,15 +267,17 @@ está del punto más cercano. Aplica a la pestaña Asistencia del portal
 personal (`PUNTOS_MARCA` en `gestores/gestores-app.js` y en la función
 `personal-marcar-asistencia`, que es la que decide). Las tres listas van iguales.
 
-| Punto | Centro | Radio |
-|---|---|---|
-| Almacentro | zona del enturne | 150 m |
-| Almacentro | bahía del CC San Diego | 150 m |
-| Nutibara | donde está el biométrico, 535 m al oriente de la bahía (ahí marca la gente) | 200 m |
-| Nutibara | la bahía del mapa | 150 m |
-| Terminal Norte | zona del enturne | 150 m |
+Desde la v1.15.2 (g2.3.2) cuenta el **cuadro de la geocerca** del mapa del enturne
+(`enturnes/zonas.json`), no un círculo:
 
-A cada radio se le suma lo que el celular diga que se puede equivocar, hasta 50 m.
+| Punto | Cuadros |
+|---|---|
+| Almacentro | Almacentro y la bahía del CC San Diego |
+| Nutibara | Nutibara (la bahía; la oficina de la Av. Oriental, 535 m al oriente, no cuenta) |
+| Terminal Norte | Terminal Norte |
+
+Al borde del cuadro se le perdona lo que el celular diga que se puede equivocar, hasta
+20 m (con el cuadro estricto, 1 de cada 20 marcas reales de la Terminal quedaba afuera).
 Si la precisión pasa de 200 m, el aviso pide salir a cielo abierto o prender el GPS.
 
 Desde la v1.15.1 (y g2.3.1) se avisa **antes** de hacer el proceso: en el portal, apenas
@@ -323,7 +325,7 @@ sus iconos; usa `css/portal.css`, `js/vendor/jsQR.min.js` y la llave pública de
 `almacentro/enturnes/sql/tarjeta_despacho.sql` (para pasar de la v9:
 `personal_empresa.sql`).
 
-La versión de la app del personal va aparte (`g2.3.1`): está en
+La versión de la app del personal va aparte (`g2.3.2`): está en
 `gestores/gestores-app.js`, en `gestores/sw.js` y en los `?v=` y el `esta` del
 final de `gestores/index.html`. Si cambia `css/portal.css` o `js/vendor/jsQR.min.js`, hay
 que subirla también, o los celulares siguen con los guardados.

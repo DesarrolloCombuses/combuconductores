@@ -5790,31 +5790,62 @@ async function captureCurrentLocation() {
   return state.currentLocation;
 }
 
-function findNearestOperationalPoint(location) {
-  const points = Array.isArray(config.PUNTOS_OPERATIVOS) ? config.PUNTOS_OPERATIVOS : [];
-  const validPoints = points
-    .map((point) => ({
-      name: point.nombre || point.name || "",
-      latitud: Number(point.latitud ?? point.lat),
-      longitud: Number(point.longitud ?? point.lng),
-      radio: Number(point.radio_metros ?? point.radio ?? 200)
-    }))
+// Los PUNTOS_OPERATIVOS en una sola forma: con "poligono" (el cuadro de la geocerca, desde el 19-oct-2026)
+// o, como antes, centro + radio. latitud/longitud es el centro (para el enlace al mapa).
+function puntosDeMarca() {
+  return (Array.isArray(config.PUNTOS_OPERATIVOS) ? config.PUNTOS_OPERATIVOS : [])
+    .map((point) => {
+      const poligono = Array.isArray(point.poligono) ? point.poligono.map((v) => [Number(v[0]), Number(v[1])]) : null;
+      const centro = poligono
+        ? [poligono.reduce((s, v) => s + v[0], 0) / poligono.length, poligono.reduce((s, v) => s + v[1], 0) / poligono.length]
+        : [Number(point.latitud ?? point.lat), Number(point.longitud ?? point.lng)];
+      return {
+        name: point.nombre || point.name || "",
+        poligono,
+        latitud: centro[0],
+        longitud: centro[1],
+        radio: poligono ? 0 : Number(point.radio_metros ?? point.radio ?? 200)
+      };
+    })
     .filter((point) => point.name && Number.isFinite(point.latitud) && Number.isFinite(point.longitud));
-
-  if (!validPoints.length) return null;
-
-  // El de radio mas cerca; adentro si cae en su radio mas lo que el GPS dice que se puede equivocar (hasta 50 m).
-  const holgura = Math.min(Number(location.precision) || 0, TOLERANCIA_GPS_M);
-  const cerca = validPoints
-    .map((point) => ({
-      ...point,
-      distance: calculateDistanceMeters(location.latitud, location.longitud, point.latitud, point.longitud)
-    }))
-    .sort((a, b) => (a.distance - a.radio) - (b.distance - b.radio))[0];
-  return { ...cerca, dentro: cerca.distance <= cerca.radio + holgura };
 }
 
-const TOLERANCIA_GPS_M = 50;
+// Metros desde la ubicacion hasta el punto: 0 si esta dentro del cuadro (o del circulo).
+function metrosAlPunto(lat, lon, point) {
+  if (!point.poligono) return Math.max(0, calculateDistanceMeters(lat, lon, point.latitud, point.longitud) - point.radio);
+  const pol = point.poligono;
+  let dentro = false;
+  for (let i = 0, j = pol.length - 1; i < pol.length; j = i++) {
+    const [yi, xi] = pol[i];
+    const [yj, xj] = pol[j];
+    if ((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) dentro = !dentro;
+  }
+  if (dentro) return 0;
+  const kx = 111320 * Math.cos(lat * Math.PI / 180);
+  const ky = 110540;
+  let mejor = Infinity;
+  for (let i = 0, j = pol.length - 1; i < pol.length; j = i++) {
+    const ax = (pol[i][1] - lon) * kx, ay = (pol[i][0] - lat) * ky, bx = (pol[j][1] - lon) * kx, by = (pol[j][0] - lat) * ky;
+    const dx = bx - ax, dy = by - ay;
+    const u = Math.max(0, Math.min(1, -(ax * dx + ay * dy) / (dx * dx + dy * dy || 1)));
+    mejor = Math.min(mejor, Math.hypot(ax + u * dx, ay + u * dy));
+  }
+  return mejor;
+}
+
+function findNearestOperationalPoint(location) {
+  const validPoints = puntosDeMarca();
+  if (!validPoints.length) return null;
+
+  // El mas cerca; adentro si esta en el cuadro, o al borde por lo que el GPS dice que se puede equivocar (hasta 20 m).
+  const holgura = Math.min(Number(location.precision) || 0, TOLERANCIA_GPS_M);
+  const cerca = validPoints
+    .map((point) => ({ ...point, distance: metrosAlPunto(location.latitud, location.longitud, point) }))
+    .sort((a, b) => a.distance - b.distance)[0];
+  return { ...cerca, dentro: cerca.distance <= holgura };
+}
+
+const TOLERANCIA_GPS_M = 20;
 
 function distanciaTexto(m) {
   return m >= 1000 ? `${(m / 1000).toFixed(1).replace(".", ",")} km` : `${Math.round(m)} m`;
@@ -5836,7 +5867,7 @@ function formatLocationStatus(location, point) {
   if (!point) return `${coords} ${precision} Sin puntos operativos configurados.`;
 
   const distance = Math.round(point.distance);
-  return `${coords} ${precision} Punto: ${point.name} a ${distance} m (${point.dentro ? "dentro" : "fuera"} del radio).`;
+  return `${coords} ${precision} Punto: ${point.name}, ${point.dentro ? "dentro de la geocerca" : `a ${distance} m de la geocerca`}.`;
 }
 
 const DUPLICADO_MINUTOS = 30;
@@ -6873,11 +6904,9 @@ function hayPuntosDeMarca() {
 // Un renglon por lugar (el primer centro de cada nombre), para la lista de autorizados.
 function lugaresAutorizados() {
   const vistos = new Map();
-  (config.PUNTOS_OPERATIVOS || []).forEach((p) => {
-    const nombre = p.nombre || p.name;
-    if (nombre && !vistos.has(nombre)) {
-      vistos.set(nombre, { nombre, latitud: Number(p.latitud ?? p.lat), longitud: Number(p.longitud ?? p.lng) });
-    }
+  puntosDeMarca().forEach((p) => {
+    if (!vistos.has(p.name)) vistos.set(p.name, { nombre: p.name, latitud: p.latitud, longitud: p.longitud, partes: [] });
+    vistos.get(p.name).partes.push(p);
   });
   return [...vistos.values()];
 }
@@ -6909,7 +6938,7 @@ function pintarPuntoAviso() {
       ${lugares.map((l) => `
         <li>
           <strong>${escapeHtml(l.nombre)}</strong>
-          ${desde ? `<span>a ${escapeHtml(distanciaTexto(calculateDistanceMeters(desde.latitud, desde.longitud, l.latitud, l.longitud)))}</span>` : ""}
+          ${desde ? `<span>a ${escapeHtml(distanciaTexto(Math.min(...l.partes.map((q) => metrosAlPunto(desde.latitud, desde.longitud, q)))))}</span>` : ""}
           <a href="https://www.google.com/maps/search/?api=1&query=${l.latitud},${l.longitud}" target="_blank" rel="noopener">Ver en el mapa</a>
         </li>`).join("")}
     </ul>

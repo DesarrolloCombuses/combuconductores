@@ -32,7 +32,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "g2.3.1";
+  var VERSION = "g2.3.2";
   var cfg = window.PORTAL_CONFIG || {};
   var RPC_QUIEN_SOY = "personal_quien_soy";
   var RPC_REGISTRAR = "personal_registrar_subida";
@@ -657,30 +657,47 @@
     show($("asisRepetir"), tomada);
   }
 
-  // Solo se marca en estos puntos (19-oct-2026; el Aeropuerto y Exposiciones no). Iguales a PUNTOS_MARCA
-  // de la función personal-marcar-asistencia, que es la que decide; aquí es para avisar antes de la selfie.
+  // Solo se marca en estos puntos (19-oct-2026; el Aeropuerto, Exposiciones y la oficina de la Av. Oriental no).
+  // Los CUADROS de las geocercas del mapa del enturne (enturnes/zonas.json), no un circulo: pedido del usuario el 19-oct-2026. Iguales a PUNTOS_MARCA de la
+  // función personal-marcar-asistencia, que es la que decide; aquí es para avisar antes de la selfie.
   var PUNTOS_MARCA = [
-    { nombre: "Almacentro", lat: 6.23640, lon: -75.57095, radio: 150 },
-    { nombre: "Almacentro", lat: 6.23692, lon: -75.57000, radio: 150 },     // bahía del CC San Diego
-    { nombre: "Nutibara", lat: 6.25184, lon: -75.56211, radio: 200 },       // donde está el biométrico
-    { nombre: "Nutibara", lat: 6.25290, lon: -75.56683, radio: 150 },       // la bahía del mapa
-    { nombre: "Terminal Norte", lat: 6.27981, lon: -75.57143, radio: 150 },
+    { nombre: "Almacentro", zona: "Almacentro", poligono: [[6.2355, -75.5719], [6.2373, -75.5719], [6.2373, -75.57], [6.2355, -75.57]] },
+    { nombre: "Almacentro", zona: "CC San Diego (bahía de despacho)", poligono: [[6.2364, -75.5709], [6.2369, -75.5709], [6.2369, -75.5702], [6.23745, -75.5702], [6.23745, -75.5689], [6.2364, -75.5689]] },
+    { nombre: "Nutibara", zona: "Nutibara", poligono: [[6.2535359, -75.5669743], [6.2531093, -75.5661964], [6.2522721, -75.5667749], [6.2526933, -75.5673874]] },
+    { nombre: "Terminal Norte", zona: "Terminal Norte", poligono: [[6.280523, -75.5715718], [6.2803417, -75.5710459], [6.2791579, -75.5714294], [6.2792059, -75.5716682]] },
   ];
-  var TOLERANCIA_GPS_M = 50;
+  var TOLERANCIA_GPS_M = 20;   // en el borde del cuadro, por el error del GPS
 
-  function metrosEntre(lat1, lon1, lat2, lon2) {
-    var rad = function (g) { return g * Math.PI / 180; };
-    var a = Math.pow(Math.sin(rad(lat2 - lat1) / 2), 2) +
-      Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.pow(Math.sin(rad(lon2 - lon1) / 2), 2);
-    return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  function dentroDelPoligono(lat, lon, pol) {
+    var dentro = false;
+    for (var i = 0, j = pol.length - 1; i < pol.length; j = i++) {
+      var yi = pol[i][0], xi = pol[i][1], yj = pol[j][0], xj = pol[j][1];
+      if ((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) dentro = !dentro;
+    }
+    return dentro;
+  }
+
+  function metrosAlBorde(lat, lon, pol) {
+    var kx = 111320 * Math.cos(lat * Math.PI / 180), ky = 110540, mejor = Infinity;
+    for (var i = 0, j = pol.length - 1; i < pol.length; j = i++) {
+      var ax = (pol[i][1] - lon) * kx, ay = (pol[i][0] - lat) * ky, bx = (pol[j][1] - lon) * kx, by = (pol[j][0] - lat) * ky;
+      var dx = bx - ax, dy = by - ay;
+      var u = Math.max(0, Math.min(1, -(ax * dx + ay * dy) / (dx * dx + dy * dy || 1)));
+      mejor = Math.min(mejor, Math.sqrt(Math.pow(ax + u * dx, 2) + Math.pow(ay + u * dy, 2)));
+    }
+    return mejor;
+  }
+
+  function metrosA(lat, lon, p) {
+    return dentroDelPoligono(lat, lon, p.poligono) ? 0 : metrosAlBorde(lat, lon, p.poligono);
   }
 
   function puntoDeMarca(lat, lon, precision) {
     var holgura = Math.min(isFinite(precision) ? precision : 0, TOLERANCIA_GPS_M);
     var cerca = PUNTOS_MARCA.map(function (p) {
-      return { nombre: p.nombre, radio: p.radio, distancia: metrosEntre(lat, lon, p.lat, p.lon) };
-    }).sort(function (a, b) { return (a.distancia - a.radio) - (b.distancia - b.radio); })[0];
-    cerca.dentro = cerca.distancia <= cerca.radio + holgura;
+      return { nombre: p.nombre, distancia: metrosA(lat, lon, p) };
+    }).sort(function (a, b) { return a.distancia - b.distancia; })[0];
+    cerca.dentro = cerca.distancia <= holgura;
     return cerca;
   }
 
@@ -691,12 +708,19 @@
   // Lejos (o sin GPS): los lugares autorizados, a cuánto queda cada uno, y "revisar otra vez".
   function pintarLugaresMarca(desde) {
     var vistos = {};
-    var lugares = PUNTOS_MARCA.filter(function (p) { if (vistos[p.nombre]) return false; vistos[p.nombre] = true; return true; });
+    var lugares = PUNTOS_MARCA.filter(function (p) { if (vistos[p.nombre]) return false; vistos[p.nombre] = true; return true; })
+      .map(function (p) {
+        var lat = 0, lon = 0;
+        p.poligono.forEach(function (v) { lat += v[0] / p.poligono.length; lon += v[1] / p.poligono.length; });
+        var mismos = PUNTOS_MARCA.filter(function (q) { return q.nombre === p.nombre; });
+        return { nombre: p.nombre, lat: lat, lon: lon, mismos: mismos };
+      });
     var caja = $("asisLugares");
     caja.innerHTML = '<p class="asis-lugares-titulo">Lugares autorizados para marcar:</p><ul>' +
       lugares.map(function (l) {
         return "<li><b>" + escapeHtml(l.nombre) + "</b>" +
-          (desde ? "<span>a " + escapeHtml(distanciaTexto(metrosEntre(desde.lat, desde.lon, l.lat, l.lon))) + "</span>" : "") +
+          (desde ? "<span>a " + escapeHtml(distanciaTexto(Math.min.apply(null, l.mismos.map(function (q) {
+            return metrosA(desde.lat, desde.lon, q); })))) + "</span>" : "") +
           '<a href="https://www.google.com/maps/search/?api=1&query=' + l.lat + "," + l.lon + '" target="_blank" rel="noopener">Ver en el mapa</a></li>';
       }).join("") + "</ul>" +
       '<button id="asisReintentarGps" class="btn btn-ghost btn-block" type="button">Ya llegué: revisar otra vez</button>';
