@@ -716,7 +716,7 @@ function setWorkflowState(stage) {
     setNextActionNotice("Paso pendiente: abre la camara y toma una foto del colaborador.");
   } else if (stage === "register") {
     setNextActionNotice(faltaUbicacion
-      ? "Falta la UBICACIÓN para registrar. Toca 'Activar ubicación' y permite el acceso."
+      ? (state.fueraDePunto?.mensaje || "Falta la UBICACIÓN para registrar. Toca 'Activar ubicación' y permite el acceso.")
       : "Ultimo paso: toca el boton verde Registrar asistencia para guardar la marca.");
   }
 }
@@ -728,7 +728,7 @@ function syncSubmitLockPorUbicacion() {
   elements.submitButton.disabled = faltaUbicacion;
   elements.submitButton.classList.toggle("attention", !faltaUbicacion);
   setNextActionNotice(faltaUbicacion
-    ? "Falta la UBICACIÓN para registrar. Toca 'Activar ubicación' y permite el acceso."
+    ? (state.fueraDePunto?.mensaje || "Falta la UBICACIÓN para registrar. Toca 'Activar ubicación' y permite el acceso.")
     : "Ultimo paso: toca el boton verde Registrar asistencia para guardar la marca.");
 }
 
@@ -773,6 +773,7 @@ function resetCaptureState(clearHistory = true) {
   state.faceValidated = false;
   state.faceWarning = "";
   state.currentLocation = null;
+  state.fueraDePunto = null;
   state.isDriverCandidate = false;
   state.attendanceSonarDriver = null;
   state.openEntrada = null;
@@ -5637,7 +5638,7 @@ async function getLocation() {
         else if (code === 3) resolve({ error: "timeout", message: "Tardamos mucho en obtener tu ubicacion. Intenta de nuevo." });
         else resolve({ error: "unknown", message: err?.message || "No se pudo obtener la ubicacion." });
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
     );
   });
 }
@@ -5756,7 +5757,28 @@ async function captureCurrentLocation() {
     return null;
   }
 
+  // Solo se marca en los PUNTOS_OPERATIVOS (supabase-config.js): Almacentro, Nutibara y Terminal Norte desde
+  // el 19-oct-2026. Lejos, la ubicacion no se toma y no se puede registrar. Sin puntos configurados no se limita.
   const point = findNearestOperationalPoint(location);
+  if (point && !point.dentro) {
+    const nombres = [...new Set((config.PUNTOS_OPERATIVOS || []).map((p) => p.nombre || p.name).filter(Boolean))];
+    const lista = nombres.length > 1 ? `${nombres.slice(0, -1).join(", ")} o ${nombres[nombres.length - 1]}` : nombres.join("");
+    const precision = Math.round(Number(location.precision) || 0);
+    state.currentLocation = null;
+    state.fueraDePunto = {
+      nombre: point.name,
+      distancia: point.distance,
+      mensaje: `Está a ${distanciaTexto(point.distance)} de ${point.name}. La asistencia solo se marca en ${lista}.` +
+        (precision > 200 ? ` El GPS ubica con poca precisión (± ${precision} m): sal a cielo abierto o prende el GPS y toca 'Reintentar ubicación'.` : "")
+    };
+    elements.locationStatus.textContent = state.fueraDePunto.mensaje;
+    elements.locationButton.textContent = "Reintentar ubicación";
+    if (elements.locationMap && !state.locationMap) elements.locationMap.textContent = "";
+    renderLocationMap(location.latitud, location.longitud, location.precision);
+    syncSubmitLockPorUbicacion();
+    return null;
+  }
+  state.fueraDePunto = null;
   state.currentLocation = { ...location, punto_operativo: point?.name || "" };
   elements.locationStatus.textContent = formatLocationStatus(state.currentLocation, point);
   if (elements.locationMap && !state.locationMap) elements.locationMap.textContent = "";
@@ -5778,12 +5800,21 @@ function findNearestOperationalPoint(location) {
 
   if (!validPoints.length) return null;
 
-  return validPoints
+  // El de radio mas cerca; adentro si cae en su radio mas lo que el GPS dice que se puede equivocar (hasta 50 m).
+  const holgura = Math.min(Number(location.precision) || 0, TOLERANCIA_GPS_M);
+  const cerca = validPoints
     .map((point) => ({
       ...point,
       distance: calculateDistanceMeters(location.latitud, location.longitud, point.latitud, point.longitud)
     }))
-    .sort((a, b) => a.distance - b.distance)[0];
+    .sort((a, b) => (a.distance - a.radio) - (b.distance - b.radio))[0];
+  return { ...cerca, dentro: cerca.distance <= cerca.radio + holgura };
+}
+
+const TOLERANCIA_GPS_M = 50;
+
+function distanciaTexto(m) {
+  return m >= 1000 ? `${(m / 1000).toFixed(1).replace(".", ",")} km` : `${Math.round(m)} m`;
 }
 
 function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
@@ -5802,8 +5833,7 @@ function formatLocationStatus(location, point) {
   if (!point) return `${coords} ${precision} Sin puntos operativos configurados.`;
 
   const distance = Math.round(point.distance);
-  const inside = distance <= point.radio;
-  return `${coords} ${precision} Punto mas cercano: ${point.name} a ${distance} m (${inside ? "dentro" : "fuera"} del radio).`;
+  return `${coords} ${precision} Punto: ${point.name} a ${distance} m (${point.dentro ? "dentro" : "fuera"} del radio).`;
 }
 
 const DUPLICADO_MINUTOS = 30;
@@ -6010,7 +6040,7 @@ async function submitAttendance(event) {
     elements.locationSection?.classList.remove("hidden");
     const location = await captureCurrentLocation();
     if (!location) {
-      setMessage(elements.formMessage, "La ubicacion es OBLIGATORIA para registrar. Activa el GPS y permite el acceso a la ubicacion, luego toca 'Activar ubicacion'.", "error");
+      setMessage(elements.formMessage, state.fueraDePunto?.mensaje || "La ubicacion es OBLIGATORIA para registrar. Activa el GPS y permite el acceso a la ubicacion, luego toca 'Activar ubicacion'.", "error");
       elements.locationSection?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }

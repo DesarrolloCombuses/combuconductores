@@ -32,7 +32,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "g2.2.2";
+  var VERSION = "g2.3.0";
   var cfg = window.PORTAL_CONFIG || {};
   var RPC_QUIEN_SOY = "personal_quien_soy";
   var RPC_REGISTRAR = "personal_registrar_subida";
@@ -657,7 +657,38 @@
     show($("asisRepetir"), tomada);
   }
 
-  // La ubicación es obligatoria (como en el biométrico).
+  // Solo se marca en estos puntos (19-oct-2026; el Aeropuerto y Exposiciones no). Iguales a PUNTOS_MARCA
+  // de la función personal-marcar-asistencia, que es la que decide; aquí es para avisar antes de la selfie.
+  var PUNTOS_MARCA = [
+    { nombre: "Almacentro", lat: 6.23640, lon: -75.57095, radio: 150 },
+    { nombre: "Almacentro", lat: 6.23692, lon: -75.57000, radio: 150 },     // bahía del CC San Diego
+    { nombre: "Nutibara", lat: 6.25184, lon: -75.56211, radio: 200 },       // donde está el biométrico
+    { nombre: "Nutibara", lat: 6.25290, lon: -75.56683, radio: 150 },       // la bahía del mapa
+    { nombre: "Terminal Norte", lat: 6.27981, lon: -75.57143, radio: 150 },
+  ];
+  var TOLERANCIA_GPS_M = 50;
+
+  function metrosEntre(lat1, lon1, lat2, lon2) {
+    var rad = function (g) { return g * Math.PI / 180; };
+    var a = Math.pow(Math.sin(rad(lat2 - lat1) / 2), 2) +
+      Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.pow(Math.sin(rad(lon2 - lon1) / 2), 2);
+    return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function puntoDeMarca(lat, lon, precision) {
+    var holgura = Math.min(isFinite(precision) ? precision : 0, TOLERANCIA_GPS_M);
+    var cerca = PUNTOS_MARCA.map(function (p) {
+      return { nombre: p.nombre, radio: p.radio, distancia: metrosEntre(lat, lon, p.lat, p.lon) };
+    }).sort(function (a, b) { return (a.distancia - a.radio) - (b.distancia - b.radio); })[0];
+    cerca.dentro = cerca.distancia <= cerca.radio + holgura;
+    return cerca;
+  }
+
+  function distanciaTexto(m) {
+    return m >= 1000 ? (m / 1000).toFixed(1).replace(".", ",") + " km" : Math.round(m) + " m";
+  }
+
+  // La ubicación es obligatoria (como en el biométrico) y tiene que ser en uno de los puntos.
   function pedirUbicacionMarca() {
     asis.gps = null;
     asis.gpsError = null;
@@ -671,14 +702,24 @@
       return;
     }
     navigator.geolocation.getCurrentPosition(function (p) {
+      var punto = puntoDeMarca(p.coords.latitude, p.coords.longitude, p.coords.accuracy);
+      if (!punto.dentro) {
+        asis.gpsError = "Está a " + distanciaTexto(punto.distancia) + " de " + punto.nombre +
+          ". La asistencia solo se marca en Almacentro, Nutibara o Terminal Norte." +
+          (p.coords.accuracy > 200 ? " Su celular ubica con poca precisión (± " + Math.round(p.coords.accuracy) +
+            " m): salga a cielo abierto o prenda el GPS." : "");
+        el.setAttribute("data-estado", "error");
+        el.textContent = asis.gpsError;
+        return;
+      }
       asis.gps = { lat: p.coords.latitude, lon: p.coords.longitude, precision: p.coords.accuracy };
       el.setAttribute("data-estado", "ok");
-      el.textContent = "✓ Ubicación lista" + (isFinite(p.coords.accuracy) ? " (± " + Math.round(p.coords.accuracy) + " m)" : "");
+      el.textContent = "✓ Está en " + punto.nombre + (isFinite(p.coords.accuracy) ? " (± " + Math.round(p.coords.accuracy) + " m)" : "");
     }, function () {
       asis.gpsError = "No se pudo saber dónde está: active la ubicación del celular y dele permiso a esta app.";
       el.setAttribute("data-estado", "error");
       el.textContent = asis.gpsError;
-    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 });
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });   // la de ahora: si se acercó al punto, que cuente
   }
 
   async function abrirMarca() {

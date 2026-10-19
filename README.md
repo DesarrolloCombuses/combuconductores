@@ -257,6 +257,27 @@ instalada puede volver a preguntar el permiso al abrirse. Seguir la ubicación
 todo el tiempo, con la app cerrada, exige una app nativa (por ejemplo,
 empaquetar el portal con Capacitor).
 
+### Dónde se puede marcar la asistencia (v1.15.0)
+
+Desde el 19-oct-2026 la entrada y la salida solo se marcan en **Almacentro,
+Nutibara o Terminal Norte** (el Aeropuerto y Exposiciones no). Lejos de esos
+puntos la app no toma la ubicación y no deja registrar: dice a cuántos metros
+está del punto más cercano. Aplica a la pestaña Asistencia del portal
+(`PUNTOS_OPERATIVOS` en `modulos/asistencia/supabase-config.js`) y a la app del
+personal (`PUNTOS_MARCA` en `gestores/gestores-app.js` y en la función
+`personal-marcar-asistencia`, que es la que decide). Las tres listas van iguales.
+
+| Punto | Centro | Radio |
+|---|---|---|
+| Almacentro | zona del enturne | 150 m |
+| Almacentro | bahía del CC San Diego | 150 m |
+| Nutibara | donde está el biométrico, 535 m al oriente de la bahía (ahí marca la gente) | 200 m |
+| Nutibara | la bahía del mapa | 150 m |
+| Terminal Norte | zona del enturne | 150 m |
+
+A cada radio se le suma lo que el celular diga que se puede equivocar, hasta 50 m.
+Si la precisión pasa de 200 m, el aviso pide salir a cielo abierto o prender el GPS.
+
 ### Personal de la empresa que se sube al bus (v1.12.0)
 
 El personal de la empresa (gestoras, auxiliares, mecánicos, un conductor que va
@@ -296,7 +317,7 @@ sus iconos; usa `css/portal.css`, `js/vendor/jsQR.min.js` y la llave pública de
 `almacentro/enturnes/sql/tarjeta_despacho.sql` (para pasar de la v9:
 `personal_empresa.sql`).
 
-La versión de la app del personal va aparte (`g2.2.2`): está en
+La versión de la app del personal va aparte (`g2.3.0`): está en
 `gestores/gestores-app.js`, en `gestores/sw.js` y en los `?v=` y el `esta` del
 final de `gestores/index.html`. Si cambia `css/portal.css` o `js/vendor/jsQR.min.js`, hay
 que subirla también, o los celulares siguen con los guardados.
@@ -332,6 +353,8 @@ primera vez.
   9-jul-2026), la salida mínimo 1 hora después de la entrada, nada repetido en 30
   minutos, máximo 6 marcas al día desde la app. Una entrada de **más de 16 horas**
   sin salida (Buk la rechaza) no deja marcar: hay que cerrarla primero.
+- **Solo se marca en Almacentro, Nutibara o Terminal Norte** (g2.3.0): la app avisa
+  apenas tiene el GPS, antes de la selfie, y la función lo vuelve a revisar.
 - **La tarjeta Mi asistencia va en verde** (g2.2.2, pedido del usuario); el resto de
   la app sigue morado.
 - **Se me olvidó marcar la salida** (g2.2.0): sale con una entrada de otro día sin
