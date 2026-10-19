@@ -278,7 +278,15 @@ Desde la v1.15.2 (g2.3.2) cuenta el **cuadro de la geocerca** del mapa del entur
 
 Al borde del cuadro se le perdona lo que el celular diga que se puede equivocar, hasta
 20 m (con el cuadro estricto, 1 de cada 20 marcas reales de la Terminal quedaba afuera).
-Si la precisión pasa de 200 m, el aviso pide salir a cielo abierto o prender el GPS.
+
+Desde la v1.15.3 (g2.3.3) el **GPS tiene que estar prendido**: con el GPS apagado el
+celular igual da una ubicación, pero por wifi o antena (± 100 m o más), y esa ya no
+sirve. La app espera hasta 15 s a que el GPS enganche (la primera ubicación suele ser la
+de wifi) y, si no engancha, dice "Prende el GPS del celular" y no deja seguir. La
+función `personal-marcar-asistencia` rechaza lo mismo (`sin_gps`). El kiosco (cuenta
+admin) no tiene GPS y no se le exige. En el mes anterior ninguna marca del celular pasó
+de ± 100 m; las de ± 100 m justos (78 de 2016, de 59 personas que otras veces sí
+marcaron con GPS) eran esa primera ubicación.
 
 Desde la v1.15.1 (y g2.3.1) se avisa **antes** de hacer el proceso: en el portal, apenas
 se valida la cédula sale "Estás en …" o "Aquí no se puede marcar" con los lugares
@@ -325,7 +333,7 @@ sus iconos; usa `css/portal.css`, `js/vendor/jsQR.min.js` y la llave pública de
 `almacentro/enturnes/sql/tarjeta_despacho.sql` (para pasar de la v9:
 `personal_empresa.sql`).
 
-La versión de la app del personal va aparte (`g2.3.2`): está en
+La versión de la app del personal va aparte (`g2.3.3`): está en
 `gestores/gestores-app.js`, en `gestores/sw.js` y en los `?v=` y el `esta` del
 final de `gestores/index.html`. Si cambia `css/portal.css` o `js/vendor/jsQR.min.js`, hay
 que subirla también, o los celulares siguen con los guardados.

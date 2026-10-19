@@ -5620,10 +5620,28 @@ function setupHistoryDefaults() {
   elements.historyEndDateInput.value = now.date;
 }
 
-async function getLocation() {
+// Con el GPS apagado el celular igual da una ubicacion, pero por wifi o antena: ± 100 m o mas. Esa no sirve para
+// marcar desde el celular (pedido del usuario el 19-oct-2026: "el GPS debe estar encendido, si no nos hacen trampa").
+// Igual en la funcion personal-marcar-asistencia y en la app del personal. El kiosco (admin) no tiene GPS: no aplica.
+const PRECISION_GPS_MAX_M = 100;
+const ESPERA_GPS_MS = 15000;
+let vigiaGps = null;
+
+function conGps(precision) {
+  const m = Math.round(Number(precision));
+  return Number.isFinite(m) && m > 0 && m < PRECISION_GPS_MAX_M;
+}
+
+function soltarGps() {
+  if (vigiaGps != null) navigator.geolocation?.clearWatch(vigiaGps);
+  vigiaGps = null;
+}
+
+async function getLocation({ esperarGps = false, mientras = null } = {}) {
   if (!navigator.geolocation) {
     return { error: "unsupported", message: "Tu navegador no soporta geolocalizacion." };
   }
+  if (esperarGps) return ubicacionConGps(mientras);
 
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
@@ -5640,6 +5658,39 @@ async function getLocation() {
         else resolve({ error: "unknown", message: err?.message || "No se pudo obtener la ubicacion." });
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
+    );
+  });
+}
+
+// La mejor ubicacion en ESPERA_GPS_MS: apenas haya una con GPS, esa (la primera suele ser la de wifi, antes de que
+// el GPS enganche); si no llega, la mejor que hubo, y captureCurrentLocation dice que prenda el GPS.
+function ubicacionConGps(mientras) {
+  soltarGps();
+  return new Promise((resolve) => {
+    let mejor = null;
+    let termino = false;
+    const dato = (p) => ({ latitud: p.coords.latitude, longitud: p.coords.longitude, precision: p.coords.accuracy });
+    const fin = (r) => {
+      if (termino) return;
+      termino = true;
+      clearTimeout(reloj);
+      soltarGps();
+      resolve(r);
+    };
+    const reloj = setTimeout(() => fin(mejor ? dato(mejor)
+      : { error: "timeout", message: "Tardamos mucho en obtener tu ubicacion. Intenta de nuevo." }), ESPERA_GPS_MS);
+    vigiaGps = navigator.geolocation.watchPosition(
+      (p) => {
+        if (!mejor || !(p.coords.accuracy >= mejor.coords.accuracy)) mejor = p;
+        if (conGps(p.coords.accuracy)) fin(dato(p));
+        else if (!termino) mientras?.(p.coords.accuracy);
+      },
+      (err) => {
+        // Sin permiso, o con la ubicacion apagada (y nada todavia): no hay nada que esperar.
+        if (err?.code === 1) fin({ error: "denied", message: "Permiso de ubicacion denegado." });
+        else if (err?.code === 2 && !mejor) fin({ error: "unavailable", message: "No se pudo determinar tu ubicacion. Activa el GPS." });
+      },
+      { enableHighAccuracy: true, timeout: ESPERA_GPS_MS, maximumAge: 0 }
     );
   });
 }
@@ -5740,7 +5791,11 @@ async function captureCurrentLocation() {
   if (elements.locationMap && !state.locationMap) elements.locationMap.textContent = "Cargando mapa...";
   showLocationPermissionHelp(false);
 
-  const location = await getLocation();
+  const exigirGps = !state.isAdmin;
+  const location = await getLocation({
+    esperarGps: exigirGps,
+    mientras: (m) => { elements.locationStatus.textContent = `Esperando la señal del GPS (± ${Math.round(m)} m)...`; }
+  });
   elements.locationButton.disabled = false;
 
   if (location.error || !location.latitud || !location.longitud) {
@@ -5761,10 +5816,26 @@ async function captureCurrentLocation() {
 
   // Solo se marca en los PUNTOS_OPERATIVOS (supabase-config.js): Almacentro, Nutibara y Terminal Norte desde
   // el 19-oct-2026. Lejos, la ubicacion no se toma y no se puede registrar. Sin puntos configurados no se limita.
+  const nombres = [...new Set((config.PUNTOS_OPERATIVOS || []).map((p) => p.nombre || p.name).filter(Boolean))];
+  const lista = nombres.length > 1 ? `${nombres.slice(0, -1).join(", ")} o ${nombres[nombres.length - 1]}` : nombres.join("");
+  if (exigirGps && !conGps(location.precision)) {
+    const precision = Math.round(Number(location.precision) || 0);
+    state.currentLocation = null;
+    state.fueraDePunto = {
+      sinGps: true,
+      posicion: null,
+      mensaje: `Tu celular no está usando el GPS${precision ? `: te ubica con ± ${precision} m` : ""}. Prende la ubicación precisa (GPS), ` +
+        `sal a cielo abierto y vuelve a intentar.` + (lista ? ` La asistencia solo se marca en ${lista}, con el GPS prendido.` : "")
+    };
+    elements.locationStatus.textContent = state.fueraDePunto.mensaje;
+    elements.locationButton.textContent = "Reintentar ubicación";
+    if (elements.locationMap && !state.locationMap) elements.locationMap.textContent = "";
+    renderLocationMap(location.latitud, location.longitud, location.precision);
+    syncSubmitLockPorUbicacion();
+    return null;
+  }
   const point = findNearestOperationalPoint(location);
   if (point && !point.dentro) {
-    const nombres = [...new Set((config.PUNTOS_OPERATIVOS || []).map((p) => p.nombre || p.name).filter(Boolean))];
-    const lista = nombres.length > 1 ? `${nombres.slice(0, -1).join(", ")} o ${nombres[nombres.length - 1]}` : nombres.join("");
     const precision = Math.round(Number(location.precision) || 0);
     state.currentLocation = null;
     state.fueraDePunto = {
@@ -6840,7 +6911,8 @@ function renderDriverGreetingCard() {
       ? `Sí, soy yo · registrar mi ${sentido.toUpperCase()}`
       : state.revisandoPunto
         ? "Revisando tu ubicación…"
-        : state.fueraDePunto ? "Acércate a un lugar autorizado para seguir" : "Activa la ubicación para seguir";
+        : state.fueraDePunto?.sinGps ? "Prende el GPS para seguir"
+          : state.fueraDePunto ? "Acércate a un lugar autorizado para seguir" : "Activa la ubicación para seguir";
     cuerpo = `
       <p class="driver-greeting-question">
         Verifica el nombre y el tipo de marca antes de continuar.
@@ -6957,7 +7029,7 @@ function pintarPuntoAviso() {
       <p>Puedes marcar aquí.</p>`;
   } else if (state.fueraDePunto) {
     el.className = "punto-aviso fuera";
-    el.innerHTML = `<strong><i data-lucide="map-pin-off"></i> Aquí no se puede marcar</strong>
+    el.innerHTML = `<strong><i data-lucide="map-pin-off"></i> ${state.fueraDePunto.sinGps ? "Prende el GPS del celular" : "Aquí no se puede marcar"}</strong>
       <p>${escapeHtml(state.fueraDePunto.mensaje)}</p>${listaHtml}`;
   } else {
     el.className = "punto-aviso sin-ubicacion";

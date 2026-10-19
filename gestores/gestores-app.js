@@ -32,7 +32,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "g2.3.2";
+  var VERSION = "g2.3.3";
   var cfg = window.PORTAL_CONFIG || {};
   var RPC_QUIEN_SOY = "personal_quien_soy";
   var RPC_REGISTRAR = "personal_registrar_subida";
@@ -667,6 +667,43 @@
     { nombre: "Terminal Norte", zona: "Terminal Norte", poligono: [[6.280523, -75.5715718], [6.2803417, -75.5710459], [6.2791579, -75.5714294], [6.2792059, -75.5716682]] },
   ];
   var TOLERANCIA_GPS_M = 20;   // en el borde del cuadro, por el error del GPS
+  // Con el GPS apagado el celular igual da una ubicación, pero por wifi o antena: ± 100 m o más. Esa no sirve
+  // (pedido del usuario el 19-oct-2026: "el GPS debe estar encendido, si no nos hacen trampa"). Se espera un rato a
+  // que el GPS enganche, porque la primera que da el celular suele ser la de wifi.
+  var PRECISION_GPS_MAX_M = 100;
+  var ESPERA_GPS_MS = 15000;
+  var vigiaGps = null;
+
+  function conGps(precision) {
+    return isFinite(precision) && Math.round(precision) > 0 && Math.round(precision) < PRECISION_GPS_MAX_M;   // la función la recibe redondeada
+  }
+
+  function soltarGps() {
+    if (vigiaGps != null && navigator.geolocation) navigator.geolocation.clearWatch(vigiaGps);
+    vigiaGps = null;
+  }
+
+  // La mejor ubicación en ESPERA_GPS_MS: apenas haya una con GPS, esa; si no, la mejor que hubo (o el error).
+  function ubicacionConGps(mientras, listo, falla) {
+    soltarGps();
+    var mejor = null, termino = false, reloj;
+    function fin(p, err) {
+      if (termino) return;
+      termino = true;
+      clearTimeout(reloj);
+      soltarGps();
+      if (p) listo(p); else falla(err);
+    }
+    reloj = setTimeout(function () { fin(mejor, null); }, ESPERA_GPS_MS);
+    vigiaGps = navigator.geolocation.watchPosition(function (p) {
+      if (!mejor || !(p.coords.accuracy >= mejor.coords.accuracy)) mejor = p;
+      if (conGps(p.coords.accuracy)) fin(p);
+      else if (!termino) mientras(p);
+    }, function (err) {
+      // Sin permiso, o con la ubicación apagada (y nada todavía): no hay nada que esperar.
+      if (err && (err.code === 1 || (err.code === 2 && !mejor))) fin(mejor, err);
+    }, { enableHighAccuracy: true, timeout: ESPERA_GPS_MS, maximumAge: 0 });
+  }
 
   function dentroDelPoligono(lat, lon, pol) {
     var dentro = false;
@@ -747,13 +784,22 @@
       pintarLugaresMarca(null);
       return;
     }
-    navigator.geolocation.getCurrentPosition(function (p) {
+    ubicacionConGps(function (p) {
+      el.textContent = "Esperando la señal del GPS (± " + Math.round(p.coords.accuracy) + " m)…";
+    }, function (p) {
+      if (!conGps(p.coords.accuracy)) {
+        asis.gpsError = "Su celular no está usando el GPS: lo ubica con ± " + Math.round(p.coords.accuracy) + " m. " +
+          "Prenda la ubicación precisa (GPS) del celular, salga a cielo abierto y toque 'Ya llegué: revisar otra vez'. " +
+          "La asistencia solo se marca en Almacentro, Nutibara o Terminal Norte, con el GPS prendido.";
+        el.setAttribute("data-estado", "error");
+        el.textContent = asis.gpsError;
+        pintarLugaresMarca(null);
+        return;
+      }
       var punto = puntoDeMarca(p.coords.latitude, p.coords.longitude, p.coords.accuracy);
       if (!punto.dentro) {
         asis.gpsError = "Está a " + distanciaTexto(punto.distancia) + " de " + punto.nombre +
-          ". La asistencia solo se marca en Almacentro, Nutibara o Terminal Norte." +
-          (p.coords.accuracy > 200 ? " Su celular ubica con poca precisión (± " + Math.round(p.coords.accuracy) +
-            " m): salga a cielo abierto o prenda el GPS." : "");
+          ". La asistencia solo se marca en Almacentro, Nutibara o Terminal Norte.";
         el.setAttribute("data-estado", "error");
         el.textContent = asis.gpsError;
         pintarLugaresMarca({ lat: p.coords.latitude, lon: p.coords.longitude });
@@ -768,7 +814,7 @@
       el.setAttribute("data-estado", "error");
       el.textContent = asis.gpsError;
       pintarLugaresMarca(null);
-    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });   // la de ahora: si se acercó al punto, que cuente
+    });
   }
 
   async function abrirMarca() {
@@ -874,6 +920,7 @@
   }
 
   function cerrarMarca() {
+    soltarGps();
     apagar(asis.stream);
     asis.stream = null;
     errorMarca("");

@@ -23,8 +23,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="../css/portal.css?v=g2.3.2">
-  <link rel="stylesheet" href="./gestores.css?v=g2.3.2">
+  <link rel="stylesheet" href="../css/portal.css?v=g2.3.3">
+  <link rel="stylesheet" href="./gestores.css?v=g2.3.3">
 </head>
 <body class="app-gestores">
 
@@ -246,15 +246,15 @@
 </div>
 
 <!-- Solo la dirección de Supabase y la llave pública (la misma del portal); no inicia sesión. -->
-<script src="../js/portal-config.js?v=g2.3.2"></script>
-<script src="../js/vendor/jsQR.min.js?v=g2.3.2"></script>
-<script src="./gestores-app.js?v=g2.3.2"></script>
+<script src="../js/portal-config.js?v=g2.3.3"></script>
+<script src="../js/vendor/jsQR.min.js?v=g2.3.3"></script>
+<script src="./gestores-app.js?v=g2.3.3"></script>
 <script>
   // La primera vez que se abre después de una actualización, el service worker viejo todavía entrega el
   // programa que tenía guardado (con la g2.0.0 la tarjeta se quedaba en "Consultando…"). Si el programa
   // que corrió no es de esta página, se espera al service worker nuevo y se recarga (máximo 2 veces).
   (function () {
-    var esta = "g2.3.2";
+    var esta = "g2.3.3";
     var corrio = (document.querySelector("[data-version]") || {}).textContent;
     if (!corrio || corrio === esta || !("serviceWorker" in navigator)) return;
     var marca = "personal_app_recarga_" + esta;
