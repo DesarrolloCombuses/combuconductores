@@ -288,6 +288,18 @@ admin) no tiene GPS y no se le exige. En el mes anterior ninguna marca del celul
 de ± 100 m; las de ± 100 m justos (78 de 2016, de 59 personas que otras veces sí
 marcaron con GPS) eran esa primera ubicación.
 
+En la v1.15.4 (g2.3.4) se arregló que, con un GPS que tarda unos segundos, a los 15 s
+saliera "Tardamos mucho en obtener tu ubicación" estando en el punto: al validar la cédula
+se pedía la ubicación dos veces y la segunda cancelaba la primera. Ahora la segunda espera
+a la que ya va (`captureCurrentLocation`), y en la app del personal una búsqueda vieja ya no
+pinta nada cuando hay otra o se cerró la hoja.
+
+También en la v1.15.4: **Tiquetes se abre aparte**. Distribusion cambió su página para que
+solo se pueda mostrar dentro de su propio sitio y de unos socios (`frame-ancestors`), y en
+el portal salía "portal.distribusion.com rechazó la conexión". Ahora, después de "Confirmo,
+es el vehículo …", la pestaña muestra el botón "Abrir Distribusion" (se abre en el
+navegador) con el bus y los pasos (`abrirAparte` en el módulo de `js/portal-config.js`).
+
 Desde la v1.15.1 (y g2.3.1) se avisa **antes** de hacer el proceso: en el portal, apenas
 se valida la cédula sale "Estás en …" o "Aquí no se puede marcar" con los lugares
 autorizados (a cuánto queda cada uno y su mapa) y "Ya llegué: revisar otra vez"; lejos,
@@ -333,7 +345,7 @@ sus iconos; usa `css/portal.css`, `js/vendor/jsQR.min.js` y la llave pública de
 `almacentro/enturnes/sql/tarjeta_despacho.sql` (para pasar de la v9:
 `personal_empresa.sql`).
 
-La versión de la app del personal va aparte (`g2.3.3`): está en
+La versión de la app del personal va aparte (`g2.3.4`): está en
 `gestores/gestores-app.js`, en `gestores/sw.js` y en los `?v=` y el `esta` del
 final de `gestores/index.html`. Si cambia `css/portal.css` o `js/vendor/jsQR.min.js`, hay
 que subirla también, o los celulares siguen con los guardados.

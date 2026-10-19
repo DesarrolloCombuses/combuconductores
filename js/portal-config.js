@@ -12,7 +12,7 @@ window.PORTAL_CONFIG = {
   // una nueva no se edita a mano, se corre (desde la carpeta portal):
   //   powershell -ExecutionPolicy Bypass -File .\nueva-version.ps1 1.6.1
   // que la cambia aquí, en sw.js y en index.html a la vez.
-  APP_VERSION: "v1.15.3",
+  APP_VERSION: "v1.15.4",
 
   // Cada cuánto se pregunta al servidor si hay una versión nueva, con el
   // portal a la vista. También se pregunta al abrirlo y al volver a él.
@@ -208,11 +208,13 @@ window.PORTAL_CONFIG = {
       nombre: "Tiquetes",
       descripcion: "Valida los tiquetes en Distribusion",
       icono: "ticket",
-      // Validador de Distribusion, con su propio login (Ory). Se deja abrir en
-      // un iframe y su login con usuario y contraseña funciona ahí dentro.
-      // OJO: el login CON GOOGLE no funciona embebido, Google no lo permite.
+      // Validador de Distribusion, con su propio login (Ory). Antes se abría en
+      // un iframe; desde el 19-oct-2026 su frame-ancestors no deja (solo admite
+      // su sitio y unos socios), así que se abre aparte, en el navegador.
       src: "https://portal.distribusion.com/bookings/ticket-validator",
       externo: true,
+      abrirAparte: true,
+      nombreExterno: "Distribusion",
       permisos: "camera; clipboard-read; clipboard-write; fullscreen",
       precarga: false,
     },

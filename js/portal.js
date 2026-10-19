@@ -1178,6 +1178,32 @@
     var panel = document.querySelector('[data-panel="' + idModulo + '"]');
     if (!panel) return null;
 
+    // Distribusion no deja mostrar su página dentro de otra: su frame-ancestors solo admite su sitio y unos socios
+    // (Chrome dice "portal.distribusion.com rechazó la conexión"). Desde el 19-oct-2026 se abre aparte, en el
+    // navegador, con el bus del turno a la vista y los pasos.
+    if (modulo.abrirAparte) {
+      panel.appendChild(barraExterna(modulo));
+      var caja = document.createElement("div");
+      caja.className = "externo-aparte";
+      caja.innerHTML =
+        '<div class="externo-aparte-tarjeta">' +
+          "<h2>" + escapeHtml(modulo.nombreExterno || modulo.nombre) + " se abre aparte</h2>" +
+          "<p>" + escapeHtml(modulo.nombreExterno || modulo.nombre) + " no deja abrir su página dentro del portal. " +
+            "Toque el botón: se abre en el navegador y, cuando termine, vuelva al portal.</p>" +
+          '<a class="btn btn-primary btn-block" href="' + escapeHtml(modulo.src) + '" target="_blank" rel="noopener">Abrir ' +
+            escapeHtml(modulo.nombreExterno || modulo.nombre) + "</a>" +
+          '<ol class="externo-aparte-pasos">' +
+            "<li>Entre con su usuario de Distribusion.</li>" +
+            "<li>Seleccione el vehículo <b data-bus-turno>" + escapeHtml(state.vehiculo || "—") + "</b>.</li>" +
+            "<li>Escanee los tiquetes.</li>" +
+            "<li>Vuelva al portal y anote cuántos escaneó en <b>Mi tarjeta</b>.</li>" +
+          "</ol>" +
+        "</div>";
+      panel.appendChild(caja);
+      state.iframes[idModulo] = caja;
+      return caja;
+    }
+
     var cargando = document.createElement("div");
     cargando.className = "module-loading";
     cargando.innerHTML = '<div class="boot-spinner"></div><p>Abriendo ' +

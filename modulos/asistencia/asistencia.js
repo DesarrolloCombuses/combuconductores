@@ -5766,7 +5766,17 @@ function mostrarInstruccionesUbicacionDenegada() {
   );
 }
 
-async function captureCurrentLocation() {
+// Al validar la cedula se pide la ubicacion dos veces casi juntas (la caja de ubicacion y el aviso del punto). Con la
+// espera del GPS (hasta 15 s), la segunda cancelaba la primera y esa, al vencerse, borraba la buena: ahora la segunda
+// espera a la que ya va.
+let capturaEnCurso = null;
+
+function captureCurrentLocation() {
+  if (!capturaEnCurso) capturaEnCurso = capturarUbicacion().finally(() => { capturaEnCurso = null; });
+  return capturaEnCurso;
+}
+
+async function capturarUbicacion() {
   if (!requireOnline()) return null;
   state.fueraDePunto = null;
 

@@ -32,7 +32,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "g2.3.3";
+  var VERSION = "g2.3.4";
   var cfg = window.PORTAL_CONFIG || {};
   var RPC_QUIEN_SOY = "personal_quien_soy";
   var RPC_REGISTRAR = "personal_registrar_subida";
@@ -678,7 +678,10 @@
     return isFinite(precision) && Math.round(precision) > 0 && Math.round(precision) < PRECISION_GPS_MAX_M;   // la función la recibe redondeada
   }
 
+  var turnoGps = 0;           // cada búsqueda nueva (o cerrar la hoja) deja sin efecto la anterior
+
   function soltarGps() {
+    turnoGps++;
     if (vigiaGps != null && navigator.geolocation) navigator.geolocation.clearWatch(vigiaGps);
     vigiaGps = null;
   }
@@ -686,16 +689,18 @@
   // La mejor ubicación en ESPERA_GPS_MS: apenas haya una con GPS, esa; si no, la mejor que hubo (o el error).
   function ubicacionConGps(mientras, listo, falla) {
     soltarGps();
-    var mejor = null, termino = false, reloj;
+    var mio = turnoGps, mejor = null, termino = false, reloj;
     function fin(p, err) {
       if (termino) return;
       termino = true;
       clearTimeout(reloj);
+      if (mio !== turnoGps) return;       // ya hay otra búsqueda, o se cerró la hoja: esta no pinta nada
       soltarGps();
       if (p) listo(p); else falla(err);
     }
     reloj = setTimeout(function () { fin(mejor, null); }, ESPERA_GPS_MS);
     vigiaGps = navigator.geolocation.watchPosition(function (p) {
+      if (mio !== turnoGps) return;
       if (!mejor || !(p.coords.accuracy >= mejor.coords.accuracy)) mejor = p;
       if (conGps(p.coords.accuracy)) fin(p);
       else if (!termino) mientras(p);
