@@ -7978,7 +7978,32 @@ async function ensureCsvLoaded() {
 async function findActiveCsvCollaborator(dni) {
   await ensureCsvLoaded();
   const cleanDni = normalizeDni(dni).replace(/[^\dA-Za-z]/g, "");
-  return state.csvRows.find((row) => normalizeDni(row.cedula).replace(/[^\dA-Za-z]/g, "") === cleanDni) || null;
+  const enLista = state.csvRows.find((row) => normalizeDni(row.cedula).replace(/[^\dA-Za-z]/g, "") === cleanDni);
+  if (enLista || !cleanDni) return enLista || null;
+  // employees solo la lee entera gestion humana (RLS del Kardex): con la cuenta de un
+  // conductor la lista llega vacia. Entonces se pregunta por esta cedula sola.
+  return buscarEmpleadoActivoPorCedula(cleanDni);
+}
+
+async function buscarEmpleadoActivoPorCedula(cleanDni) {
+  state.empleadosPorCedula = state.empleadosPorCedula || {};
+  if (cleanDni in state.empleadosPorCedula) return state.empleadosPorCedula[cleanDni];
+  const { data, error } = await supabaseClient.rpc("asistencia_empleado_activo", { p_dni: cleanDni });
+  if (error) {
+    console.warn("asistencia_empleado_activo:", error.message || error);
+    return null;
+  }
+  const fila = data ? {
+    cedula: normalizeCsvText(data.cedula).replace(/[^\dA-Za-z]/g, ""),
+    nombre: normalizeCsvText(data.nombre),
+    estado: "ACTIVO",
+    cargo: normalizeCsvText(data.cargo),
+    empresa: "",
+    vehiculo: normalizeCsvText(data.vehiculo_asociado),
+    ruta: normalizeCsvText(data.ruta)
+  } : null;
+  if (fila) state.empleadosPorCedula[cleanDni] = fila;   // un "no" no se guarda: gestion humana la puede activar
+  return fila;
 }
 
 function renderCsvTable() {
