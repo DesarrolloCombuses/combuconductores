@@ -32,7 +32,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "g2.2.1";
+  var VERSION = "g2.2.2";
   var cfg = window.PORTAL_CONFIG || {};
   var RPC_QUIEN_SOY = "personal_quien_soy";
   var RPC_REGISTRAR = "personal_registrar_subida";

@@ -296,7 +296,7 @@ sus iconos; usa `css/portal.css`, `js/vendor/jsQR.min.js` y la llave pública de
 `almacentro/enturnes/sql/tarjeta_despacho.sql` (para pasar de la v9:
 `personal_empresa.sql`).
 
-La versión de la app del personal va aparte (`g2.2.1`): está en
+La versión de la app del personal va aparte (`g2.2.2`): está en
 `gestores/gestores-app.js`, en `gestores/sw.js` y en los `?v=` y el `esta` del
 final de `gestores/index.html`. Si cambia `css/portal.css` o `js/vendor/jsQR.min.js`, hay
 que subirla también, o los celulares siguen con los guardados.
@@ -332,7 +332,9 @@ primera vez.
   9-jul-2026), la salida mínimo 1 hora después de la entrada, nada repetido en 30
   minutos, máximo 6 marcas al día desde la app. Una entrada de **más de 16 horas**
   sin salida (Buk la rechaza) no deja marcar: hay que cerrarla primero.
-- **Se me olvidó marcar la salida** (g2.2.0, verde desde la g2.2.1): sale con una entrada de otro día sin
+- **La tarjeta Mi asistencia va en verde** (g2.2.2, pedido del usuario); el resto de
+  la app sigue morado.
+- **Se me olvidó marcar la salida** (g2.2.0): sale con una entrada de otro día sin
   salida (el botón grande si lleva más de 16 h). Es el **cierre declarado** del
   biométrico (`cerrar_turno_automatico`): la persona dice a qué hora salió (se le
   propone la de la última vez que entró a una hora parecida) y por qué no marcó.
