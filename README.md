@@ -471,7 +471,62 @@ que $240.000 son en tiquetes y $140.000 en efectivo (7 pasajeros).
   de 19 dice *"Máximo 19 pasajeros: es el cupo del bus"* y el botón Guardar se apaga; igual si tiquetes y cívicas
   pasan de los pasajeros. La lectura que escribe dice cómo le queda el viaje anterior (si no cuadra, avisa).
 
-### Service worker
+### Notificaciones de documentos (v1.19.0)
+
+Pedido del usuario (20-oct-2026): "los documentos, si están próximos a vencer, esas notificaciones les faltan en la
+aplicación; eso es súper importante". Los papeles del bus del turno (SOAT, técnico-mecánica, tarjeta de operación,
+certificación de amparo; los mismos de la tarjeta "Documentos del bus") y la licencia del conductor que están
+**vencidos o vencen en 30 días** (`DOCUMENTOS_POR_VENCER_DIAS`) salen como notificación:
+
+- en la **campana** de arriba (ahora "Notificaciones"), antes que las noticias, con lo que dice la tarjeta ("Vence en
+  5 días. Avísale a tu coordinador") y un botón "Ver los documentos";
+- en el **aviso flotante** del Inicio, el más urgente primero: **rojo** si venció, **amarillo** si vence pronto, con
+  "y N documentos más". **Ver** baja a la tarjeta "Documentos del bus" y la resalta. El de un documento vencido
+  vuelve cada vez que se abre la app; el de uno por vencer, una vez al día.
+
+Salen de la misma consulta de la tarjeta de documentos (`alertasDeDocumentos`): no hay tabla nueva. Son avisos
+dentro de la app; las notificaciones del celular con la app cerrada (push) serían otro paso.
+
+### La cívica de cada viaje (v1.18.0)
+
+Desde el 20-oct-2026 (pedido del usuario, con el bus 710: "cuando se repite el validador no debe contar, solo
+cuando cambia positivamente") las cívicas de un viaje son **su lectura menos la del despacho anterior del bus**, no
+la siguiente menos la suya. El conductor escribe la lectura ya hecho el viaje (junto con sus pasajeros y tiquetes):
+si el número se repite, ese viaje no tuvo cívicas. Ej.: viaje 1 en 2773, viaje 2 en 2773, viaje 3 en 2774 → el 2
+tuvo 0 y el 3 tuvo 1. Lo calcula la vista `v_tarjeta_viajes` (v12, `civica_lectura_anterior.sql`, con
+`lectura_anterior` al final); el portal hace la misma cuenta mientras escribe, así que al escribir la lectura ya se ve
+cuánto fue tiquete, cívica y efectivo de ese mismo viaje. Si con las cívicas no cuadra con los pasajeros, solo avisa
+(la lectura anterior pudo quedar mal escrita y esa la corrige el despachador); más de 19 pasajeros o más tiquetes que
+pasajeros sigue sin dejar guardar. El daño del validador va en el viaje en que se dañó (el que ya tiene la lectura
+del nuevo).
+
+### Noticias de la empresa (v1.17.0)
+
+Cada noticia de `NOTICIAS` en `js/portal-config.js` sale solo entre su `desde` y su `hasta` (hora de Colombia): se
+quita sola al terminar. Desde la v1.17.2 no va encima del Inicio (la tarjeta grande tapaba todo):
+
+- **Campana** arriba, con el número de noticias vigentes. Abre la hoja "Noticias" con cada una completa: imagen
+  (`imagen`), etiqueta (`etiqueta`), título, texto, el plazo con los días que quedan, el botón y `ocultar`.
+- **Aviso flotante** pequeño abajo, solo en el Inicio: icono (`icono`), nombre corto (`corto`), `aviso` y los días
+  que quedan, con **Ver** y una **X**. Ver o la X lo dejan quieto por ese día (vuelve al día siguiente mientras la
+  noticia siga vigente); con el aviso de versión nueva a la vista, no sale.
+
+Con `ocultar` ("Ya los inscribí o no tengo hijos de esa edad"), el conductor la quita de su celular: ni campana ni
+aviso (queda guardado en el teléfono). Para poner otra noticia se agrega a la lista y se publica el portal.
+
+Desde la v1.17.1, al tocarla (el botón o la imagen) su enlace se abre **dentro del portal**, en el panel `noticia`:
+arriba "Volver al inicio" y el nombre corto (`corto`), abajo la página; Inicio sigue marcado en la barra de abajo y
+el formulario queda abierto si el conductor va y vuelve. La página de la noticia no está en `MODULOS`: nunca recibe la
+sesión del portal. Desde la v1.17.3, con `llenarCedula` (el selector de un campo de esa página, en Halloween
+`#ccAcudiente`) el portal escribe ahí la cédula con la que entró el conductor, como si la tecleara, y el formulario
+trae solo el nombre y el cargo. Solo funciona si la página es del mismo sitio (desarrollocombuses.github.io); si no,
+o si el campo ya tiene algo, no hace nada y el conductor la escribe. Para una página que no se deje mostrar dentro de otra, `abrirAparte: true` la abre
+en el navegador, como Tiquetes.
+
+La primera (20-oct-2026, pedido del usuario): **Obsequios de Halloween**, para que los conductores con hijos de 0 a
+10 años los inscriban en el formulario de la empresa (https://desarrollocombuses.github.io/obsequios-halloween/), del
+19 al viernes 23 de octubre. El formulario pide la cédula y el celular; el portal no le pasa nada.
+
 
 Manda uno solo, el del portal, con scope sobre todo el sitio. Los service
 workers de los módulos quedaron desactivados **solo cuando van embebidos**

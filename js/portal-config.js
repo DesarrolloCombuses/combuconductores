@@ -12,7 +12,7 @@ window.PORTAL_CONFIG = {
   // una nueva no se edita a mano, se corre (desde la carpeta portal):
   //   powershell -ExecutionPolicy Bypass -File .\nueva-version.ps1 1.6.1
   // que la cambia aquí, en sw.js y en index.html a la vez.
-  APP_VERSION: "v1.16.1",
+  APP_VERSION: "v1.19.0",
 
   // Cada cuánto se pregunta al servidor si hay una versión nueva, con el
   // portal a la vista. También se pregunta al abrirlo y al volver a él.
@@ -217,6 +217,36 @@ window.PORTAL_CONFIG = {
       nombreExterno: "Distribusion",
       permisos: "camera; clipboard-read; clipboard-write; fullscreen",
       precarga: false,
+    },
+  ],
+
+  // Noticias de la empresa (v1.17.0). Cada una sale solo entre desde y hasta (hora de Colombia): en la campana de
+  // arriba (con el número) y, en el Inicio, como un aviso flotante pequeño abajo (icono + corto + aviso; la X lo
+  // cierra por hoy) (v1.17.2). Al abrirla, su enlace se abre DENTRO del portal, con "Volver al inicio" (v1.17.1); con
+  // abrirAparte: true se abre en el navegador (para páginas que no se dejan mostrar dentro de otra). Con "ocultar",
+  // el conductor la puede quitar de su celular (si ya lo hizo o no le aplica). La página de la noticia nunca recibe
+  // la sesión del portal; con llenarCedula (el selector de un campo de esa página) el portal le escribe ahí la
+  // cédula con la que entró el conductor, solo si la página es de este mismo sitio (v1.17.3). Para poner otra
+  // noticia: agregarla aquí y publicar el portal.
+  NOTICIAS: [
+    {
+      id: "halloween-2026",
+      tema: "halloween",
+      imagen: "./assets/noticias/halloween-2026.webp",
+      icono: "./assets/noticias/calabaza.svg",
+      etiqueta: "Noticias Combuses",
+      titulo: "Obsequios de Halloween para los hijos de nuestros empleados",
+      corto: "Obsequios de Halloween",
+      texto: "Si tienes hijos de 0 a 10 años, inscríbelos para recibir su obsequio de Halloween. " +
+        "Tu cédula ya va escrita: solo necesitas tu celular y los datos de tus hijos.",
+      plazo: "Inscripciones hasta el viernes 23 de octubre",
+      aviso: "Inscribe a tus hijos de 0 a 10 años",
+      boton: "Inscribir a mis hijos",
+      enlace: "https://desarrollocombuses.github.io/obsequios-halloween/",
+      llenarCedula: "#ccAcudiente",   // el campo "Cédula" del formulario: con eso trae solo el nombre y el cargo
+      ocultar: "Ya los inscribí o no tengo hijos de esa edad",
+      desde: "2026-10-19T00:00:00-05:00",
+      hasta: "2026-10-23T23:59:59-05:00",
     },
   ],
 };

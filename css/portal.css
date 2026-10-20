@@ -437,6 +437,103 @@ a.btn { text-decoration: none; }   /* un enlace con cara de botón (ej. Abrir la
 
 .card-body { padding: 12px 16px 17px; }
 
+/* --- Notificaciones (v1.19.0): en la hoja de la campana, primero los documentos vencidos o por vencer --- */
+.notif-docs { display: flex; flex-direction: column; gap: 10px; }
+.notif-titulo { margin: 2px 0 0; font-size: 12px; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.notif-docs .notif-titulo + .docs-lista { margin-top: -2px; }
+/* El aviso flotante de un documento: rojo si venció, amarillo oscuro si vence pronto */
+.aviso-noticia[data-tema="vencido"] { background: var(--danger); }
+.aviso-noticia[data-tema="vencido"] .btn { background: #fff; color: var(--danger); }
+.aviso-noticia[data-tema="pronto"] { background: var(--warn-ink); }
+.aviso-noticia[data-tema="pronto"] .btn { background: #fff; color: var(--warn-ink); }
+.aviso-noticia-alerta { width: 42px; height: 42px; flex: none; display: grid; place-items: center; border-radius: 50%; background: rgba(255, 255, 255, .16); }
+.aviso-noticia-alerta .ico { width: 23px; height: 23px; }
+/* "Ver" lleva a la tarjeta de documentos y la resalta un momento */
+#cardDocumentos { transition: box-shadow 300ms ease; }
+#cardDocumentos.resaltar { box-shadow: 0 0 0 3px var(--warn-ink), var(--shadow); }
+
+/* --- Noticias de la empresa (v1.17.0): en la hoja de la campana, con imagen, etiqueta, título, texto y plazo --- */
+.noticias { display: flex; flex-direction: column; gap: 13px; }
+.noticia { overflow: hidden; }
+.noticia-foto { display: flex; justify-content: center; padding: 16px 16px 2px; cursor: pointer; }
+.noticia-foto img { display: block; width: 100%; max-width: 340px; height: auto; }
+.noticia .card-body { padding: 12px 16px 10px; }
+.noticia-etiqueta { margin: 0 0 4px; font-size: 12px; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; color: var(--primary); }
+.noticia-titulo { margin: 0 0 6px; font-size: 20px; font-weight: 800; line-height: 1.2; color: var(--ink); text-wrap: balance; }
+.noticia-texto { margin: 0 0 9px; font-size: 15px; line-height: 1.45; color: var(--ink-2); }
+.noticia-plazo { display: flex; align-items: center; gap: 7px; margin: 0 0 14px; font-size: 13.5px; font-weight: 650; color: var(--muted); }
+.noticia-plazo .ico { width: 17px; height: 17px; flex: none; }
+.noticia .noticia-ocultar { margin-top: 4px; font-size: 13.5px; font-weight: 600; }
+/* Halloween: morado noche y calabaza, como la página del formulario */
+.noticia[data-tema="halloween"] { background: linear-gradient(160deg, #2d1846 0%, #1b0f2b 100%); border-color: #46285f; }
+.noticia[data-tema="halloween"] .noticia-etiqueta { color: #ffb347; }
+.noticia[data-tema="halloween"] .noticia-titulo { color: #fff; }
+.noticia[data-tema="halloween"] .noticia-texto { color: rgba(255, 255, 255, .86); }
+.noticia[data-tema="halloween"] .noticia-plazo { color: #ffcf8a; }
+.noticia[data-tema="halloween"] .btn-primary { background: #f97316; border-color: #f97316; color: #1b0f2b; }
+.noticia[data-tema="halloween"] .btn-primary:hover { background: #fb8a3c; border-color: #fb8a3c; }
+.noticia[data-tema="halloween"] .noticia-ocultar { color: rgba(255, 255, 255, .72); }
+/* La campana de arriba (v1.17.2): el número de noticias vigentes en un circulito */
+.campana { position: relative; }
+.campana-cuenta {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 800;
+  line-height: 19px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--panel);
+}
+
+/* Aviso flotante de una noticia (v1.17.2): pequeño, abajo, solo en el Inicio. Como el de versión nueva, va por
+   encima de la barra de navegación; fuera de la app o con ese aviso a la vista, no sale. */
+.aviso-noticia {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--navbar-h) + env(safe-area-inset-bottom) + 10px);
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 460px;
+  margin: 0 auto;
+  padding: 8px 6px 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: var(--primary-strong);
+  color: #fff;
+  box-shadow: var(--shadow-lg);
+  animation: sheet-up 220ms cubic-bezier(.2, .7, .3, 1);
+}
+.app-view[hidden] ~ .aviso-noticia,
+.aviso-actualizacion:not([hidden]) ~ .aviso-noticia { display: none; }
+.aviso-noticia-icono { width: 42px; height: 42px; flex: none; }
+.aviso-noticia-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; font-size: 13px; line-height: 1.3; color: rgba(255, 255, 255, .84); }
+.aviso-noticia-texto strong { font-size: 14.5px; font-weight: 750; color: #fff; }
+.aviso-noticia .btn { flex: none; background: #fff; color: var(--primary-strong); font-weight: 750; }
+.aviso-noticia .aviso-noticia-cerrar { flex: none; width: 34px; height: 34px; border-color: transparent; background: transparent; color: rgba(255, 255, 255, .78); }
+.aviso-noticia .aviso-noticia-cerrar:hover { background: rgba(255, 255, 255, .12); color: #fff; }
+.aviso-noticia[data-tema="halloween"] { background: linear-gradient(160deg, #2d1846 0%, #1b0f2b 100%); border-color: #46285f; }
+.aviso-noticia[data-tema="halloween"] .btn { background: #f97316; color: #1b0f2b; }
+/* Que el aviso no tape lo último del Inicio */
+body:has(.aviso-noticia:not([hidden])) [data-panel="inicio"] .home { padding-bottom: 96px; }
+@media (min-width: 880px) {
+  .app-view:not([hidden]) ~ .aviso-noticia { left: auto; right: 24px; bottom: 20px; width: 420px; }
+}
+
+/* La noticia abierta dentro del portal (v1.17.1): barra con "Volver al inicio" y el nombre, la página debajo */
+.noticia-barra .btn { flex: none; gap: 4px; padding-left: 9px; }
+.noticia-barra .btn .ico { width: 18px; height: 18px; }
+.noticia-barra-nombre { min-width: 0; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .placeholder { margin: 0; color: var(--muted); font-size: 14.5px; }
 
 /* --- Tarjeta del turno: la pieza principal de la pantalla ---

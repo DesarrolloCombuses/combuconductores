@@ -50,6 +50,7 @@
     estadoTurno: null,   // marcas reales del turno (estado_turno_actual)
     vista: "inicio",
     iframes: {},         // id de módulo -> elemento iframe
+    noticia: null,       // id de la noticia abierta dentro del portal
     booted: false,
     deferredInstall: null,
   };
@@ -372,6 +373,9 @@
     // Quien entre después empieza por Inicio, no en la pestaña donde se quedó
     // el usuario anterior.
     state.vista = "inicio";
+    show($("noticiasSheet"), false);
+    notif.docs = [];
+    notif.cerrados = {};
     // Los iframes se destruyen: no queremos dejar cargada la app de otro
     // usuario detrás de la pantalla de login.
     Object.keys(state.iframes).forEach(function (id) {
@@ -979,6 +983,7 @@
     aeropuerto: { titulo: "Aeropuerto", sub: "Enturnamiento y mapa en vivo" },
     tiquetes: { titulo: "Tiquetes", sub: "Validación en Distribusion" },
     tarjeta: { titulo: "Mi tarjeta", sub: "Cívica, pasajeros y tiquetes de cada despacho" },
+    noticia: { titulo: "Noticia", sub: "" },
   };
 
   // Vistas del propio portal (sin iframe): Inicio y Mi tarjeta.
@@ -988,6 +993,8 @@
     // El perfil es una hoja, no una vista: no cambia el panel de fondo.
     if (vista === "perfil") { abrirPerfil(); return; }
     if (!TITULOS[vista]) vista = "inicio";
+    // Una noticia que ya cerró o que el conductor quitó (o un #/noticia viejo) vuelve al Inicio.
+    if (vista === "noticia" && !noticiaParaAbrir()) vista = "inicio";
 
     // Cada vez que entra a Tiquetes, el conductor confirma primero el vehículo
     // que debe seleccionar en Distribusion (ver pedirConfirmacionTiquetes).
@@ -1003,7 +1010,8 @@
       p.hidden = p.dataset.panel !== vista;
     });
     document.querySelectorAll("[data-nav]").forEach(function (b) {
-      b.classList.toggle("active", b.dataset.nav === vista);
+      // La noticia se abre desde el Inicio: Inicio queda marcado abajo.
+      b.classList.toggle("active", b.dataset.nav === (vista === "noticia" ? "inicio" : vista));
     });
 
     $("topbarTitle").textContent = TITULOS[vista].titulo;
@@ -1018,6 +1026,8 @@
     }
     if (vista === "inicio") cargarInicio();
     if (vista === "tarjeta") cargarTarjeta();
+    // La campana en todas las vistas; el aviso flotante solo en el Inicio.
+    pintarNotificaciones();
 
     if (!desdeHash) {
       try { history.replaceState(null, "", "#/" + vista); } catch (_) {}
@@ -1170,6 +1180,7 @@
 
   // ------------------------------------------------------- módulos (iframes)
   function crearIframe(idModulo) {
+    if (idModulo === "noticia") return crearNoticia();
     if (state.iframes[idModulo]) return state.iframes[idModulo];
 
     var modulo = cfg.MODULOS.find(function (m) { return m.id === idModulo; });
@@ -1230,6 +1241,67 @@
     panel.appendChild(frame);
     state.iframes[idModulo] = frame;
     return frame;
+  }
+
+  // La noticia abierta va en su propio panel, como un módulo más: arriba "Volver al inicio" y su nombre, abajo su
+  // página (el formulario de Halloween). Es otra aplicación: no está en MODULOS, así que nunca recibe la sesión del
+  // portal (empujarSesion la salta). Lo único que recibe es la cédula del conductor (llenarCedulaEnNoticia).
+  function crearNoticia() {
+    var x = noticiaParaAbrir();
+    var panel = document.querySelector('[data-panel="noticia"]');
+    if (!x || !panel) return null;
+    var hay = state.iframes.noticia;
+    if (hay && hay.getAttribute("data-noticia") === x.id) return hay;
+
+    panel.innerHTML = "";
+    var nombre = x.corto || x.titulo;
+    var barra = document.createElement("div");
+    barra.className = "externo-barra noticia-barra";
+    barra.innerHTML =
+      '<button class="btn btn-ghost btn-sm" type="button">' +
+        '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>Volver al inicio</button>' +
+      '<span class="noticia-barra-nombre">' + escapeHtml(nombre) + "</span>";
+    barra.querySelector("button").addEventListener("click", function () { irA("inicio"); });
+
+    var cargando = document.createElement("div");
+    cargando.className = "module-loading";
+    cargando.innerHTML = '<div class="boot-spinner"></div><p>Abriendo ' + escapeHtml(nombre.toLowerCase()) + "…</p>";
+
+    var frame = document.createElement("iframe");
+    frame.id = "frame-noticia";
+    frame.title = nombre;
+    frame.setAttribute("data-noticia", x.id);
+    frame.setAttribute("allow", x.permisos || "fullscreen");
+    frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+    frame.src = x.enlace;
+    frame.addEventListener("load", function () {
+      cargando.remove();
+      llenarCedulaEnNoticia(frame, x);
+    });
+
+    panel.appendChild(barra);
+    panel.appendChild(cargando);
+    panel.appendChild(frame);
+    state.iframes.noticia = frame;
+    return frame;
+  }
+
+  // Pedido del usuario (20-oct-2026): el conductor ya entró con su cédula, que el formulario de la noticia la traiga
+  // escrita. Con llenarCedula (el selector del campo) se escribe ahí SOLO la cédula, como si la tecleara: el evento
+  // input hace que el formulario de Halloween busque el nombre y el cargo. Funciona porque la página es del mismo
+  // sitio (desarrollocombuses.github.io); si no lo es, el campo no está o ya tiene algo, no hace nada y el conductor
+  // la escribe como siempre.
+  function llenarCedulaEnNoticia(frame, x) {
+    if (!x.llenarCedula || !state.dni) return;
+    try {
+      var doc = frame.contentDocument;
+      var campo = doc && doc.querySelector(x.llenarCedula);
+      if (!campo || campo.value) return;
+      campo.value = String(state.dni);
+      campo.dispatchEvent(new doc.defaultView.Event("input", { bubbles: true }));
+      // Que se vea de una vez: baja hasta el formulario (sin enfocar, para no abrir el teclado).
+      (campo.form || campo).scrollIntoView({ block: "start" });
+    } catch (_) { /* otro sitio: el navegador no deja entrar; el conductor la escribe */ }
   }
 
   function recargarModulo() {
@@ -1365,9 +1437,271 @@
   // da el turno: no tiene sentido pedirlos antes.
   function cargarInicio() {
     pintarSaludo();
+    pintarNotificaciones();
     cargarTurno();
     cargarJornada();
     enviarNovedadesPendientes();
+  }
+
+  // ------------------------------------------------------------- noticias
+  // Las noticias de la empresa (cfg.NOTICIAS) salen solo entre su desde y su hasta: en la campana de arriba, con el
+  // número, que abre la hoja Noticias con cada una completa; y en el Inicio, como un aviso flotante pequeño abajo.
+  // Al abrirla se ve dentro del portal (vista "noticia"); con abrirAparte, en el navegador. "Ya los inscribí…" la
+  // quita de este celular; la X del aviso lo cierra solo por hoy (queda guardado en el teléfono).
+  var NOTICIAS_OCULTAS = "portal_noticias_ocultas";
+  var NOTICIAS_AVISADAS = "portal_noticias_avisadas";
+
+  // v1.19.0: los documentos vencidos o por vencer del bus del turno y la licencia (los pone pintarDocumentos). El
+  // aviso de uno vencido, cerrado, vuelve al abrir otra vez la app (cerrados vive solo en memoria); el de uno por
+  // vencer, una vez al día (como las noticias).
+  var notif = { docs: [], cerrados: {} };
+
+  function noticiasOcultas() {
+    try { return JSON.parse(localStorage.getItem(NOTICIAS_OCULTAS) || "[]") || []; } catch (_) { return []; }
+  }
+
+  function noticiasAvisadas() {
+    try { return JSON.parse(localStorage.getItem(NOTICIAS_AVISADAS) || "{}") || {}; } catch (_) { return {}; }
+  }
+
+  // El aviso flotante de esa noticia ya se vio (Ver) o se cerró (X) hoy: vuelve mañana mientras siga vigente.
+  function marcarAvisada(id) {
+    var avisadas = noticiasAvisadas();
+    avisadas[id] = hoyColombia();
+    try { localStorage.setItem(NOTICIAS_AVISADAS, JSON.stringify(avisadas)); } catch (_) { /* sin espacio: solo por ahora */ }
+  }
+
+  function noticiasVigentes() {
+    var ahora = Date.now();
+    var ocultas = noticiasOcultas();
+    return (cfg.NOTICIAS || []).filter(function (x) {
+      return x && x.id && x.enlace && ocultas.indexOf(x.id) < 0 &&
+        (!x.desde || Date.parse(x.desde) <= ahora) && (!x.hasta || ahora <= Date.parse(x.hasta));
+    });
+  }
+
+  // La noticia que se abre dentro del portal: la que tocó el conductor o, si no (un #/noticia al recargar), la
+  // primera vigente.
+  function noticiaParaAbrir() {
+    var lista = noticiasVigentes().filter(function (x) { return !x.abrirAparte; });
+    var x = lista.find(function (n) { return n.id === state.noticia; }) || lista[0] || null;
+    if (x) state.noticia = x.id;
+    return x;
+  }
+
+  function quedaDeNoticia(x) {
+    if (!x.hasta) return "";
+    var dias = Math.ceil((Date.parse(x.hasta) - Date.now()) / 86400000);
+    return dias <= 1 ? "último día" : "quedan " + dias + " días";
+  }
+
+  function pintarNotificaciones() {
+    var box = $("noticias");
+    if (!box) return;
+    var lista = noticiasVigentes();
+    box.innerHTML = lista.map(function (x) {
+      var id = escapeHtml(x.id);
+      var plazo = [x.plazo, quedaDeNoticia(x)].filter(Boolean).join(" · ");
+      var abrir = x.abrirAparte
+        ? '<a class="btn btn-primary btn-block" href="' + escapeHtml(x.enlace) + '" target="_blank" rel="noopener">' +
+            escapeHtml(x.boton || "Ver la noticia") + "</a>"
+        : '<button class="btn btn-primary btn-block" type="button" data-abrir-noticia="' + id + '">' +
+            escapeHtml(x.boton || "Ver la noticia") + "</button>";
+      return '<article class="card noticia" data-tema="' + escapeHtml(x.tema || "") + '" data-noticia="' + id + '">' +
+        (x.imagen
+          ? '<div class="noticia-foto"' + (x.abrirAparte ? "" : ' data-abrir-noticia="' + id + '"') + ' aria-hidden="true">' +
+              '<img src="' + escapeHtml(x.imagen) + '" alt="" width="640" height="394" decoding="async"></div>'
+          : "") +
+        '<div class="card-body">' +
+          '<p class="noticia-etiqueta">' + escapeHtml(x.etiqueta || "Noticia") + "</p>" +
+          '<h3 class="noticia-titulo">' + escapeHtml(x.titulo) + "</h3>" +
+          '<p class="noticia-texto">' + escapeHtml(x.texto) + "</p>" +
+          (plazo
+            ? '<p class="noticia-plazo"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="12" r="9"/>' +
+                '<path d="M12 7v5l3 2"/></svg><span>' + escapeHtml(plazo) + "</span></p>"
+            : "") +
+          abrir +
+          (x.ocultar
+            ? '<button class="btn-link btn-link-muted noticia-ocultar" type="button" data-ocultar-noticia="' + id + '">' +
+                escapeHtml(x.ocultar) + "</button>"
+            : "") +
+        "</div>" +
+      "</article>";
+    }).join("");
+
+    // Los documentos vencidos o por vencer, arriba de las noticias, como en la tarjeta "Documentos del bus".
+    var docsBox = $("notifDocs");
+    docsBox.innerHTML = notif.docs.length
+      ? '<h4 class="notif-titulo">Documentos</h4>' +
+        '<ul class="docs-lista">' + notif.docs.map(function (d) {
+          return '<li class="doc">' +
+            '<div class="doc-info">' +
+              '<span class="doc-nombre">' + escapeHtml(d.titulo) + "</span>" +
+              '<span class="doc-detalle">' + escapeHtml(d.detalle + ". " + d.consejo) + "</span>" +
+            "</div>" +
+            '<span class="doc-estado" data-nivel="' + d.nivel + '">' + (d.nivel === "vencido" ? "Vencido" : "Por vencer") + "</span>" +
+          "</li>";
+        }).join("") + "</ul>" +
+        '<button class="btn btn-ghost btn-block btn-sm" type="button" data-ver-documentos>Ver los documentos</button>' +
+        (lista.length ? '<h4 class="notif-titulo">Noticias de la empresa</h4>' : "")
+      : "";
+    show(docsBox, notif.docs.length > 0);
+
+    // La campana de arriba: sale solo si hay algo, con cuántas.
+    var total = notif.docs.length + lista.length;
+    var campana = $("btnNoticias");
+    show(campana, total > 0);
+    $("noticiasCuenta").textContent = total ? String(total) : "";
+    campana.setAttribute("aria-label", total === 1 ? "Notificaciones: hay 1" : "Notificaciones: hay " + total);
+    if (!total) show($("noticiasSheet"), false);
+    pintarAvisoNoticia();
+  }
+
+  // Los documentos vencidos o por vencer (v1.19.0): los del bus del turno (los mismos de la tarjeta "Documentos del
+  // bus") y la licencia del conductor. El más urgente primero: los vencidos, después el que vence antes.
+  function alertasDeDocumentos(datos) {
+    var lista = [];
+    var interno = state.vehiculo ? String(state.vehiculo).trim() : "";
+    if (datos.vehiculo) {
+      DOC_TIPOS.forEach(function (t) {
+        var fila = datos.porTipo[t.tipo];
+        var est = estadoDocumento(t, fila);
+        if (est.nivel !== "vencido" && est.nivel !== "pronto") return;
+        lista.push({
+          id: "doc-" + datos.vehiculo.placa + "-" + t.tipo + "-" + fila.fecha_vencimiento,
+          nivel: est.nivel, dias: diasHasta(fila.fecha_vencimiento),
+          titulo: t.nombre + " del bus " + (interno || datos.vehiculo.interno || datos.vehiculo.placa),
+          detalle: est.detalle,
+          consejo: est.nivel === "vencido" ? "Avísale a tu coordinador antes de salir" : "Avísale a tu coordinador",
+        });
+      });
+    }
+    if (datos.licencia) {
+      var lic = estadoDocumento({ nombre: "Licencia" }, datos.licencia);
+      if (lic.nivel === "vencido" || lic.nivel === "pronto") {
+        lista.push({
+          id: "doc-licencia-" + datos.licencia.fecha_vencimiento,
+          nivel: lic.nivel, dias: diasHasta(datos.licencia.fecha_vencimiento),
+          titulo: "Tu licencia de conducción",
+          detalle: lic.detalle,
+          consejo: lic.nivel === "vencido" ? "Renuévala y lleva la nueva a tu coordinador" : "Renuévala a tiempo y lleva la nueva a tu coordinador",
+        });
+      }
+    }
+    return lista.sort(function (a, b) { return a.dias - b.dias; });
+  }
+
+  // El aviso flotante de un documento: rojo si venció, amarillo si vence pronto. Dice cuántos más hay.
+  function pintarAvisoDocumento(aviso, d) {
+    var otros = notif.docs.length - 1;
+    var id = escapeHtml(d.id);
+    aviso.setAttribute("data-noticia", d.id);
+    aviso.setAttribute("data-tema", d.nivel);
+    aviso.innerHTML =
+      '<span class="aviso-noticia-alerta">' + ICONO_ALERTA + "</span>" +
+      '<div class="aviso-noticia-texto"><strong>' + escapeHtml(d.titulo) + "</strong>" +
+        "<span>" + escapeHtml(d.detalle + (otros > 0 ? " · y " + (otros === 1 ? "1 documento más" : otros + " documentos más") : "")) +
+        "</span></div>" +
+      '<button class="btn btn-sm" type="button" data-aviso-doc="' + id + '">Ver</button>' +
+      '<button class="icon-btn aviso-noticia-cerrar" type="button" data-aviso-doc-cerrar="' + id + '" ' +
+        'aria-label="Cerrar el aviso" title="Cerrar el aviso">' + '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>' + "</button>";
+    show(aviso, true);
+  }
+
+  // Ver o cerrar el aviso de documentos lo deja quieto para todos los de ahora: los vencidos hasta que se vuelva a
+  // abrir la app; los por vencer, hasta mañana.
+  function cerrarAvisosDeDocumentos() {
+    notif.docs.forEach(function (d) {
+      if (d.nivel === "vencido") notif.cerrados[d.id] = true;
+      else marcarAvisada(d.id);
+    });
+  }
+
+  // Lleva al Inicio, a la tarjeta "Documentos del bus", y la resalta un momento.
+  function verDocumentos() {
+    show($("noticiasSheet"), false);
+    if (state.vista !== "inicio") irA("inicio");
+    pintarAvisoNoticia();
+    var card = $("cardDocumentos");
+    if (!card) return;
+    card.scrollIntoView({ behavior: "smooth", block: "start" });
+    card.classList.add("resaltar");
+    setTimeout(function () { card.classList.remove("resaltar"); }, 2500);
+  }
+
+  // El aviso flotante: una noticia a la vez, solo mirando el Inicio, la primera que hoy no se haya visto ni cerrado.
+  function pintarAvisoNoticia() {
+    var aviso = $("avisoNoticia");
+    if (!aviso) return;
+    var hoy = hoyColombia();
+    var avisadas = noticiasAvisadas();
+    var enInicio = state.vista === "inicio" && !$("appView").hidden;
+    // Primero un documento vencido o por vencer (el más urgente); después las noticias.
+    var doc = enInicio ? notif.docs.find(function (d) { return !notif.cerrados[d.id] && avisadas[d.id] !== hoy; }) : null;
+    if (doc) { pintarAvisoDocumento(aviso, doc); return; }
+    var x = enInicio ? noticiasVigentes().find(function (n) { return avisadas[n.id] !== hoy; }) : null;
+    if (!x) { show(aviso, false); return; }
+    var id = escapeHtml(x.id);
+    aviso.setAttribute("data-noticia", x.id);
+    aviso.setAttribute("data-tema", x.tema || "");
+    aviso.innerHTML =
+      (x.icono ? '<img class="aviso-noticia-icono" src="' + escapeHtml(x.icono) + '" alt="" width="42" height="42">' : "") +
+      '<div class="aviso-noticia-texto"><strong>' + escapeHtml(x.corto || x.titulo) + "</strong>" +
+        "<span>" + escapeHtml([x.aviso || x.texto, quedaDeNoticia(x)].filter(Boolean).join(" · ")) + "</span></div>" +
+      (x.abrirAparte
+        ? '<a class="btn btn-sm" href="' + escapeHtml(x.enlace) + '" target="_blank" rel="noopener" data-aviso-ver="' + id + '">Ver</a>'
+        : '<button class="btn btn-sm" type="button" data-aviso-ver="' + id + '">Ver</button>') +
+      '<button class="icon-btn aviso-noticia-cerrar" type="button" data-aviso-cerrar="' + id + '" ' +
+        'aria-label="Cerrar el aviso por hoy" title="Cerrar el aviso por hoy">' +
+        '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>';
+    show(aviso, true);
+  }
+
+  function abrirNoticia(id) {
+    state.noticia = id;
+    show($("noticiasSheet"), false);
+    irA("noticia");
+  }
+
+  function initNoticias() {
+    function cerca(ev, sel) { return ev.target.closest ? ev.target.closest(sel) : null; }
+
+    $("btnNoticias").addEventListener("click", function () {
+      pintarNotificaciones();
+      show($("noticiasSheet"), true);
+    });
+    $("noticiasSheetClose").addEventListener("click", function () { show($("noticiasSheet"), false); });
+    $("noticiasSheet").addEventListener("click", function (ev) {
+      if (ev.target === $("noticiasSheet")) { show($("noticiasSheet"), false); return; }
+      if (cerca(ev, "[data-ver-documentos]")) { verDocumentos(); return; }
+      var abrir = cerca(ev, "[data-abrir-noticia]");
+      if (abrir) { abrirNoticia(abrir.getAttribute("data-abrir-noticia")); return; }
+      var b = cerca(ev, "[data-ocultar-noticia]");
+      if (!b) return;
+      var ocultas = noticiasOcultas();
+      ocultas.push(b.getAttribute("data-ocultar-noticia"));
+      try { localStorage.setItem(NOTICIAS_OCULTAS, JSON.stringify(ocultas)); } catch (_) { /* sin espacio: solo por ahora */ }
+      pintarNotificaciones();
+    });
+
+    $("avisoNoticia").addEventListener("click", function (ev) {
+      var verDoc = cerca(ev, "[data-aviso-doc]");
+      if (verDoc || cerca(ev, "[data-aviso-doc-cerrar]")) {
+        cerrarAvisosDeDocumentos();
+        if (verDoc) verDocumentos(); else pintarAvisoNoticia();
+        return;
+      }
+      var ver = cerca(ev, "[data-aviso-ver]");
+      var cerrar = cerca(ev, "[data-aviso-cerrar]");
+      if (!ver && !cerrar) return;
+      var id = ver ? ver.getAttribute("data-aviso-ver") : cerrar.getAttribute("data-aviso-cerrar");
+      marcarAvisada(id);
+      if (ver && ver.tagName === "BUTTON") abrirNoticia(id);
+      else pintarAvisoNoticia();
+    });
+
+    // Que se quiten solas al terminar el plazo, aunque la app quede abierta.
+    setInterval(function () { if (!$("appView").hidden) pintarNotificaciones(); }, 10 * 60 * 1000);
   }
 
   function pintarSaludo() {
@@ -1775,8 +2109,9 @@
   // pasajeros que contó el sensor (tope 19). En cada despacho el conductor
   // escribe el número que marca el validador de la cívica, cuántos pasajeros
   // llevó (por su cuenta: control lo audita contra el sensor) y cuántos
-  // tiquetes escaneó en Distribusion; las cívicas de un viaje salen solas: la
-  // lectura del despacho siguiente menos la suya.
+  // tiquetes escaneó en Distribusion; las cívicas de un viaje salen solas: su
+  // lectura menos la del despacho anterior (v1.18.0: la escribe ya hecho el
+  // viaje; si el número se repite, son 0).
   //
   // Para que la auditoría sirva, el número del sensor de un viaje no se le
   // muestra al conductor hasta que guarda el suyo (si lo viera, lo copiaría).
@@ -1813,6 +2148,9 @@
   // palabras del conductor.
   var ESTADO_CIVICA = {
     ok: { nivel: "ok", texto: "Cuadra" },
+    sin_lectura_anterior: { nivel: "espera", texto: "Sin lectura anterior del bus" },
+    falta_lectura_anterior: { nivel: "espera", texto: "Falta la cívica del viaje anterior" },
+    // los de antes de la v12 (cívicas = lectura siguiente - la suya), por si la base todavía no cambió
     pendiente_cierre: { nivel: "espera", texto: "Se completa en el próximo despacho" },
     falta_lectura_siguiente: { nivel: "espera", texto: "Falta la cívica del viaje siguiente" },
     dano_por_revisar: { nivel: "revisa", texto: "Daño del validador en revisión" },
@@ -1970,7 +2308,7 @@
     var dif = valor - ant.lectura;
     if (dif < 0) {
       return [{
-        tipo: "bajo", clave: ant.fila.clave,
+        tipo: "bajo", clave: filas[i].clave,
         texto: "La cívica es menor que la del " + nombreViaje(ant.fila) + " (" + ant.lectura + "). " +
           "Si cambiaron el validador, repórtalo como daño.",
       }];
@@ -1992,10 +2330,12 @@
   // control es el que compara.
   var CUPO = 19;
 
-  // Las cívicas de un viaje: la lectura del despacho siguiente menos la suya (la
-  // vista las trae en civicas, ya con el daño del validador). Ej.: el viaje 2 en
-  // 2773 y el 3 en 2774: el 2 tuvo 1 cívica. null mientras no hay lectura
-  // siguiente, o si bajó (eso lo revisa el despachador).
+  // Las cívicas de un viaje: su lectura menos la del despacho anterior del bus
+  // (la vista las trae en civicas, ya con el daño del validador). El conductor
+  // escribe la lectura ya hecho el viaje, así que si el número se repite no hubo
+  // cívicas; solo cuentan cuando sube. Ej. (bus 710, 20-oct): viaje 1 en 2773,
+  // viaje 2 en 2773 y viaje 3 en 2774: el 2 tuvo 0 y el 3 tuvo 1. null sin
+  // lectura, sin la del anterior, o si bajó (eso lo revisa el despachador).
   function civicasDe(f) {
     return f.civicas == null || Number(f.civicas) < 0 ? null : Number(f.civicas);
   }
@@ -2019,8 +2359,8 @@
   // el personal de la empresa) pagan con tiquete, con la cívica o en efectivo, y
   // los tres valen el pasaje. Ej.: 19 pasajeros, 4 tiquetes y 1 cívica a $20.000
   // = $380.000: $80.000 en tiquetes, $20.000 en cívica y $280.000 en efectivo
-  // (14). Mientras no se saben las cívicas (el último viaje, hasta el próximo
-  // despacho), lo que no es tiquete va junto: "cívica o efectivo". Las partes
+  // (14). Mientras no se saben las cívicas (falta la lectura de este viaje o la
+  // del anterior), lo que no es tiquete va junto: "cívica o efectivo". Las partes
   // nunca pasan de los que se cobran, para que sumen el total; sobran dice
   // cuántos tiquetes y cívicas hay de más (no cuadra). null sin pasajeros.
   function repartir(pasajeros, personal, tiquetes, civicas, tarifa) {
@@ -2080,7 +2420,7 @@
   function repartoDelDia(t) {
     if (!t.conReparto) return "";
     var nota = [];
-    if (t.porSeparar) nota.push(pesos(t.porSeparar) + " entre cívica y efectivo: se separa en el próximo despacho");
+    if (t.porSeparar) nota.push(pesos(t.porSeparar) + " entre cívica y efectivo: faltan lecturas de la cívica");
     if (t.sinRepartir) nota.push(pesos(t.sinRepartir) + " sin repartir: faltan los tiquetes");
     return '<span class="viajes-reparto">Tiquetes ' + pesos(t.enTiquetes) + " · cívica " + pesos(t.enCivica) +
       " · efectivo " + pesos(t.enEfectivo) + "</span>" +
@@ -2112,7 +2452,7 @@
     }
     if (r.personal) partes.push(r.personal + " del personal (no se cobra)");
     return r.pasajeros + " pasajeros = " + partes.join(" + ") +
-      (r.civicas == null ? ". Las cívicas se saben en el próximo despacho." : ".");
+      (r.civicas == null ? ". Cívica y efectivo se separan con la lectura del validador de este viaje y la del anterior." : ".");
   }
 
   // "a", "a y b", "a, b y c"
@@ -2169,7 +2509,7 @@
       texto = "Tarjeta al día: " + enViajes(filas.length) + ", " + suyo.pasajeros + " pasajeros" +
         (suyo.conPlata ? ", " + pesos(suyo.plata) +
           (suyo.conReparto ? " (tiquetes " + pesos(suyo.enTiquetes) + ", cívica " + pesos(suyo.enCivica) + ", efectivo " +
-            pesos(suyo.enEfectivo) + (suyo.porSeparar ? "; " + pesos(suyo.porSeparar) + " se separa en el próximo despacho" : "") +
+            pesos(suyo.enEfectivo) + (suyo.porSeparar ? "; " + pesos(suyo.porSeparar) + " entre cívica y efectivo, sin separar" : "") +
             ")" : "")
           : "") + ".";
     }
@@ -2346,7 +2686,7 @@
       "</div>";
     }
     // El resto de los que se cobran: con la cívica y en efectivo (juntos mientras no se saben las cívicas).
-    if (r && r.tiquetes != null) html += lineasDelReparto(r);
+    if (r && r.tiquetes != null) html += lineasDelReparto(r, f);
 
     // Lo que falta: el "¿Guardar?" o el formulario
     var c = tarj.confirmando;
@@ -2392,6 +2732,10 @@
         (faltaTiquetes ? campoTarjeta(f, i, "tiquetes", "Tiquetes", "Ej. 12", 3) : "") +
         '<div class="tv-cuenta" data-cuenta="' + escapeHtml(f.clave) + '" aria-live="polite"></div>' +
         '<button class="btn btn-primary btn-sm tv-guardar" type="submit">Guardar</button>' +
+        (esLaQueSigue && faltaCivica
+          ? '<p class="tv-ayuda">Cívica: el número que marca el validador ahora, ya hecho el viaje. Las cívicas del ' +
+            'viaje son lo que subió desde la lectura anterior; si el número se repite, no hubo.</p>'
+          : "") +
         (esLaQueSigue && faltaPasajeros
           ? '<p class="tv-ayuda">Pasajeros: cuántas personas llevaste en este viaje, contadas por ti; máximo 19, ' +
             'el cupo del bus. Cuenta a todos: los que pagaron con tiquete, con la cívica o en efectivo, y al ' +
@@ -2426,11 +2770,13 @@
   }
 
   // Debajo de los tiquetes de un viaje: con cívica y en efectivo, o los dos
-  // juntos mientras no se saben las cívicas; y si no cuadra, por qué.
-  function lineasDelReparto(r) {
+  // juntos mientras no se saben las cívicas (y por qué); y si no cuadra, por qué.
+  function lineasDelReparto(r, f) {
     var html = r.civicas == null
       ? lineaPlata("Cívica o efectivo", r.sinTiquete, plataDe(r, r.sinTiquete),
-          '<span class="tv-chip" data-nivel="espera">Se separa en el próximo despacho</span>')
+          '<span class="tv-chip" data-nivel="espera">' +
+            (f && f.civica_lectura == null ? "Falta la cívica de este viaje" : "Falta la cívica del viaje anterior") +
+          "</span>")
       : lineaPlata("Con cívica", r.civicas, plataDe(r, r.civicas)) +
         lineaPlata("En efectivo", r.efectivo, plataDe(r, r.efectivo));
     if (r.sobran) {
@@ -2441,8 +2787,11 @@
   }
 
   // La cuenta del viaje mientras escribe, con lo que lleva escrito y lo ya
-  // guardado. mal: lo que no deja guardar (más de 19, o más tiquetes y cívicas
-  // que pasajeros). La lectura que escribe cierra las cívicas del viaje anterior:
+  // guardado. mal: lo que no deja guardar (más de 19, o más tiquetes que
+  // pasajeros). Las cívicas de este viaje salen de la lectura que escribe menos
+  // la del anterior: si con ellas no cuadra, solo avisa (puede estar mal escrita
+  // la del viaje anterior, y esa ya solo la corrige el despachador). Si el viaje
+  // siguiente ya tiene su lectura, también dice cómo le queda a ese:
   // también dice cómo le queda (avisos, si no cuadra; eso no tranca).
   function cuentaDelFormulario(f, i) {
     var filas = tarj.filas || [];
@@ -2455,10 +2804,13 @@
     var tiq = escrito(f, "tiquetes", "tiquetes_escaneados");
     var lectura = escrito(f, "civica", "civica_lectura");
     var civ = civicasDe(f);
-    var sig = i > 0 ? filas[i - 1] : null;      // la lista va del más reciente al más viejo
-    if (civ == null && sig && lectura != null) {
-      var lecSig = escrito(sig, "civica", "civica_lectura");
-      if (lecSig != null && lecSig >= lectura) civ = lecSig - lectura;
+    var ant = filas[i + 1];                      // la lista va del más reciente al más viejo
+    var sig = i > 0 ? filas[i - 1] : null;
+    if (civ == null && lectura != null) {
+      // El primer viaje del día: la lectura anterior es la del último despacho del bus (otro día u otro conductor).
+      var lecAnt = ant ? escrito(ant, "civica", "civica_lectura")
+        : f.lectura_anterior != null ? Number(f.lectura_anterior) : null;
+      if (lecAnt != null && lectura >= lecAnt) civ = lectura - lecAnt;
     }
     var lineas = [], avisos = [], mal = "";
     if (pas != null && pas > CUPO) {
@@ -2466,20 +2818,26 @@
     } else if (pas == null && tiq != null && tiq > CUPO) {
       mal = "Máximo " + CUPO + " tiquetes: es el cupo del bus.";
     } else if (pas != null) {
+      var propios = repartir(pas, f.personal, tiq, null, f.tarifa);   // solo lo que escribe él
       var r = repartir(pas, f.personal, tiq, civ, f.tarifa);
-      if (r.sobran) mal = "No cuadra: " + textoSobran(r) + ". Revisa los números.";
-      else lineas.push(textoCuenta(r));
+      if (propios.sobran) {
+        mal = "No cuadra: " + textoSobran(propios) + ". Revisa los números.";
+      } else if (r.sobran) {
+        avisos.push("Con esta lectura salen " + enCivicas(civ) + " y no cuadra: " + textoSobran(r) +
+          ". Revisa el número del validador; si está bien, el despachador revisa el viaje.");
+      } else {
+        lineas.push(textoCuenta(r));
+      }
     }
-    var ant = filas[i + 1];
-    if (f.civica_lectura == null && lectura != null && ant && ant.civica_lectura != null &&
-        ant.pasajeros_conductor != null && lectura >= Number(ant.civica_lectura)) {
-      var civAnt = lectura - Number(ant.civica_lectura);
-      var rAnt = repartir(ant.pasajeros_conductor, ant.personal, ant.tiquetes_escaneados, civAnt, ant.tarifa);
-      var dice = "Con esta lectura, el " + nombreViaje(ant) + " tuvo " + enCivicas(civAnt);
-      if (rAnt.sobran) {
-        avisos.push(dice + " y no cuadra: " + textoSobran(rAnt) + ". Revisa el número; si está bien, el despachador corrige ese viaje.");
-      } else if (rAnt.tiquetes != null) {
-        lineas.push(dice + ": " + textoCuenta(rAnt));
+    if (f.civica_lectura == null && lectura != null && sig && sig.civica_lectura != null &&
+        sig.pasajeros_conductor != null && Number(sig.civica_lectura) >= lectura) {
+      var civSig = Number(sig.civica_lectura) - lectura;
+      var rSig = repartir(sig.pasajeros_conductor, sig.personal, sig.tiquetes_escaneados, civSig, sig.tarifa);
+      var dice = "Con esta lectura, el " + nombreViaje(sig) + " tuvo " + enCivicas(civSig);
+      if (rSig.sobran) {
+        avisos.push(dice + " y no cuadra: " + textoSobran(rSig) + ". Revisa el número; si está bien, el despachador corrige ese viaje.");
+      } else if (rSig.tiquetes != null) {
+        lineas.push(dice + ": " + textoCuenta(rSig));
       }
     }
     var parrafos = function (lista, clase) {
@@ -2593,9 +2951,13 @@
           clave_viaje: f.clave, dia: f.dia, interno: f.interno, lectura: c.civica,
         }, quien)));
         if (r1.error) throw r1.error;
-        // Se ve al instante; las cívicas del viaje anterior llegan con la recarga.
+        // Se ve al instante, con las cívicas de este viaje (su lectura - la del anterior); la recarga trae lo
+        // que dice la base (salto, daño, corregida).
         f.civica_lectura = c.civica;
-        f.estado_civica = "pendiente_cierre";
+        var antes = tarj.filas[tarj.filas.indexOf(f) + 1];
+        var lecAntes = antes ? antes.civica_lectura : f.lectura_anterior;
+        f.civicas = lecAntes != null && c.civica >= Number(lecAntes) ? c.civica - Number(lecAntes) : null;
+        f.estado_civica = lecAntes == null ? "falta_lectura_anterior" : f.civicas == null ? "bajo" : "ok";
         delete borrador.civica;
         hecho.push("la cívica");
       } catch (err) {
@@ -3151,6 +3513,8 @@
 
     if (!interno && !dni) {
       docs.clave = null;
+      notif.docs = [];
+      pintarNotificaciones();
       box.innerHTML = '<p class="placeholder">Cuando tengas vehículo asignado verás aquí si sus papeles están al día.</p>';
       return;
     }
@@ -3163,7 +3527,11 @@
     var cache = leerCache("documentos_" + clave);
     if (docs.clave !== clave) {
       if (cache && cache.datos) pintarDocumentos(cache.datos, cache.guardadoEn);
-      else esqueleto(box, "lineas");
+      else {
+        esqueleto(box, "lineas");
+        notif.docs = [];   // otro bus u otro conductor: las de antes ya no son suyas
+        pintarNotificaciones();
+      }
     }
     docs.clave = clave;
 
@@ -3261,6 +3629,10 @@
     }
 
     box.innerHTML = html || '<p class="placeholder">Sin documentos para mostrar.</p>';
+
+    // v1.19.0: los vencidos o por vencer también van como notificación (campana y aviso del Inicio).
+    notif.docs = alertasDeDocumentos(datos);
+    pintarNotificaciones();
   }
 
   // ---------------------------------------------------------------- PERFIL
@@ -4679,7 +5051,7 @@
   // asistencia o validar tiquetes).
   function pedirInstalacion() {
     if (instalarYaPedido || instalacionPospuesta() || !modoInstalacion()) return;
-    var ocupado = ["bootOverlay", "perfilSheet", "tiquetesSheet", "sinInternet", "sinUbicacion", "instalarSheet"]
+    var ocupado = ["bootOverlay", "perfilSheet", "tiquetesSheet", "sinInternet", "sinUbicacion", "instalarSheet", "noticiasSheet"]
       .some(function (id) { return $(id) && !$(id).hidden; });
     if (ocupado) return;
     if (!$("appView").hidden && state.vista !== "inicio") return;
@@ -4843,7 +5215,7 @@
   function momentoSeguroParaActualizar() {
     // Recargar sin red dejaría el portal a medio cargar.
     if (!internet.ok || !navigator.onLine) return false;
-    var hojaAbierta = ["perfilSheet", "tiquetesSheet", "instalarSheet"].some(function (id) {
+    var hojaAbierta = ["perfilSheet", "tiquetesSheet", "instalarSheet", "noticiasSheet"].some(function (id) {
       return $(id) && !$(id).hidden;
     });
     if (hojaAbierta) return false;
@@ -5033,6 +5405,7 @@
     initConfirmacionTiquetes();
     initPersonal();
     initNovedades();
+    initNoticias();
 
     $("btnLogout").addEventListener("click", logout);
     $("btnReloadModule").addEventListener("click", recargarModulo);
