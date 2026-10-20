@@ -1780,7 +1780,10 @@
   //
   // Para que la auditoría sirva, el número del sensor de un viaje no se le
   // muestra al conductor hasta que guarda el suyo (si lo viera, lo copiaría).
-  // La plata que ve es la de sus pasajeros: pasajeros x el pasaje del día.
+  // La plata que ve es la de sus pasajeros (pasajeros x el pasaje del día), repartida en lo que pagaron con
+  // tiquete, con la cívica y en efectivo: los tres van dentro de los pasajeros y valen lo mismo. El cupo del
+  // bus es 19: más pasajeros, o más tiquetes y cívicas que pasajeros, no se deja guardar. La cuenta se ve
+  // mientras escribe.
   //
   // Los viajes los publica el programa de enturnes en tarjeta_viajes, y la
   // vista v_tarjeta_viajes los junta con las lecturas, los pasajeros del
@@ -1982,31 +1985,22 @@
     return [];
   }
 
-  // Más de 19 (el tope de la tarjeta de papel) es casi seguro un número mal
-  // escrito. No se compara con el sensor: lo del conductor es su cuenta, y
+  // El cupo del bus: 19 (el tope de la tarjeta de papel). Los 19 se reparten
+  // entre los que pagan con tiquete, con la cívica o en efectivo, y el personal
+  // de la empresa (no paga). Si no cuadra es un número mal escrito, y no se deja
+  // guardar. No se compara con el sensor: lo del conductor es su cuenta, y
   // control es el que compara.
-  function avisosDePasajeros(n) {
-    if (n > 19) {
-      return [{
-        tipo: "salto",
-        texto: "Son " + n + " pasajeros y el tope de la tarjeta es 19. Revisa el número.",
-      }];
-    }
-    return [];
+  var CUPO = 19;
+
+  // Las cívicas de un viaje: la lectura del despacho siguiente menos la suya (la
+  // vista las trae en civicas, ya con el daño del validador). Ej.: el viaje 2 en
+  // 2773 y el 3 en 2774: el 2 tuvo 1 cívica. null mientras no hay lectura
+  // siguiente, o si bajó (eso lo revisa el despachador).
+  function civicasDe(f) {
+    return f.civicas == null || Number(f.civicas) < 0 ? null : Number(f.civicas);
   }
 
-  // Más tiquetes que pasajeros es casi seguro un número mal escrito. Se compara
-  // con los pasajeros que escribió el conductor (no con el sensor, que no ve).
-  function avisosDeTiquetes(n, pasajeros) {
-    if (pasajeros != null && n > pasajeros) {
-      return [{
-        tipo: "salto",
-        texto: "Son más tiquetes (" + n + ") que los pasajeros que escribiste (" + pasajeros + "). " +
-          "Revisa los números.",
-      }];
-    }
-    return [];
-  }
+  function enCivicas(n) { return n === 1 ? "1 cívica" : n + " cívicas"; }
 
   function enViajes(n) { return n === 1 ? "1 viaje" : n + " viajes"; }
 
@@ -2021,13 +2015,104 @@
     return n - Math.min(Number(f.personal) || 0, n);
   }
 
+  // Cómo se reparten los pasajeros de un viaje y su plata. Los que se cobran (sin
+  // el personal de la empresa) pagan con tiquete, con la cívica o en efectivo, y
+  // los tres valen el pasaje. Ej.: 19 pasajeros, 4 tiquetes y 1 cívica a $20.000
+  // = $380.000: $80.000 en tiquetes, $20.000 en cívica y $280.000 en efectivo
+  // (14). Mientras no se saben las cívicas (el último viaje, hasta el próximo
+  // despacho), lo que no es tiquete va junto: "cívica o efectivo". Las partes
+  // nunca pasan de los que se cobran, para que sumen el total; sobran dice
+  // cuántos tiquetes y cívicas hay de más (no cuadra). null sin pasajeros.
+  function repartir(pasajeros, personal, tiquetes, civicas, tarifa) {
+    if (pasajeros == null) return null;
+    var pas = Number(pasajeros);
+    var per = Math.min(Number(personal) || 0, pas);
+    var r = {
+      pasajeros: pas, personal: per, cobran: pas - per, tarifa: tarifa == null ? null : Number(tarifa),
+      tiquetes: null, civicas: null, efectivo: null, sinTiquete: null, sobran: 0,
+      tiquetesEscritos: null, civicasLeidas: civicas == null ? null : Number(civicas),
+    };
+    r.total = r.tarifa == null ? null : r.cobran * r.tarifa;
+    if (tiquetes == null) return r;
+    r.tiquetesEscritos = Number(tiquetes);
+    r.tiquetes = Math.min(r.tiquetesEscritos, r.cobran);
+    r.sobran = Math.max(0, r.tiquetesEscritos + (r.civicasLeidas || 0) - r.cobran);
+    if (r.civicasLeidas == null) {
+      r.sinTiquete = r.cobran - r.tiquetes;
+    } else {
+      r.civicas = Math.min(r.civicasLeidas, r.cobran - r.tiquetes);
+      r.efectivo = r.cobran - r.tiquetes - r.civicas;
+    }
+    return r;
+  }
+
+  // La plata de n pasajeros de ese viaje (null si no hay pasaje).
+  function plataDe(r, n) { return r.tarifa == null || n == null ? null : n * r.tarifa; }
+
+  function plataDelViaje(f) {
+    return repartir(f.pasajeros_conductor, f.personal, f.tiquetes_escaneados, civicasDe(f), f.tarifa);
+  }
+
   function totalesDelConductor(filas) {
     return filas.reduce(function (t, f) {
-      if (f.pasajeros_conductor == null) return t;
-      t.pasajeros += Number(f.pasajeros_conductor);
-      if (f.tarifa != null) { t.plata += pasajerosQueSeCobran(f) * Number(f.tarifa); t.conPlata = true; }
+      var r = plataDelViaje(f);
+      if (!r) return t;
+      t.pasajeros += r.pasajeros;
+      if (r.tarifa == null) return t;
+      t.plata += r.total;
+      t.conPlata = true;
+      if (r.tiquetes == null) { t.sinRepartir += r.total; return t; }
+      t.conReparto = true;
+      t.enTiquetes += plataDe(r, r.tiquetes);
+      if (r.civicas == null) {
+        t.porSeparar += plataDe(r, r.sinTiquete);
+      } else {
+        t.enCivica += plataDe(r, r.civicas);
+        t.enEfectivo += plataDe(r, r.efectivo);
+      }
       return t;
-    }, { pasajeros: 0, plata: 0, conPlata: false });
+    }, { pasajeros: 0, plata: 0, conPlata: false, conReparto: false,
+         enTiquetes: 0, enCivica: 0, enEfectivo: 0, porSeparar: 0, sinRepartir: 0 });
+  }
+
+  // El reparto del día, arriba de la tarjeta: "Tiquetes $340.000 · cívica
+  // $20.000 · efectivo $260.000", y debajo lo que todavía no se sabe.
+  function repartoDelDia(t) {
+    if (!t.conReparto) return "";
+    var nota = [];
+    if (t.porSeparar) nota.push(pesos(t.porSeparar) + " entre cívica y efectivo: se separa en el próximo despacho");
+    if (t.sinRepartir) nota.push(pesos(t.sinRepartir) + " sin repartir: faltan los tiquetes");
+    return '<span class="viajes-reparto">Tiquetes ' + pesos(t.enTiquetes) + " · cívica " + pesos(t.enCivica) +
+      " · efectivo " + pesos(t.enEfectivo) + "</span>" +
+      (nota.length ? '<span class="viajes-reparto-nota">' + escapeHtml(nota.join(" · ")) + "</span>" : "");
+  }
+
+  // "4 tiquetes y 18 cívicas son más que los 19 pasajeros"
+  function textoSobran(r) {
+    var partes = [r.tiquetesEscritos + (r.tiquetesEscritos === 1 ? " tiquete" : " tiquetes")];
+    if (r.civicasLeidas != null) partes.push(enCivicas(r.civicasLeidas));
+    if (r.personal) partes.push(r.personal + " del personal");
+    return listaY(partes) + " son más que los " + r.pasajeros + " pasajeros";
+  }
+
+  // "19 pasajeros = 4 con tiquete ($80.000) + 1 con cívica ($20.000) + 14 en
+  // efectivo ($280.000)."
+  function textoCuenta(r) {
+    function con(n, que) { return n + " " + que + (r.tarifa != null ? " (" + pesos(n * r.tarifa) + ")" : ""); }
+    if (r.tiquetes == null) {
+      return r.pasajeros + " pasajeros" + (r.total != null ? " = " + pesos(r.total) : "") +
+        ". Con los tiquetes se reparten en tiquete, cívica y efectivo.";
+    }
+    var partes = [con(r.tiquetes, "con tiquete")];
+    if (r.civicas == null) {
+      partes.push(con(r.sinTiquete, "en cívica o efectivo"));
+    } else {
+      partes.push(con(r.civicas, "con cívica"));
+      partes.push(con(r.efectivo, "en efectivo"));
+    }
+    if (r.personal) partes.push(r.personal + " del personal (no se cobra)");
+    return r.pasajeros + " pasajeros = " + partes.join(" + ") +
+      (r.civicas == null ? ". Las cívicas se saben en el próximo despacho." : ".");
   }
 
   // "a", "a y b", "a, b y c"
@@ -2082,7 +2167,11 @@
     } else {
       nivel = "ok";
       texto = "Tarjeta al día: " + enViajes(filas.length) + ", " + suyo.pasajeros + " pasajeros" +
-        (suyo.conPlata ? ", " + pesos(suyo.plata) : "") + ".";
+        (suyo.conPlata ? ", " + pesos(suyo.plata) +
+          (suyo.conReparto ? " (tiquetes " + pesos(suyo.enTiquetes) + ", cívica " + pesos(suyo.enCivica) + ", efectivo " +
+            pesos(suyo.enEfectivo) + (suyo.porSeparar ? "; " + pesos(suyo.porSeparar) + " se separa en el próximo despacho" : "") +
+            ")" : "")
+          : "") + ".";
     }
     box.innerHTML = '<p class="docs-resumen" data-nivel="' + nivel + '">' + escapeHtml(texto) + "</p>" +
       botonAbrirTarjeta(!!faltan);
@@ -2118,6 +2207,7 @@
           "<strong>" + suyo.pasajeros + (suyo.pasajeros === 1 ? " pasajero" : " pasajeros") +
             (suyo.conPlata ? " · " + pesos(suyo.plata) : "") +
             (n ? " · " + tiquetes + (tiquetes === 1 ? " tiquete" : " tiquetes") : "") + "</strong>" +
+          repartoDelDia(suyo) +
           "<span>" +
             (!n ? "Todavía no hay viajes hoy" : faltan ? "Falta " + faltan : "Tarjeta completa") +
           "</span>" +
@@ -2171,6 +2261,7 @@
     }
 
     box.innerHTML = html;
+    actualizarCuentas();
     pintarResumenTarjeta();
 
     if (enfocado) {
@@ -2228,12 +2319,11 @@
         (f.lectura_corregida ? '<span class="tv-chip" data-nivel="espera">Corregida por el despachador</span>' : "") +
       "</div>";
     }
+    var r = plataDelViaje(f);
     if (!faltaPasajeros) {
       html += '<div class="tv-civica">' +
         "<span>Pasajeros que llevaste <b>" + escapeHtml(f.pasajeros_conductor) + "</b></span>" +
-        (f.tarifa != null
-          ? '<span class="tv-plata">' + pesos(pasajerosQueSeCobran(f) * Number(f.tarifa)) + "</span>"
-          : "") +
+        (r && r.total != null ? '<span class="tv-plata">' + pesos(r.total) + "</span>" : "") +
         (f.pasajeros_conductor_corregidos ? '<span class="tv-chip" data-nivel="espera">Corregidos por el despachador</span>' : "") +
       "</div>";
     }
@@ -2246,11 +2336,17 @@
       "</div>";
     }
     if (!faltaTiquetes) {
+      // Lo que vale en tiquetes; si todavía no escribió los pasajeros, tiquetes x el pasaje.
+      var enTiquetes = r && r.tiquetes != null ? plataDe(r, r.tiquetes)
+        : f.tarifa != null ? Number(f.tiquetes_escaneados) * Number(f.tarifa) : null;
       html += '<div class="tv-civica">' +
         "<span>Tiquetes escaneados <b>" + escapeHtml(f.tiquetes_escaneados) + "</b></span>" +
+        (enTiquetes != null ? '<span class="tv-plata">' + pesos(enTiquetes) + "</span>" : "") +
         (f.tiquetes_corregidos ? '<span class="tv-chip" data-nivel="espera">Corregidos por el despachador</span>' : "") +
       "</div>";
     }
+    // El resto de los que se cobran: con la cívica y en efectivo (juntos mientras no se saben las cívicas).
+    if (r && r.tiquetes != null) html += lineasDelReparto(r);
 
     // Lo que falta: el "¿Guardar?" o el formulario
     var c = tarj.confirmando;
@@ -2272,6 +2368,7 @@
         '<div class="tv-valores">' + valores.map(function (v) {
           return "<div><span>" + v[0] + '</span><strong class="tv-numero">' + v[1] + "</strong></div>";
         }).join("") + "</div>" +
+        '<div class="tv-cuenta">' + cuentaDelFormulario(f, i).lineas + "</div>" +
         "<p>Después solo el despachador lo puede corregir.</p>" +
         '<div class="tv-acciones">' +
           '<button class="btn btn-primary btn-sm" type="button" data-confirmar="' + escapeHtml(f.clave) + '"' +
@@ -2293,13 +2390,16 @@
         (faltaCivica ? campoTarjeta(f, i, "civica", "Número del validador", "Ej. 1250", 9) : "") +
         (faltaPasajeros ? campoTarjeta(f, i, "pasajeros", "Pasajeros", "Ej. 15", 2) : "") +
         (faltaTiquetes ? campoTarjeta(f, i, "tiquetes", "Tiquetes", "Ej. 12", 3) : "") +
+        '<div class="tv-cuenta" data-cuenta="' + escapeHtml(f.clave) + '" aria-live="polite"></div>' +
         '<button class="btn btn-primary btn-sm tv-guardar" type="submit">Guardar</button>' +
         (esLaQueSigue && faltaPasajeros
-          ? '<p class="tv-ayuda">Pasajeros: cuántas personas llevaste en este viaje, contadas por ti. ' +
-            'Cuenta también al personal de la empresa que se registró: no se te cobra.</p>'
+          ? '<p class="tv-ayuda">Pasajeros: cuántas personas llevaste en este viaje, contadas por ti; máximo 19, ' +
+            'el cupo del bus. Cuenta a todos: los que pagaron con tiquete, con la cívica o en efectivo, y al ' +
+            'personal de la empresa que se registró (a ese no se le cobra).</p>'
           : "") +
         (esLaQueSigue && faltaTiquetes
-          ? '<p class="tv-ayuda">Tiquetes: los que escaneaste en Distribusion para este viaje. Si no hubo, pon 0.</p>'
+          ? '<p class="tv-ayuda">Tiquetes: los que escaneaste en Distribusion para este viaje; van dentro de tus ' +
+            'pasajeros. Si no hubo, pon 0.</p>'
           : "") +
       "</form>";
     }
@@ -2320,6 +2420,95 @@
     return '<li class="tv"' + (falta ? " data-falta" : "") + ">" + html + "</li>";
   }
 
+  function lineaPlata(etiqueta, n, plata, extra) {
+    return '<div class="tv-civica tv-reparto-linea"><span>' + etiqueta + " <b>" + n + "</b></span>" +
+      (plata != null ? '<span class="tv-plata">' + pesos(plata) + "</span>" : "") + (extra || "") + "</div>";
+  }
+
+  // Debajo de los tiquetes de un viaje: con cívica y en efectivo, o los dos
+  // juntos mientras no se saben las cívicas; y si no cuadra, por qué.
+  function lineasDelReparto(r) {
+    var html = r.civicas == null
+      ? lineaPlata("Cívica o efectivo", r.sinTiquete, plataDe(r, r.sinTiquete),
+          '<span class="tv-chip" data-nivel="espera">Se separa en el próximo despacho</span>')
+      : lineaPlata("Con cívica", r.civicas, plataDe(r, r.civicas)) +
+        lineaPlata("En efectivo", r.efectivo, plataDe(r, r.efectivo));
+    if (r.sobran) {
+      html += '<div class="tv-civica"><span class="tv-chip" data-nivel="mal">No cuadra: ' +
+        escapeHtml(textoSobran(r)) + "</span></div>";
+    }
+    return html;
+  }
+
+  // La cuenta del viaje mientras escribe, con lo que lleva escrito y lo ya
+  // guardado. mal: lo que no deja guardar (más de 19, o más tiquetes y cívicas
+  // que pasajeros). La lectura que escribe cierra las cívicas del viaje anterior:
+  // también dice cómo le queda (avisos, si no cuadra; eso no tranca).
+  function cuentaDelFormulario(f, i) {
+    var filas = tarj.filas || [];
+    function escrito(x, campo, guardado) {
+      if (x[guardado] != null) return Number(x[guardado]);
+      var v = (tarj.borrador[x.clave] || {})[campo];
+      return v == null || v === "" ? null : Number(v);
+    }
+    var pas = escrito(f, "pasajeros", "pasajeros_conductor");
+    var tiq = escrito(f, "tiquetes", "tiquetes_escaneados");
+    var lectura = escrito(f, "civica", "civica_lectura");
+    var civ = civicasDe(f);
+    var sig = i > 0 ? filas[i - 1] : null;      // la lista va del más reciente al más viejo
+    if (civ == null && sig && lectura != null) {
+      var lecSig = escrito(sig, "civica", "civica_lectura");
+      if (lecSig != null && lecSig >= lectura) civ = lecSig - lectura;
+    }
+    var lineas = [], avisos = [], mal = "";
+    if (pas != null && pas > CUPO) {
+      mal = "Máximo " + CUPO + " pasajeros: es el cupo del bus.";
+    } else if (pas == null && tiq != null && tiq > CUPO) {
+      mal = "Máximo " + CUPO + " tiquetes: es el cupo del bus.";
+    } else if (pas != null) {
+      var r = repartir(pas, f.personal, tiq, civ, f.tarifa);
+      if (r.sobran) mal = "No cuadra: " + textoSobran(r) + ". Revisa los números.";
+      else lineas.push(textoCuenta(r));
+    }
+    var ant = filas[i + 1];
+    if (f.civica_lectura == null && lectura != null && ant && ant.civica_lectura != null &&
+        ant.pasajeros_conductor != null && lectura >= Number(ant.civica_lectura)) {
+      var civAnt = lectura - Number(ant.civica_lectura);
+      var rAnt = repartir(ant.pasajeros_conductor, ant.personal, ant.tiquetes_escaneados, civAnt, ant.tarifa);
+      var dice = "Con esta lectura, el " + nombreViaje(ant) + " tuvo " + enCivicas(civAnt);
+      if (rAnt.sobran) {
+        avisos.push(dice + " y no cuadra: " + textoSobran(rAnt) + ". Revisa el número; si está bien, el despachador corrige ese viaje.");
+      } else if (rAnt.tiquetes != null) {
+        lineas.push(dice + ": " + textoCuenta(rAnt));
+      }
+    }
+    var parrafos = function (lista, clase) {
+      return lista.map(function (t) { return '<p class="' + clase + '">' + escapeHtml(t) + "</p>"; }).join("");
+    };
+    var lineasHtml = parrafos(lineas, "tv-cuenta-linea");
+    return {
+      mal: mal, avisos: avisos, lineas: lineasHtml,
+      html: (mal ? parrafos([mal], "tv-cuenta-mal") : "") + lineasHtml + parrafos(avisos, "tv-cuenta-aviso"),
+    };
+  }
+
+  // Pone al día la cuenta de cada formulario abierto y no deja guardar si no cuadra.
+  function actualizarCuentas() {
+    var box = $("tarjetaBody");
+    var filas = tarj.filas || [];
+    Array.prototype.forEach.call(box.querySelectorAll("[data-cuenta]"), function (el) {
+      var i = filas.findIndex(function (x) { return x.clave === el.getAttribute("data-cuenta"); });
+      if (i < 0) return;
+      var c = cuentaDelFormulario(filas[i], i);
+      if (el.innerHTML !== c.html) el.innerHTML = c.html;
+      var form = el.closest(".tv-form");
+      if (!form) return;
+      if (c.mal) form.setAttribute("data-mal", ""); else form.removeAttribute("data-mal");
+      var btn = form.querySelector(".tv-guardar");
+      if (btn) btn.disabled = !!c.mal;
+    });
+  }
+
   function prepararLectura(clave) {
     var filas = tarj.filas || [];
     var i = filas.findIndex(function (f) { return f.clave === clave; });
@@ -2337,18 +2526,15 @@
       : civica && !/^\d{1,9}$/.test(civica) ? "La cívica va solo con números."
       : pasajeros && !/^\d{1,2}$/.test(pasajeros) ? "Los pasajeros van solo con números."
       : tiquetes && !/^\d{1,3}$/.test(tiquetes) ? "Los tiquetes van solo con números."
-      : "";
+      : cuentaDelFormulario(f, i).mal;
     if (falla) {
       tarj.mensaje = { clave: clave, tipo: "error", texto: falla };
       pintarTarjeta();
       return;
     }
 
-    // Los tiquetes se comparan con los pasajeros que dijo: los de ahora o los ya guardados.
-    var suyos = pasajeros ? Number(pasajeros) : f.pasajeros_conductor != null ? Number(f.pasajeros_conductor) : null;
     var avisos = (civica ? avisosDeLectura(filas, i, Number(civica)) : [])
-      .concat(pasajeros ? avisosDePasajeros(Number(pasajeros)) : [])
-      .concat(tiquetes ? avisosDeTiquetes(Number(tiquetes), suyos) : []);
+      .concat(cuentaDelFormulario(f, i).avisos.map(function (t) { return { tipo: "salto", texto: t }; }));
     // Dejó alguno en blanco: se puede, pero que lo sepa.
     var blancos = [];
     if (f.civica_lectura == null && !civica) blancos.push("la cívica");
@@ -2600,6 +2786,7 @@
       if (limpio !== ev.target.value) ev.target.value = limpio;
       tarj.borrador[clave] = tarj.borrador[clave] || {};
       tarj.borrador[clave][ev.target.getAttribute("data-campo")] = limpio;
+      actualizarCuentas();
       if (tarj.mensaje && tarj.mensaje.clave === clave && tarj.mensaje.tipo === "error") {
         tarj.mensaje = null;
         var msg = ev.target.closest(".tv") && ev.target.closest(".tv").querySelector(".tv-msg");

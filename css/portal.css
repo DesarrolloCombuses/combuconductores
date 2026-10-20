@@ -605,6 +605,8 @@ a.btn { text-decoration: none; }   /* un enlace con cara de botón (ej. Abrir la
 .viajes-info { min-width: 0; }
 .viajes-info strong { display: block; font-size: 17px; font-weight: 750; }
 .viajes-info span { font-size: 13.5px; color: var(--ink-2); }
+.viajes-info .viajes-reparto { display: block; margin: 1px 0 2px; font-weight: 650; color: var(--primary-strong); }
+.viajes-info .viajes-reparto-nota { display: block; margin-bottom: 2px; font-size: 12.5px; color: var(--muted); }
 
 .viajes-aviso {
   margin: 12px 0 0;
@@ -691,6 +693,15 @@ a.btn { text-decoration: none; }   /* un enlace con cara de botón (ej. Abrir la
 }
 .tv-civica b { font-size: 17px; color: var(--ink); font-variant-numeric: tabular-nums; }
 .tv-plata { font-size: 15px; font-weight: 800; color: var(--primary-strong); font-variant-numeric: tabular-nums; }
+/* La cuenta del viaje mientras escribe: 19 pasajeros = tiquete + cívica + efectivo */
+.tv-cuenta { flex-basis: 100%; }
+.tv-cuenta:empty { display: none; }
+.tv-cuenta p { margin: 0 0 4px; font-size: 13.5px; line-height: 1.4; }
+.tv-cuenta .tv-cuenta-linea { font-weight: 650; color: var(--primary-strong); }
+.tv-cuenta .tv-cuenta-mal { font-weight: 750; color: var(--danger); }
+.tv-cuenta .tv-cuenta-aviso { font-weight: 600; color: var(--warn-ink); }
+.tv-form[data-mal] input[data-campo="pasajeros"],
+.tv-form[data-mal] input[data-campo="tiquetes"] { border-color: var(--danger); }
 .tv-chip {
   padding: 3px 9px;
   border-radius: var(--radius-pill);

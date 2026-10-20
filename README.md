@@ -449,6 +449,28 @@ video de su novedad recién hecha, a `<año-mes>/<número>-<id_local>.<ext>`) y
 NOVEDADES de `js/portal.js`, la hoja `#novedadSheet` y la cámara `#grabador` de
 `index.html`, y lo de `.nov-*`, `.novedad-*` y `.grabador*` en `css/portal.css`.
 
+### La plata del viaje: tiquetes, cívica y efectivo, y el cupo de 19 (v1.16.0 y v1.16.1)
+
+Pedido del usuario el 20-oct-2026. En **Mi tarjeta**, la plata de cada viaje (pasajeros x el pasaje, sin el
+personal de la empresa) se reparte en lo que pagaron **con tiquete** y lo que pagaron **en efectivo**. Los tiquetes
+van dentro de los pasajeros y valen lo mismo. Ejemplo: 19 pasajeros y 12 tiquetes a $20.000 = $380.000, de los
+que $240.000 son en tiquetes y $140.000 en efectivo (7 pasajeros).
+
+- Cada viaje: *Pasajeros que llevaste 19 · $380.000*, *Tiquetes escaneados 12 · $240.000* y *En efectivo 7 ·
+  $140.000*. El efectivo sale cuando están los pasajeros y los tiquetes.
+- Arriba, el total del día con *"En tiquetes … · en efectivo …"* (y *"falta repartir …"* si en algún viaje faltan los
+  tiquetes). El inicio lo dice cuando la tarjeta está al día. El "¿Guardar?" muestra cómo queda la plata.
+- **Cupo de 19:** más de 19 pasajeros, o más tiquetes que pasajeros (escritos ahora o ya guardados), ya no se deja
+  guardar; antes era solo un aviso. Solo en el portal: la base de datos no lo revisa.
+- **v1.16.1, la cívica también cuenta:** los 19 se reparten en tiquete, **cívica** y efectivo (más el personal, que
+  no paga). Las cívicas de un viaje son la lectura del despacho siguiente menos la suya (del viaje 2 en 2773 al 3 en
+  2774: el 2 tuvo 1). Ej.: 19 pasajeros, 4 tiquetes y 1 cívica = $80.000 + $20.000 + $280.000 en efectivo (14).
+  Mientras no hay lectura siguiente, lo que no es tiquete sale como *"Cívica o efectivo · se separa en el próximo
+  despacho"*. Arriba: *"Tiquetes … · cívica … · efectivo …"*.
+- **La cuenta en vivo:** mientras escribe, el formulario dice *"19 pasajeros = 4 con tiquete ($80.000) + …"*; con más
+  de 19 dice *"Máximo 19 pasajeros: es el cupo del bus"* y el botón Guardar se apaga; igual si tiquetes y cívicas
+  pasan de los pasajeros. La lectura que escribe dice cómo le queda el viaje anterior (si no cuadra, avisa).
+
 ### Service worker
 
 Manda uno solo, el del portal, con scope sobre todo el sitio. Los service
