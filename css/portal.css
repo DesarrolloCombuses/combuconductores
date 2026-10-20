@@ -529,6 +529,33 @@ body:has(.aviso-noticia:not([hidden])) [data-panel="inicio"] .home { padding-bot
   .app-view:not([hidden]) ~ .aviso-noticia { left: auto; right: 24px; bottom: 20px; width: 420px; }
 }
 
+/* La noticia completa en una ventana encima (v1.20.0): la misma tarjeta, sin el blanco de la hoja, con la X y
+   "Ahora no". En el teléfono sube desde abajo; en el computador, al centro. */
+.app-view[hidden] ~ .noticia-ventana { display: none !important; }
+.sheet-noticia { background: transparent; box-shadow: none; padding-bottom: 0; }
+.sheet-noticia .noticia { position: relative; margin: 0; border: 0; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
+.sheet-noticia .noticia .card-body { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+.sheet-noticia .noticia-foto { padding-top: 22px; }
+@media (min-width: 880px) { .sheet-noticia .noticia { border-radius: var(--radius-xl); } }
+.noticia-cerrar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .35);
+  color: #fff;
+  cursor: pointer;
+}
+.noticia-cerrar .ico { width: 20px; height: 20px; }
+.noticia .noticia-luego { margin-top: 8px; }
+.noticia[data-tema="halloween"] .noticia-luego { background: transparent; border-color: rgba(255, 255, 255, .3); color: #fff; }
+
 /* La noticia abierta dentro del portal (v1.17.1): barra con "Volver al inicio" y el nombre, la página debajo */
 .noticia-barra .btn { flex: none; gap: 4px; padding-left: 9px; }
 .noticia-barra .btn .ico { width: 18px; height: 18px; }

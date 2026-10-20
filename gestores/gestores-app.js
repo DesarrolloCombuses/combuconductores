@@ -20,6 +20,9 @@
         salida" (g2.2.0), el cierre declarado del biométrico: dice a qué hora
         salió y por qué; gestión humana lo revisa y lo pasa a Buk.
      5. ¿Cómo se hace?: la guía con dibujos (sale sola la primera vez).
+     6. Noticias de la empresa (g2.4.0): las mismas del Portal del Conductor;
+        desde la g2.5.0 salen completas encima al abrir la app (una vez al día),
+        con la campana y la página dentro de la app.
 
    Sin sesión, la app solo usa dos funciones de Supabase
    (almacentro/enturnes/sql/personal_empresa.sql, la v10):
@@ -32,7 +35,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "g2.3.4";
+  var VERSION = "g2.5.0";
   var cfg = window.PORTAL_CONFIG || {};
   var RPC_QUIEN_SOY = "personal_quien_soy";
   var RPC_REGISTRAR = "personal_registrar_subida";
@@ -167,6 +170,12 @@
   function mostrarVista(cual) {
     show($("vistaCedula"), cual === "cedula");
     show($("vistaInicio"), cual === "inicio");
+    if (cual !== "inicio") {   // sin cédula no hay noticia abierta ni ventana
+      show($("noticiaPantalla"), false);
+      $("noticiaPantalla").innerHTML = "";
+      show($("noticiasSheet"), false);
+      show($("noticiaVentana"), false);
+    }
     window.scrollTo(0, 0);
   }
 
@@ -239,6 +248,8 @@
     $("inicioSaludo").textContent = yo.nombre ? "Hola, " + yo.nombre : "Hola";
     $("inicioCargo").textContent = capitalizar(yo.cargo || "");
     mostrarVista("inicio");
+    pintarNoticias();
+    presentarNoticia();
     pintarRegistros();
     pintarRed();
     enviarPendientes();
@@ -1075,6 +1086,204 @@
   function cerrarGuia() {
     guardarJson(LS_GUIA, true);
     show($("guiaSheet"), false);
+    presentarNoticia();   // la primera vez la guía va antes que la noticia
+  }
+
+  // ------------------------------------------- 6. noticias de la empresa (g2.4.0)
+  // Las mismas del Portal del Conductor (cfg.NOTICIAS, de ../js/portal-config.js) y con sus mismos estilos. Desde la
+  // g2.5.0, al abrir la app la noticia sale ENCIMA, completa (imagen, texto, plazo y botón), una vez al día: "Ahora
+  // no" o la X la dejan para mañana, el botón la abre aquí dentro y "Ya los inscribí…" la quita. La campana junto al
+  // saludo la muestra cuando quieran. Al abrirla, su página sale a pantalla completa con "Volver" y la cédula de este
+  // celular ya escrita (llenarCedula; solo en el mismo sitio). Lo quitado o presentado hoy queda en el teléfono con
+  // las mismas llaves del portal.
+  var NOTICIAS_OCULTAS = "portal_noticias_ocultas";
+  var NOTICIAS_PRESENTADAS = "portal_noticias_presentadas";
+  var presentarTimer = null;
+
+  function noticiasVigentes() {
+    var ahora = Date.now();
+    var ocultas = leerJson(NOTICIAS_OCULTAS, []) || [];
+    return (cfg.NOTICIAS || []).filter(function (x) {
+      return x && x.id && x.enlace && ocultas.indexOf(x.id) < 0 &&
+        (!x.desde || Date.parse(x.desde) <= ahora) && (!x.hasta || ahora <= Date.parse(x.hasta));
+    });
+  }
+
+  function quedaDeNoticia(x) {
+    if (!x.hasta) return "";
+    var dias = Math.ceil((Date.parse(x.hasta) - Date.now()) / 86400000);
+    return dias <= 1 ? "último día" : "quedan " + dias + " días";
+  }
+
+  // Las rutas de la configuración son las del portal (./assets/...): aquí, una carpeta más adentro.
+  function rutaDelPortal(ruta) { return /^\.\//.test(ruta || "") ? "../" + ruta.slice(2) : ruta; }
+
+  // La tarjeta de una noticia (la misma del portal). enVentana: con la X y "Ahora no".
+  function tarjetaNoticia(x, enVentana) {
+    var id = escapeHtml(x.id);
+    var plazo = [x.plazo, quedaDeNoticia(x)].filter(Boolean).join(" · ");
+    var abrir = x.abrirAparte
+      ? '<a class="btn btn-primary btn-block" href="' + escapeHtml(x.enlace) + '" target="_blank" rel="noopener">' +
+          escapeHtml(x.boton || "Ver la noticia") + "</a>"
+      : '<button class="btn btn-primary btn-block" type="button" data-abrir-noticia="' + id + '">' +
+          escapeHtml(x.boton || "Ver la noticia") + "</button>";
+    return '<article class="card noticia" data-tema="' + escapeHtml(x.tema || "") + '" data-noticia="' + id + '">' +
+      (enVentana
+        ? '<button class="noticia-cerrar" type="button" data-noticia-luego aria-label="Cerrar: ahora no"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'
+        : "") +
+      (x.imagen
+        ? '<div class="noticia-foto"' + (x.abrirAparte ? "" : ' data-abrir-noticia="' + id + '"') + ' aria-hidden="true">' +
+            '<img src="' + escapeHtml(rutaDelPortal(x.imagen)) + '" alt="" width="640" height="394" decoding="async"></div>'
+        : "") +
+      '<div class="card-body">' +
+        '<p class="noticia-etiqueta">' + escapeHtml(x.etiqueta || "Noticia") + "</p>" +
+        '<h3 class="noticia-titulo">' + escapeHtml(x.titulo) + "</h3>" +
+        '<p class="noticia-texto">' + escapeHtml(x.texto) + "</p>" +
+        (plazo
+          ? '<p class="noticia-plazo"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="12" r="9"/>' +
+              '<path d="M12 7v5l3 2"/></svg><span>' + escapeHtml(plazo) + "</span></p>"
+          : "") +
+        abrir +
+        (enVentana ? '<button class="btn btn-ghost btn-block noticia-luego" type="button" data-noticia-luego>Ahora no</button>' : "") +
+        (x.ocultar
+          ? '<button class="btn-link btn-link-muted noticia-ocultar" type="button" data-ocultar-noticia="' + id + '">' +
+              escapeHtml(x.ocultar) + "</button>"
+          : "") +
+      "</div>" +
+    "</article>";
+  }
+
+  // La campana y su hoja.
+  function pintarNoticias() {
+    var lista = noticiasVigentes();
+    $("noticias").innerHTML = lista.map(function (x) { return tarjetaNoticia(x, false); }).join("");
+    var campana = $("btnNoticias");
+    show(campana, lista.length > 0);
+    $("noticiasCuenta").textContent = lista.length ? String(lista.length) : "";
+    campana.setAttribute("aria-label", lista.length === 1 ? "Noticias: hay 1" : "Noticias: hay " + lista.length);
+    if (!lista.length) show($("noticiasSheet"), false);
+  }
+
+  // La ventana: la primera noticia vigente que hoy no se haya presentado, en el inicio y sin otra hoja abierta.
+  function presentarNoticia() {
+    clearTimeout(presentarTimer);
+    presentarTimer = setTimeout(function () {
+      var ventana = $("noticiaVentana");
+      if (!ventana.hidden || $("vistaInicio").hidden || !$("noticiaPantalla").hidden) return;
+      var ocupado = ["registroSheet", "asistenciaSheet", "cierreSheet", "guiaSheet", "noticiasSheet"]
+        .some(function (id) { return !$(id).hidden; });
+      if (ocupado) return;
+      var hoy = hoyCol();
+      var vistas = leerJson(NOTICIAS_PRESENTADAS, {}) || {};
+      var x = noticiasVigentes().find(function (n) { return vistas[n.id] !== hoy; });
+      if (!x) return;
+      $("noticiaVentanaCuerpo").innerHTML = tarjetaNoticia(x, true);
+      show(ventana, true);
+    }, 900);
+  }
+
+  // Cierra la ventana y la deja quieta por hoy.
+  function cerrarVentanaNoticia() {
+    var art = $("noticiaVentanaCuerpo").querySelector(".noticia");
+    var id = art && art.getAttribute("data-noticia");
+    if (id) {
+      var vistas = leerJson(NOTICIAS_PRESENTADAS, {}) || {};
+      vistas[id] = hoyCol();
+      guardarJson(NOTICIAS_PRESENTADAS, vistas);
+    }
+    show($("noticiaVentana"), false);
+    return id;
+  }
+
+  function ocultarNoticia(id) {
+    var ocultas = leerJson(NOTICIAS_OCULTAS, []) || [];
+    if (ocultas.indexOf(id) < 0) ocultas.push(id);
+    guardarJson(NOTICIAS_OCULTAS, ocultas);
+    pintarNoticias();
+  }
+
+  // La noticia a pantalla completa. Si ya estaba abierta la misma, sigue como la dejó.
+  function abrirNoticia(idNoticia) {
+    var x = noticiasVigentes().find(function (n) { return n.id === idNoticia && !n.abrirAparte; });
+    if (!x) return;
+    show($("noticiasSheet"), false);
+    var pantalla = $("noticiaPantalla");
+    var frame = pantalla.querySelector("iframe");
+    if (!frame || frame.getAttribute("data-noticia") !== x.id) {
+      var nombre = x.corto || x.titulo;
+      pantalla.innerHTML =
+        '<div class="externo-barra noticia-barra">' +
+          '<button class="btn btn-ghost btn-sm" type="button" data-cerrar-noticia>' +
+            '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>Volver</button>' +
+          '<span class="noticia-barra-nombre">' + escapeHtml(nombre) + "</span>" +
+        "</div>" +
+        '<div class="module-loading"><div class="boot-spinner"></div><p>Abriendo ' + escapeHtml(nombre.toLowerCase()) + "…</p></div>";
+      frame = document.createElement("iframe");
+      frame.id = "frame-noticia";
+      frame.title = nombre;
+      frame.setAttribute("data-noticia", x.id);
+      frame.setAttribute("allow", x.permisos || "fullscreen");
+      frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+      frame.src = x.enlace;
+      frame.addEventListener("load", function () {
+        var cargando = pantalla.querySelector(".module-loading");
+        if (cargando) cargando.remove();
+        llenarCedulaEnNoticia(frame, x);
+      });
+      pantalla.appendChild(frame);
+    }
+    show(pantalla, true);
+  }
+
+  function cerrarNoticia() {
+    show($("noticiaPantalla"), false);
+  }
+
+  // Como en el portal: SOLO la cédula de este celular, en el campo que diga la noticia, como si la tecleara (el
+  // formulario de Halloween trae el nombre y el cargo). Si la página es de otro sitio, el navegador no deja y no
+  // pasa nada: la escribe la persona.
+  function llenarCedulaEnNoticia(frame, x) {
+    var dni = estado.yo && estado.yo.dni;
+    if (!x.llenarCedula || !dni) return;
+    try {
+      var doc = frame.contentDocument;
+      var campo = doc && doc.querySelector(x.llenarCedula);
+      if (!campo || campo.value) return;
+      campo.value = String(dni);
+      campo.dispatchEvent(new doc.defaultView.Event("input", { bubbles: true }));
+      (campo.form || campo).scrollIntoView({ block: "start" });
+    } catch (_) { /* otro sitio: la escribe la persona */ }
+  }
+
+  function initNoticias() {
+    function cerca(ev, sel) { return ev.target.closest ? ev.target.closest(sel) : null; }
+    $("btnNoticias").addEventListener("click", function () {
+      pintarNoticias();
+      show($("noticiasSheet"), true);
+    });
+    $("noticiasCerrar").addEventListener("click", function () { show($("noticiasSheet"), false); });
+    $("noticiasSheet").addEventListener("click", function (ev) {
+      if (ev.target === $("noticiasSheet")) { show($("noticiasSheet"), false); return; }
+      var abrir = cerca(ev, "[data-abrir-noticia]");
+      if (abrir) { abrirNoticia(abrir.getAttribute("data-abrir-noticia")); return; }
+      var b = cerca(ev, "[data-ocultar-noticia]");
+      if (b) ocultarNoticia(b.getAttribute("data-ocultar-noticia"));
+    });
+    // La ventana: el botón la abre, "Ahora no", la X o tocar afuera la dejan para mañana.
+    $("noticiaVentana").addEventListener("click", function (ev) {
+      var abrir = cerca(ev, "[data-abrir-noticia]");
+      var ocultar = cerca(ev, "[data-ocultar-noticia]");
+      var aparte = cerca(ev, "a[target=_blank]");
+      if (ev.target !== $("noticiaVentana") && !abrir && !ocultar && !aparte && !cerca(ev, "[data-noticia-luego]")) return;
+      var id = cerrarVentanaNoticia();
+      if (abrir) abrirNoticia(abrir.getAttribute("data-abrir-noticia"));
+      else if (ocultar) ocultarNoticia(id);
+    });
+    $("noticiaPantalla").addEventListener("click", function (ev) {
+      if (cerca(ev, "[data-cerrar-noticia]")) cerrarNoticia();
+    });
+    // Que se quiten solas al terminar el plazo, aunque la app quede abierta.
+    setInterval(function () { if (estado.yo) pintarNoticias(); }, 10 * 60 * 1000);
   }
 
   // ------------------------------------------------------------- arranque
@@ -1115,6 +1324,7 @@
     $("btnGuia").addEventListener("click", abrirGuia);
     $("guiaCerrar").addEventListener("click", cerrarGuia);
     $("guiaListo").addEventListener("click", cerrarGuia);
+    initNoticias();
 
     window.addEventListener("online", function () {
       pintarRed();
@@ -1129,6 +1339,8 @@
         return;
       }
       if (estado.yo) {
+        pintarNoticias();
+        presentarNoticia();
         enviarPendientes();
         if (Date.now() - asis.consultadoEn > 60 * 1000) consultarAsistencia();   // marcó en otro lado, o pasó la hora
       }

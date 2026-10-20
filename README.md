@@ -345,7 +345,19 @@ sus iconos; usa `css/portal.css`, `js/vendor/jsQR.min.js` y la llave pública de
 `almacentro/enturnes/sql/tarjeta_despacho.sql` (para pasar de la v9:
 `personal_empresa.sql`).
 
-La versión de la app del personal va aparte (`g2.3.4`): está en
+**g2.4.0 (20-oct-2026, pedido del usuario):** la app del personal usa los **mismos colores del portal** (el verde de
+Combuses; hasta la g2.3.4 era morada): sin los colores propios en `gestores.css`, `theme-color` y el manifest en
+verde, y los iconos de `gestores/assets/` pasados de morado a verde (solo el morado; el logo igual). Y tiene las
+**noticias de la empresa**, las mismas de `NOTICIAS` del portal: el aviso flotante abajo en su inicio, la campana al
+lado del saludo y la hoja con la noticia; "Ver" abre la página a pantalla completa dentro de la app, con "Volver" y la
+cédula de ese celular ya escrita (`llenarCedula`). Lo quitado o visto hoy usa las mismas llaves del portal
+(`portal_noticias_ocultas`, `portal_noticias_avisadas`).
+
+**g2.5.0:** como el portal v1.20.0, la noticia ya no va en el aviso pequeño de abajo: al abrir la app sale
+**completa en una ventana encima**, una vez al día ("Ahora no" o la X la dejan para mañana; "Ya los inscribí…" la
+quita), y la campana sigue junto al saludo.
+
+La versión de la app del personal va aparte (`g2.5.0`): está en
 `gestores/gestores-app.js`, en `gestores/sw.js` y en los `?v=` y el `esta` del
 final de `gestores/index.html`. Si cambia `css/portal.css` o `js/vendor/jsQR.min.js`, hay
 que subirla también, o los celulares siguen con los guardados.
@@ -470,6 +482,14 @@ que $240.000 son en tiquetes y $140.000 en efectivo (7 pasajeros).
 - **La cuenta en vivo:** mientras escribe, el formulario dice *"19 pasajeros = 4 con tiquete ($80.000) + …"*; con más
   de 19 dice *"Máximo 19 pasajeros: es el cupo del bus"* y el botón Guardar se apaga; igual si tiquetes y cívicas
   pasan de los pasajeros. La lectura que escribe dice cómo le queda el viaje anterior (si no cuadra, avisa).
+
+### La noticia en una ventana encima (v1.20.0)
+
+El aviso pequeño de abajo "no es informativo" (usuario, 20-oct): ahora, al abrir el Inicio, la noticia vigente sale
+**completa en una ventana encima** (la misma tarjeta de la campana: imagen, texto, plazo y el botón), **una vez al
+día** (`portal_noticias_presentadas`). "Ahora no", la X o tocar afuera la dejan para mañana; el botón la abre dentro
+del portal; "Ya los inscribí…" la quita. No sale si hay otra hoja abierta, y el aviso para instalar la app espera. El
+aviso flotante pequeño queda solo para los documentos vencidos o por vencer.
 
 ### Notificaciones de documentos (v1.19.0)
 

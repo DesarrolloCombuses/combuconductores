@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="./css/portal.css?v=1.19.0">
+  <link rel="stylesheet" href="./css/portal.css?v=1.20.0">
 </head>
 <body>
 
@@ -323,9 +323,16 @@
 </div>
 
 <!-- ============ Noticias de la empresa (v1.17.2) ============ -->
-<!-- Aviso flotante pequeño, solo en el Inicio: "Ver" abre la noticia dentro del portal, la X lo cierra por hoy.
+<!-- Aviso flotante pequeño, solo en el Inicio: los documentos vencidos o por vencer (v1.19.0).
      Va después de appView y del aviso de versión nueva: el CSS lo esconde fuera de la app o si sale ese aviso. -->
 <div id="avisoNoticia" class="aviso-noticia" role="status" hidden></div>
+
+<!-- La noticia completa en una ventana encima (v1.20.0): sale sola al abrir el Inicio, una vez al día -->
+<div id="noticiaVentana" class="sheet-overlay noticia-ventana" hidden>
+  <div class="sheet sheet-noticia" role="dialog" aria-modal="true" aria-label="Noticia de Combuses">
+    <div id="noticiaVentanaCuerpo"></div>
+  </div>
+</div>
 
 <!-- La campana de arriba abre esta hoja: primero los documentos vencidos o por vencer, después las noticias completas
      (las pinta portal.js) -->
@@ -647,7 +654,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./js/portal-config.js?v=1.19.0"></script>
-<script src="./js/portal.js?v=1.19.0"></script>
+<script src="./js/portal-config.js?v=1.20.0"></script>
+<script src="./js/portal.js?v=1.20.0"></script>
 </body>
 </html>

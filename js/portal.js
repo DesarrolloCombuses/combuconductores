@@ -374,6 +374,7 @@
     // el usuario anterior.
     state.vista = "inicio";
     show($("noticiasSheet"), false);
+    show($("noticiaVentana"), false);
     notif.docs = [];
     notif.cerrados = {};
     // Los iframes se destruyen: no queremos dejar cargada la app de otro
@@ -1438,6 +1439,7 @@
   function cargarInicio() {
     pintarSaludo();
     pintarNotificaciones();
+    presentarNoticia();
     cargarTurno();
     cargarJornada();
     enviarNovedadesPendientes();
@@ -1495,39 +1497,47 @@
     return dias <= 1 ? "último día" : "quedan " + dias + " días";
   }
 
+  // La tarjeta de una noticia: imagen, etiqueta, título, texto, plazo, el botón y "Ya los inscribí…". La usan la
+  // hoja de la campana y la ventana que sale al abrir el Inicio (enVentana: con la X y "Ahora no").
+  function tarjetaNoticia(x, enVentana) {
+    var id = escapeHtml(x.id);
+    var plazo = [x.plazo, quedaDeNoticia(x)].filter(Boolean).join(" · ");
+    var abrir = x.abrirAparte
+      ? '<a class="btn btn-primary btn-block" href="' + escapeHtml(x.enlace) + '" target="_blank" rel="noopener">' +
+          escapeHtml(x.boton || "Ver la noticia") + "</a>"
+      : '<button class="btn btn-primary btn-block" type="button" data-abrir-noticia="' + id + '">' +
+          escapeHtml(x.boton || "Ver la noticia") + "</button>";
+    return '<article class="card noticia" data-tema="' + escapeHtml(x.tema || "") + '" data-noticia="' + id + '">' +
+      (enVentana
+        ? '<button class="noticia-cerrar" type="button" data-noticia-luego aria-label="Cerrar: ahora no"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'
+        : "") +
+      (x.imagen
+        ? '<div class="noticia-foto"' + (x.abrirAparte ? "" : ' data-abrir-noticia="' + id + '"') + ' aria-hidden="true">' +
+            '<img src="' + escapeHtml(x.imagen) + '" alt="" width="640" height="394" decoding="async"></div>'
+        : "") +
+      '<div class="card-body">' +
+        '<p class="noticia-etiqueta">' + escapeHtml(x.etiqueta || "Noticia") + "</p>" +
+        '<h3 class="noticia-titulo">' + escapeHtml(x.titulo) + "</h3>" +
+        '<p class="noticia-texto">' + escapeHtml(x.texto) + "</p>" +
+        (plazo
+          ? '<p class="noticia-plazo"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="12" r="9"/>' +
+              '<path d="M12 7v5l3 2"/></svg><span>' + escapeHtml(plazo) + "</span></p>"
+          : "") +
+        abrir +
+        (enVentana ? '<button class="btn btn-ghost btn-block noticia-luego" type="button" data-noticia-luego>Ahora no</button>' : "") +
+        (x.ocultar
+          ? '<button class="btn-link btn-link-muted noticia-ocultar" type="button" data-ocultar-noticia="' + id + '">' +
+              escapeHtml(x.ocultar) + "</button>"
+          : "") +
+      "</div>" +
+    "</article>";
+  }
+
   function pintarNotificaciones() {
     var box = $("noticias");
     if (!box) return;
     var lista = noticiasVigentes();
-    box.innerHTML = lista.map(function (x) {
-      var id = escapeHtml(x.id);
-      var plazo = [x.plazo, quedaDeNoticia(x)].filter(Boolean).join(" · ");
-      var abrir = x.abrirAparte
-        ? '<a class="btn btn-primary btn-block" href="' + escapeHtml(x.enlace) + '" target="_blank" rel="noopener">' +
-            escapeHtml(x.boton || "Ver la noticia") + "</a>"
-        : '<button class="btn btn-primary btn-block" type="button" data-abrir-noticia="' + id + '">' +
-            escapeHtml(x.boton || "Ver la noticia") + "</button>";
-      return '<article class="card noticia" data-tema="' + escapeHtml(x.tema || "") + '" data-noticia="' + id + '">' +
-        (x.imagen
-          ? '<div class="noticia-foto"' + (x.abrirAparte ? "" : ' data-abrir-noticia="' + id + '"') + ' aria-hidden="true">' +
-              '<img src="' + escapeHtml(x.imagen) + '" alt="" width="640" height="394" decoding="async"></div>'
-          : "") +
-        '<div class="card-body">' +
-          '<p class="noticia-etiqueta">' + escapeHtml(x.etiqueta || "Noticia") + "</p>" +
-          '<h3 class="noticia-titulo">' + escapeHtml(x.titulo) + "</h3>" +
-          '<p class="noticia-texto">' + escapeHtml(x.texto) + "</p>" +
-          (plazo
-            ? '<p class="noticia-plazo"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="12" r="9"/>' +
-                '<path d="M12 7v5l3 2"/></svg><span>' + escapeHtml(plazo) + "</span></p>"
-            : "") +
-          abrir +
-          (x.ocultar
-            ? '<button class="btn-link btn-link-muted noticia-ocultar" type="button" data-ocultar-noticia="' + id + '">' +
-                escapeHtml(x.ocultar) + "</button>"
-            : "") +
-        "</div>" +
-      "</article>";
-    }).join("");
+    box.innerHTML = lista.map(function (x) { return tarjetaNoticia(x, false); }).join("");
 
     // Los documentos vencidos o por vencer, arriba de las noticias, como en la tarjeta "Documentos del bus".
     var docsBox = $("notifDocs");
@@ -1629,32 +1639,66 @@
     setTimeout(function () { card.classList.remove("resaltar"); }, 2500);
   }
 
-  // El aviso flotante: una noticia a la vez, solo mirando el Inicio, la primera que hoy no se haya visto ni cerrado.
+  // El aviso flotante pequeño, solo mirando el Inicio: los documentos vencidos o por vencer (el más urgente). Las
+  // noticias ya no van aquí: salen completas en la ventana (presentarNoticia, v1.20.0).
   function pintarAvisoNoticia() {
     var aviso = $("avisoNoticia");
     if (!aviso) return;
     var hoy = hoyColombia();
     var avisadas = noticiasAvisadas();
     var enInicio = state.vista === "inicio" && !$("appView").hidden;
-    // Primero un documento vencido o por vencer (el más urgente); después las noticias.
     var doc = enInicio ? notif.docs.find(function (d) { return !notif.cerrados[d.id] && avisadas[d.id] !== hoy; }) : null;
-    if (doc) { pintarAvisoDocumento(aviso, doc); return; }
-    var x = enInicio ? noticiasVigentes().find(function (n) { return avisadas[n.id] !== hoy; }) : null;
-    if (!x) { show(aviso, false); return; }
-    var id = escapeHtml(x.id);
-    aviso.setAttribute("data-noticia", x.id);
-    aviso.setAttribute("data-tema", x.tema || "");
-    aviso.innerHTML =
-      (x.icono ? '<img class="aviso-noticia-icono" src="' + escapeHtml(x.icono) + '" alt="" width="42" height="42">' : "") +
-      '<div class="aviso-noticia-texto"><strong>' + escapeHtml(x.corto || x.titulo) + "</strong>" +
-        "<span>" + escapeHtml([x.aviso || x.texto, quedaDeNoticia(x)].filter(Boolean).join(" · ")) + "</span></div>" +
-      (x.abrirAparte
-        ? '<a class="btn btn-sm" href="' + escapeHtml(x.enlace) + '" target="_blank" rel="noopener" data-aviso-ver="' + id + '">Ver</a>'
-        : '<button class="btn btn-sm" type="button" data-aviso-ver="' + id + '">Ver</button>') +
-      '<button class="icon-btn aviso-noticia-cerrar" type="button" data-aviso-cerrar="' + id + '" ' +
-        'aria-label="Cerrar el aviso por hoy" title="Cerrar el aviso por hoy">' +
-        '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>';
-    show(aviso, true);
+    if (doc) pintarAvisoDocumento(aviso, doc);
+    else show(aviso, false);
+  }
+
+  // La ventana de la noticia (v1.20.0, pedido del usuario: el aviso pequeño "no es informativo"; que salga encima para
+  // que la abran). Al abrir el Inicio, la primera noticia vigente que hoy no se haya presentado sale completa encima de
+  // todo: imagen, texto, plazo y el botón. Una vez al día: "Ahora no" o la X la dejan para mañana, el botón la abre y
+  // "Ya los inscribí…" la quita. No sale si hay otra hoja abierta (instalar, perfil, tiquetes...).
+  var NOTICIAS_PRESENTADAS = "portal_noticias_presentadas";
+  var presentarTimer = null;
+
+  function noticiasPresentadas() {
+    try { return JSON.parse(localStorage.getItem(NOTICIAS_PRESENTADAS) || "{}") || {}; } catch (_) { return {}; }
+  }
+
+  function presentarNoticia() {
+    clearTimeout(presentarTimer);
+    presentarTimer = setTimeout(function () {
+      var ventana = $("noticiaVentana");
+      if (!ventana || !ventana.hidden || state.vista !== "inicio" || $("appView").hidden) return;
+      var ocupado = ["bootOverlay", "perfilSheet", "tiquetesSheet", "instalarSheet", "noticiasSheet", "danoSheet",
+        "sinInternet", "sinUbicacion"].some(function (id) { return $(id) && !$(id).hidden; });
+      if (ocupado) return;
+      var hoy = hoyColombia();
+      var vistas = noticiasPresentadas();
+      var x = noticiasVigentes().find(function (n) { return vistas[n.id] !== hoy; });
+      if (!x) return;
+      $("noticiaVentanaCuerpo").innerHTML = tarjetaNoticia(x, true);
+      show(ventana, true);
+    }, 900);
+  }
+
+  // Cierra la ventana y la deja quieta por hoy.
+  function cerrarVentanaNoticia() {
+    var art = $("noticiaVentanaCuerpo").querySelector(".noticia");
+    var id = art && art.getAttribute("data-noticia");
+    if (id) {
+      var vistas = noticiasPresentadas();
+      vistas[id] = hoyColombia();
+      try { localStorage.setItem(NOTICIAS_PRESENTADAS, JSON.stringify(vistas)); } catch (_) { /* sin espacio: solo por ahora */ }
+    }
+    show($("noticiaVentana"), false);
+    return id;
+  }
+
+  // "Ya los inscribí o no tengo hijos de esa edad": no vuelve a salir en este celular (ni ventana ni campana).
+  function ocultarNoticia(id) {
+    var ocultas = noticiasOcultas();
+    if (ocultas.indexOf(id) < 0) ocultas.push(id);
+    try { localStorage.setItem(NOTICIAS_OCULTAS, JSON.stringify(ocultas)); } catch (_) { /* sin espacio: solo por ahora */ }
+    pintarNotificaciones();
   }
 
   function abrirNoticia(id) {
@@ -1677,11 +1721,18 @@
       var abrir = cerca(ev, "[data-abrir-noticia]");
       if (abrir) { abrirNoticia(abrir.getAttribute("data-abrir-noticia")); return; }
       var b = cerca(ev, "[data-ocultar-noticia]");
-      if (!b) return;
-      var ocultas = noticiasOcultas();
-      ocultas.push(b.getAttribute("data-ocultar-noticia"));
-      try { localStorage.setItem(NOTICIAS_OCULTAS, JSON.stringify(ocultas)); } catch (_) { /* sin espacio: solo por ahora */ }
-      pintarNotificaciones();
+      if (b) ocultarNoticia(b.getAttribute("data-ocultar-noticia"));
+    });
+
+    // La ventana: el botón la abre (dentro del portal), "Ahora no", la X o tocar afuera la dejan para mañana.
+    $("noticiaVentana").addEventListener("click", function (ev) {
+      var abrir = cerca(ev, "[data-abrir-noticia]");
+      var ocultar = cerca(ev, "[data-ocultar-noticia]");
+      var aparte = cerca(ev, "a[target=_blank]");
+      if (ev.target !== $("noticiaVentana") && !abrir && !ocultar && !aparte && !cerca(ev, "[data-noticia-luego]")) return;
+      var id = cerrarVentanaNoticia();
+      if (abrir) abrirNoticia(abrir.getAttribute("data-abrir-noticia"));
+      else if (ocultar) ocultarNoticia(id);
     });
 
     $("avisoNoticia").addEventListener("click", function (ev) {
@@ -1691,13 +1742,6 @@
         if (verDoc) verDocumentos(); else pintarAvisoNoticia();
         return;
       }
-      var ver = cerca(ev, "[data-aviso-ver]");
-      var cerrar = cerca(ev, "[data-aviso-cerrar]");
-      if (!ver && !cerrar) return;
-      var id = ver ? ver.getAttribute("data-aviso-ver") : cerrar.getAttribute("data-aviso-cerrar");
-      marcarAvisada(id);
-      if (ver && ver.tagName === "BUTTON") abrirNoticia(id);
-      else pintarAvisoNoticia();
     });
 
     // Que se quiten solas al terminar el plazo, aunque la app quede abierta.
@@ -5051,7 +5095,7 @@
   // asistencia o validar tiquetes).
   function pedirInstalacion() {
     if (instalarYaPedido || instalacionPospuesta() || !modoInstalacion()) return;
-    var ocupado = ["bootOverlay", "perfilSheet", "tiquetesSheet", "sinInternet", "sinUbicacion", "instalarSheet", "noticiasSheet"]
+    var ocupado = ["bootOverlay", "perfilSheet", "tiquetesSheet", "sinInternet", "sinUbicacion", "instalarSheet", "noticiasSheet", "noticiaVentana"]
       .some(function (id) { return $(id) && !$(id).hidden; });
     if (ocupado) return;
     if (!$("appView").hidden && state.vista !== "inicio") return;
@@ -5215,7 +5259,7 @@
   function momentoSeguroParaActualizar() {
     // Recargar sin red dejaría el portal a medio cargar.
     if (!internet.ok || !navigator.onLine) return false;
-    var hojaAbierta = ["perfilSheet", "tiquetesSheet", "instalarSheet", "noticiasSheet"].some(function (id) {
+    var hojaAbierta = ["perfilSheet", "tiquetesSheet", "instalarSheet", "noticiasSheet", "noticiaVentana"].some(function (id) {
       return $(id) && !$(id).hidden;
     });
     if (hojaAbierta) return false;

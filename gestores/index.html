@@ -12,7 +12,7 @@
            viaje: suman en los pasajeros pero no se cobran.
          - ¿Cómo se hace?: la guía con dibujos. -->
   <link rel="manifest" href="./manifest.webmanifest">
-  <meta name="theme-color" content="#5b21b6">
+  <meta name="theme-color" content="#0b6b3a">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -23,8 +23,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="../css/portal.css?v=g2.3.4">
-  <link rel="stylesheet" href="./gestores.css?v=g2.3.4">
+  <link rel="stylesheet" href="../css/portal.css?v=g2.5.0">
+  <link rel="stylesheet" href="./gestores.css?v=g2.5.0">
 </head>
 <body class="app-gestores">
 
@@ -59,9 +59,16 @@
 <!-- ============ 2. Inicio: leer el código del bus ============ -->
 <section id="vistaInicio" class="view" hidden>
   <div class="home">
-    <div class="home-greeting">
-      <h2 id="inicioSaludo">Hola</h2>
-      <p id="inicioCargo" class="home-date"></p>
+    <div class="home-greeting inicio-encabezado">
+      <div>
+        <h2 id="inicioSaludo">Hola</h2>
+        <p id="inicioCargo" class="home-date"></p>
+      </div>
+      <!-- Noticias de la empresa (g2.4.0): sale solo si hay alguna, con el número; abre la hoja Noticias -->
+      <button id="btnNoticias" class="icon-btn campana" type="button" hidden title="Noticias" aria-label="Noticias">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        <span id="noticiasCuenta" class="campana-cuenta" aria-hidden="true"></span>
+      </button>
     </div>
 
     <p id="sinRed" class="aviso-sin-red" role="status" hidden></p>
@@ -110,6 +117,32 @@
     <p class="version-note">Personal Combuses <span data-version></span></p>
   </div>
 </section>
+
+<!-- ============ Noticias de la empresa (g2.4.0), las mismas del Portal del Conductor ============ -->
+<!-- La noticia completa en una ventana encima (g2.5.0): sale sola al abrir la app, una vez al día -->
+<div id="noticiaVentana" class="sheet-overlay noticia-ventana" hidden>
+  <div class="sheet sheet-noticia" role="dialog" aria-modal="true" aria-label="Noticia de Combuses">
+    <div id="noticiaVentanaCuerpo"></div>
+  </div>
+</div>
+
+<!-- La campana abre esta hoja con las noticias completas (las pinta gestores-app.js) -->
+<div id="noticiasSheet" class="sheet-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="noticiasTitulo">
+    <header class="sheet-head">
+      <h3 id="noticiasTitulo">Noticias</h3>
+      <button id="noticiasCerrar" class="icon-btn" type="button" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <div id="noticias" class="noticias"></div>
+    </div>
+  </div>
+</div>
+
+<!-- La noticia abierta, dentro de la app: "Volver" arriba y su página debajo (con la cédula ya escrita) -->
+<div id="noticiaPantalla" class="noticia-pantalla" hidden></div>
 
 <!-- ============ Leer el código del bus, la selfie y el resultado ============ -->
 <div id="registroSheet" class="sheet-overlay" hidden>
@@ -246,15 +279,15 @@
 </div>
 
 <!-- Solo la dirección de Supabase y la llave pública (la misma del portal); no inicia sesión. -->
-<script src="../js/portal-config.js?v=g2.3.4"></script>
-<script src="../js/vendor/jsQR.min.js?v=g2.3.4"></script>
-<script src="./gestores-app.js?v=g2.3.4"></script>
+<script src="../js/portal-config.js?v=g2.5.0"></script>
+<script src="../js/vendor/jsQR.min.js?v=g2.5.0"></script>
+<script src="./gestores-app.js?v=g2.5.0"></script>
 <script>
   // La primera vez que se abre después de una actualización, el service worker viejo todavía entrega el
   // programa que tenía guardado (con la g2.0.0 la tarjeta se quedaba en "Consultando…"). Si el programa
   // que corrió no es de esta página, se espera al service worker nuevo y se recarga (máximo 2 veces).
   (function () {
-    var esta = "g2.3.4";
+    var esta = "g2.5.0";
     var corrio = (document.querySelector("[data-version]") || {}).textContent;
     if (!corrio || corrio === esta || !("serviceWorker" in navigator)) return;
     var marca = "personal_app_recarga_" + esta;

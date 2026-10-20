@@ -1,18 +1,6 @@
-/* App del personal de la empresa: usa el estilo del Portal del Conductor (../css/portal.css)
-   con el morado de los gestores (el mismo de su punto en el mapa de Control), para que no se
-   confunda con la app del conductor. */
-.app-gestores {
-  --bg: #f1eef8;
-  --primary: #5b21b6;
-  --primary-strong: #4c1d95;
-  --primary-ink: #f3eefc;
-  --primary-glow: rgba(91, 33, 182, .22);
-  --soft: #efe9fb;
-  --line: #e2dcef;
-  --line-strong: #cbc1e3;
-  --muted: #6b6380;
-  --ink-2: #3f3a4d;
-}
+/* App del personal de la empresa: usa el estilo del Portal del Conductor (../css/portal.css) con
+   sus mismos colores, el verde de Combuses (g2.4.0, pedido del usuario: "los mismos colores, que quede
+   bien integrada"). Hasta la g2.3.4 era morada, como el punto de los gestores en el mapa de Control. */
 
 .app-gestores .home { padding-top: calc(18px + env(safe-area-inset-top)); }
 
@@ -66,9 +54,8 @@
 
 .app-gestores .btn-link { align-self: center; }
 
-/* --- Mi asistencia (g2.1.0): el biométrico del personal; en verde de Combuses desde la g2.2.2 (pedido
-   del usuario), el resto de la app sigue morado. Ya adentro (le toca la salida) el verde es más oscuro. --- */
-.app-gestores .card-turno { background: linear-gradient(160deg, #5b21b6 0%, #4c1d95 100%); }
+/* --- Mi asistencia (g2.1.0): el biométrico del personal, en verde de Combuses (g2.2.2). Ya adentro
+   (le toca la salida) el verde es más oscuro. --- */
 .app-gestores .card-asistencia {
   background: linear-gradient(160deg, #1fae5b 0%, #0f8a45 50%, #0b6b3a 100%);
   box-shadow: 0 2px 4px rgba(11, 47, 25, .08), 0 12px 26px -12px rgba(11, 107, 58, .55);
@@ -197,3 +184,19 @@
 .cierre-resumen { padding: 11px 13px; border-radius: var(--radius-sm); background: var(--soft); font-size: 14px; color: var(--ink-2); }
 .cierre-resumen ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
 .cierre-alerta { color: var(--danger); font-weight: 700; }
+
+/* --- Noticias de la empresa (g2.4.0): las mismas del Portal del Conductor (cfg.NOTICIAS), con su misma ventana
+   encima al abrir (g2.5.0), la campana y la hoja (estilos de ../css/portal.css). --- */
+.inicio-encabezado { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.inicio-encabezado .campana { flex: none; margin-top: 4px; }
+/* La noticia abierta: pantalla completa dentro de la app, "Volver" arriba y la página debajo */
+.noticia-pantalla {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  background: var(--bg);
+}
+.noticia-pantalla > iframe { flex: 1; width: 100%; min-height: 0; border: 0; }
