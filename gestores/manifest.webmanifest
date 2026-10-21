@@ -1,8 +1,8 @@
 {
   "id": "/personal-combuses/",
-  "name": "Gestores · Combuses",
-  "short_name": "Gestores",
-  "description": "Para gestores de servicio y gestores de movilidad: marcan su entrada y su salida en los puntos autorizados y se registran al subir a un bus leyendo el código del conductor.",
+  "name": "Personal · Combuses",
+  "short_name": "Personal",
+  "description": "Para gestores y colaboradores administrativos: marcan su entrada y su salida en los puntos autorizados y se registran al subir a un bus leyendo el código del conductor.",
   "start_url": "./index.html?source=pwa",
   "scope": "./",
   "display": "standalone",

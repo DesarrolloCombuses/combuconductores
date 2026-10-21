@@ -376,7 +376,13 @@ los gestores de servicio y gestores de movilidad, que explique los puntos donde 
 La noticia del día sale solo en el Inicio. La puede seguir usando cualquier persona vinculada (no se cerró a otros
 cargos).
 
-La versión de la app del personal va aparte (`g2.6.0`): está en
+**g2.6.1 (21-oct-2026, pedido del usuario: "personas de gestores y colaboradores administrativos"):** solo textos.
+La app se llama **Personal** ("Personal · Combuses", *Gestores y administrativos*; el manifest también, y así
+coincide con el ícono, que ya decía PERSONAL) y dice que es para los gestores y los colaboradores
+administrativos. Sigue abierta a cualquier persona vinculada: un mecánico que se sube al bus se sigue
+registrando.
+
+La versión de la app del personal va aparte (`g2.6.1`): está en
 `gestores/gestores-app.js`, en `gestores/sw.js` y en los `?v=` y el `esta` del
 final de `gestores/index.html`. Si cambia `css/portal.css` o `js/vendor/jsQR.min.js`, hay
 que subirla también, o los celulares siguen con los guardados.

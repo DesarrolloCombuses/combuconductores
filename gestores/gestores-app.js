@@ -24,6 +24,9 @@
      con los 3 puntos y a cuánto queda cada uno), Cómo se hace (la guía y
      "Si algo falla") y Mi cuenta. Dice que es para los gestores de servicio
      y los gestores de movilidad (la puede usar cualquier persona vinculada).
+     Desde la g2.6.1 se llama "Personal" (como el ícono) y dice que es para los
+     gestores y los colaboradores administrativos; sigue abierta a cualquier
+     persona vinculada.
      6. Noticias de la empresa (g2.4.0): las mismas del Portal del Conductor;
         desde la g2.5.0 salen completas encima al abrir la app (una vez al día),
         con la campana y la página dentro de la app.
@@ -39,7 +42,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "g2.6.0";
+  var VERSION = "g2.6.1";
   var cfg = window.PORTAL_CONFIG || {};
   var RPC_QUIEN_SOY = "personal_quien_soy";
   var RPC_REGISTRAR = "personal_registrar_subida";
