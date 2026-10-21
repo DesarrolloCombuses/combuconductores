@@ -3,28 +3,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Personal · Combuses</title>
-  <!-- La app del PERSONAL DE LA EMPRESA (gestoras, auxiliares, mecánicos...), aparte del Portal del
-       Conductor y sin correo ni clave:
-         - Mi asistencia: marcan ENTRADA y SALIDA con una selfie y la ubicación, como en el biométrico (queda
-           en la asistencia y en Buk, con la función personal-marcar-asistencia de Supabase).
-         - Al subir a un bus leen el código que les muestra el conductor y se toman una selfie. Quedan en el
-           viaje: suman en los pasajeros pero no se cobran.
-         - ¿Cómo se hace?: la guía con dibujos. -->
+  <title>Gestores · Combuses</title>
+  <!-- La app de los GESTORES (gestores de servicio y gestores de movilidad; la puede usar cualquier persona
+       vinculada), aparte del Portal del Conductor y sin correo ni clave. Desde la g2.6.0 tiene un menú abajo:
+         - Inicio: Mi asistencia (ENTRADA y SALIDA con una selfie y la ubicación, como en el biométrico: queda en
+           la asistencia y en Buk, con la función personal-marcar-asistencia de Supabase), "Leer código del bus"
+           (al subir a un bus: suma en los pasajeros pero no se cobra) y los registros de hoy.
+         - Dónde marcar: el mapa con los 3 puntos (Almacentro, Nutibara y Terminal Norte), a cuánto queda cada uno
+           y dónde no se marca.
+         - Cómo se hace: la guía con dibujos y "Si algo falla".
+         - Mi cuenta: quién es, para quién es la app y cambiar la cédula. -->
   <link rel="manifest" href="./manifest.webmanifest">
   <meta name="theme-color" content="#0b6b3a">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Personal">
+  <meta name="apple-mobile-web-app-title" content="Gestores">
   <meta name="format-detection" content="telephone=no">
   <link rel="apple-touch-icon" sizes="180x180" href="./assets/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./assets/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="../css/portal.css?v=g2.5.0">
-  <link rel="stylesheet" href="./gestores.css?v=g2.5.0">
+  <link rel="stylesheet" href="../css/portal.css?v=g2.6.0">
+  <link rel="stylesheet" href="./gestores.css?v=g2.6.0">
 </head>
 <body class="app-gestores">
 
@@ -32,8 +34,13 @@
 <section id="vistaCedula" class="view login-view" hidden>
   <form id="cedulaForm" class="login-card" autocomplete="off" novalidate>
     <img class="login-logo" src="../assets/logo-combuses.webp" alt="Combuses">
-    <h1 class="login-title">Personal de la empresa</h1>
-    <p class="login-subtitle">Su entrada, su salida y su registro al subir a un bus</p>
+    <h1 class="login-title">Gestores Combuses</h1>
+    <p class="login-subtitle">Para gestores de servicio y gestores de movilidad</p>
+    <ul class="cedula-usos">
+      <li><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Marcar su entrada y su salida</li>
+      <li><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>Registrarse al subir a un bus</li>
+      <li><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Ver dónde se marca</li>
+    </ul>
 
     <div id="pasoCedula">
       <label class="field">
@@ -52,23 +59,30 @@
       <button id="confirmarNo" class="btn btn-ghost btn-block" type="button">No, escribir otra cédula</button>
     </div>
 
-    <p class="version-note">Personal Combuses <span data-version></span></p>
+    <p class="version-note">Gestores Combuses <span data-version></span></p>
   </form>
 </section>
 
-<!-- ============ 2. Inicio: leer el código del bus ============ -->
-<section id="vistaInicio" class="view" hidden>
-  <div class="home">
-    <div class="home-greeting inicio-encabezado">
-      <div>
-        <h2 id="inicioSaludo">Hola</h2>
-        <p id="inicioCargo" class="home-date"></p>
-      </div>
-      <!-- Noticias de la empresa (g2.4.0): sale solo si hay alguna, con el número; abre la hoja Noticias -->
-      <button id="btnNoticias" class="icon-btn campana" type="button" hidden title="Noticias" aria-label="Noticias">
-        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-        <span id="noticiasCuenta" class="campana-cuenta" aria-hidden="true"></span>
-      </button>
+<!-- ============ 2. La app: la barra de arriba, las 4 partes y el menú de abajo (g2.6.0) ============ -->
+<section id="vistaInicio" class="view vista-app" hidden>
+  <header class="gestores-barra">
+    <img class="gestores-logo" src="../assets/logo-combuses.webp" alt="Combuses">
+    <div class="gestores-barra-titulos">
+      <strong>Gestores</strong>
+      <span>Servicio y movilidad</span>
+    </div>
+    <!-- Noticias de la empresa (g2.4.0): sale solo si hay alguna, con el número; abre la hoja Noticias -->
+    <button id="btnNoticias" class="icon-btn campana" type="button" hidden title="Noticias" aria-label="Noticias">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+      <span id="noticiasCuenta" class="campana-cuenta" aria-hidden="true"></span>
+    </button>
+  </header>
+
+  <!-- ---- Inicio: la asistencia, el bus y los registros de hoy ---- -->
+  <div class="home pestana" data-pestana="inicio">
+    <div class="saludo">
+      <h2 id="inicioSaludo">Hola</h2>
+      <span id="inicioCargo" class="cargo-chip"></span>
     </div>
 
     <p id="sinRed" class="aviso-sin-red" role="status" hidden></p>
@@ -108,14 +122,172 @@
       </div>
     </article>
 
-    <button id="btnGuia" class="card card-guia" type="button">
-      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.3 2.4c-.5.2-.8.6-.8 1.1v.5M12 16.5v.5"/></svg>
-      <span><b>¿Cómo se hace?</b><small>La guía con dibujos: la entrada, el bus y la salida</small></span>
-    </button>
+    <div class="atajos">
+      <button class="card atajo" type="button" data-ir="puntos">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+        <b>¿Dónde marco?</b><small>Almacentro, Nutibara y Terminal Norte</small>
+      </button>
+      <button class="card atajo" type="button" data-ir="guia">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.3 2.4c-.5.2-.8.6-.8 1.1v.5M12 16.5v.5"/></svg>
+        <b>¿Cómo se hace?</b><small>La entrada, el bus y la salida</small>
+      </button>
+    </div>
 
-    <button id="btnCambiarCedula" class="btn-link btn-link-muted" type="button">No soy yo: cambiar la cédula</button>
-    <p class="version-note">Personal Combuses <span data-version></span></p>
+    <p class="version-note">Gestores Combuses <span data-version></span></p>
   </div>
+
+  <!-- ---- Dónde marcar: el mapa con los 3 puntos y a cuánto queda cada uno ---- -->
+  <div class="home pestana" data-pestana="puntos" hidden>
+    <div class="pestana-cabeza">
+      <h2>Dónde marcar</h2>
+      <p>La entrada y la salida solo se marcan en estos <b>3 puntos</b>, con el GPS del celular encendido.</p>
+    </div>
+    <div id="mapaPuntos" class="mapa-puntos" aria-label="Mapa de los puntos de marcación">
+      <p class="mapa-aviso">Cargando el mapa…</p>
+    </div>
+    <button id="btnDondeEstoy" class="btn btn-primary btn-block" type="button">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22"/></svg>
+      ¿A cuánto estoy?
+    </button>
+    <p id="puntosEstado" class="puntos-estado" role="status" hidden></p>
+    <ul id="listaPuntos" class="lista-puntos"></ul>
+
+    <article class="card aviso-no-marca">
+      <header class="card-head"><h3>Aquí no se marca</h3></header>
+      <div class="card-body">
+        <ul class="lista-no">
+          <li>El Aeropuerto</li>
+          <li>Exposiciones</li>
+          <li>La oficina de la Av. Oriental</li>
+        </ul>
+        <p class="nota-puntos">Si está lejos de los 3 puntos, la app no deja tomar la foto y le dice a cuánto queda cada uno.</p>
+      </div>
+    </article>
+
+    <article class="card">
+      <header class="card-head"><h3>El GPS, siempre encendido</h3></header>
+      <div class="card-body">
+        <p class="nota-puntos">Con el GPS apagado el celular adivina dónde está por el wifi, con más de 100 m de error, y así
+          no deja marcar. Encienda la <b>ubicación</b> del celular y, si tarda, salga a cielo abierto y espere unos
+          segundos.</p>
+      </div>
+    </article>
+  </div>
+
+  <!-- ---- Cómo se hace: la guía con dibujos y lo que hay que hacer si algo falla ---- -->
+  <div class="home pestana" data-pestana="guia" hidden>
+    <div class="pestana-cabeza">
+      <h2>Cómo se hace</h2>
+      <p>Todo lo de la app, paso a paso.</p>
+    </div>
+    <p id="guiaBienvenida" class="guia-bienvenida" hidden>Le damos la bienvenida a la app de los gestores. Mire cómo
+      funciona y al final toque <b>Entendido</b>.</p>
+    <ol class="guia">
+      <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><rect x="22" y="4" width="36" height="62" rx="7" class="g-fondo"/><circle cx="40" cy="26" r="8"/><path d="M27 50c2-8 8-12 13-12s11 4 13 12"/><circle cx="68" cy="50" r="14" class="g-blanco"/><path d="M68 42v8l5 3"/><path d="M76 14h12M82 8l6 6-6 6" class="g-acento"/></svg>
+        <div><b>Al llegar a trabajar</b>
+          <p>Toque <strong>Marcar ENTRADA</strong> y tómese una foto de frente. Queda la hora y dónde está, y se manda a Buk, igual que en el biométrico. Solo se marca en <strong>Almacentro, Nutibara o Terminal Norte</strong>.</p></div></li>
+      <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><rect x="3" y="12" width="50" height="42" rx="7" class="g-fondo"/><rect x="9" y="18" width="38" height="15" rx="3" class="g-blanco"/><path d="M9 43h8M39 43h8"/><circle cx="15" cy="56" r="5" class="g-blanco"/><circle cx="41" cy="56" r="5" class="g-blanco"/><rect x="60" y="6" width="32" height="54" rx="6" class="g-blanco"/><rect x="67" y="16" width="18" height="18" rx="2"/><path d="M71 20h3v3h-3zM78 20h3v3h-3zM71 27h3v3h-3zM78 27h3v3h-3z" class="g-relleno"/><path d="M68 44h16M71 50h10"/></svg>
+        <div><b>Al subir a un bus de Combuses</b>
+          <p>Salude y pídale al conductor que, en <strong>Mi tarjeta</strong>, toque <strong>Personal de la empresa</strong>. Su celular le muestra un código que cambia cada 15 segundos.</p></div></li>
+      <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><rect x="28" y="3" width="40" height="66" rx="7" class="g-fondo"/><path d="M35 17v-5h5M56 12h5v5M61 41v5h-5M40 46h-5v-5"/><rect x="41" y="21" width="14" height="14" rx="2" class="g-blanco"/><path d="M44 24h3v3h-3zM49 29h3v3h-3z" class="g-relleno"/><path d="M31 29h34" class="g-acento"/><path d="M40 57h16"/></svg>
+        <div><b>Lea el código</b>
+          <p>Toque <strong>Leer código del bus</strong> y apunte la cámara al código del celular del conductor.</p></div></li>
+      <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><circle cx="42" cy="36" r="30" class="g-fondo"/><circle cx="42" cy="29" r="9"/><path d="M26 55c3-9 9-13 16-13s13 4 16 13"/><circle cx="74" cy="52" r="13" class="g-ok"/><path d="M68 52l4 4 8-8" class="g-ok-trazo"/></svg>
+        <div><b>Su foto y listo</b>
+          <p>Tómese una foto y toque <strong>Registrarme</strong>. Queda en el viaje de ese bus: cuenta como pasajero, pero no se le cobra.</p></div></li>
+      <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><path d="M20 30a40 40 0 0 1 56 0M29 39a27 27 0 0 1 38 0M38 48a14 14 0 0 1 20 0"/><circle cx="48" cy="57" r="3.5" class="g-relleno"/><path d="M22 66L74 10" class="g-acento"/></svg>
+        <div><b>Si no hay señal</b>
+          <p>El registro del bus se guarda en su celular y se manda solo cuando vuelva. La entrada y la salida sí necesitan internet.</p></div></li>
+      <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><rect x="22" y="4" width="36" height="62" rx="7" class="g-fondo"/><circle cx="40" cy="26" r="8"/><path d="M27 50c2-8 8-12 13-12s11 4 13 12"/><circle cx="68" cy="50" r="14" class="g-blanco"/><path d="M68 42v8l5 3"/><path d="M88 14H76M82 8l-6 6 6 6" class="g-acento"/></svg>
+        <div><b>Al terminar el día</b>
+          <p>Toque <strong>Marcar SALIDA</strong> con otra foto. Si se le olvidó, al otro día toque <strong>Se me olvidó marcar la salida</strong> y diga a qué hora salió.</p></div></li>
+    </ol>
+
+    <h3 class="guia-sub">Si algo falla</h3>
+    <div class="preguntas">
+      <details>
+        <summary>No me deja marcar la entrada o la salida</summary>
+        <p>Está lejos de los 3 puntos o el GPS está apagado. Mire <a href="#" data-ir="puntos">Dónde marcar</a>: le dice a
+          cuánto queda cada punto. Cuando llegue, toque <strong>Ya llegué: revisar otra vez</strong>.</p>
+      </details>
+      <details>
+        <summary>La cámara no lee el código del bus</summary>
+        <p>Pídale al conductor que suba el brillo de su celular y acerque la cámara, sin reflejos. El código cambia cada 15
+          segundos: si se demoró, que lo muestre otra vez.</p>
+      </details>
+      <details>
+        <summary>Se me olvidó marcar la salida</summary>
+        <p>Al otro día, en Mi asistencia, toque <strong>Se me olvidó marcar la salida</strong>, diga a qué hora salió y por
+          qué no quedó marcada. Gestión humana la revisa.</p>
+      </details>
+      <details>
+        <summary>No tengo señal</summary>
+        <p>Igual puede leer el código del bus: el registro queda guardado en su celular y se manda solo. La entrada y la
+          salida sí necesitan internet.</p>
+      </details>
+      <details>
+        <summary>Mi cédula no aparece</summary>
+        <p>Revise que esté bien escrita, solo con números. Si está bien, avísele a control: puede que no esté como personal
+          vinculado.</p>
+      </details>
+      <details>
+        <summary>Cambié de celular</summary>
+        <p>Abra la app en el celular nuevo y escriba su cédula. En el viejo, en <strong>Mi cuenta</strong>, toque
+          <strong>No soy yo: cambiar la cédula</strong>.</p>
+      </details>
+    </div>
+    <button id="guiaListo" class="btn btn-primary btn-block" type="button">Entendido</button>
+  </div>
+
+  <!-- ---- Mi cuenta: quién es y para quién es la app ---- -->
+  <div class="home pestana" data-pestana="cuenta" hidden>
+    <div class="pestana-cabeza">
+      <h2>Mi cuenta</h2>
+    </div>
+    <article class="card cuenta-card">
+      <div class="card-body cuenta-quien">
+        <span id="cuentaInicial" class="cuenta-inicial" aria-hidden="true"></span>
+        <div>
+          <b id="cuentaNombre"></b>
+          <span id="cuentaCargo"></span>
+          <small id="cuentaCedula"></small>
+        </div>
+      </div>
+    </article>
+    <article class="card">
+      <header class="card-head"><h3>¿Para quién es esta app?</h3></header>
+      <div class="card-body">
+        <p class="nota-puntos">Para los <b>gestores de servicio</b> y los <b>gestores de movilidad</b> de Combuses. Con ella:</p>
+        <ul class="usos">
+          <li>Marca su entrada y su salida en los puntos autorizados, con una foto. Va a la asistencia y a Buk.</li>
+          <li>Se registra al subir a un bus leyendo el código del conductor. Cuenta como pasajero, pero no se cobra.</li>
+          <li>Ve las noticias de la empresa en la campana.</li>
+        </ul>
+      </div>
+    </article>
+    <button id="btnCambiarCedula" class="btn btn-ghost btn-block" type="button">No soy yo: cambiar la cédula</button>
+    <p class="version-note">Gestores Combuses <span data-version></span></p>
+  </div>
+
+  <!-- ---- El menú de abajo ---- -->
+  <nav class="menu-gestores" aria-label="Menú">
+    <button class="menu-item activo" type="button" data-ir="inicio" aria-current="page">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M9 22V12h6v10"/></svg>
+      <span>Inicio</span>
+    </button>
+    <button class="menu-item" type="button" data-ir="puntos">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+      <span>Dónde marcar</span>
+    </button>
+    <button class="menu-item" type="button" data-ir="guia">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.3 2.4c-.5.2-.8.6-.8 1.1v.5M12 16.5v.5"/></svg>
+      <span>Cómo se hace</span>
+    </button>
+    <button class="menu-item" type="button" data-ir="cuenta">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <span>Mi cuenta</span>
+    </button>
+  </nav>
 </section>
 
 <!-- ============ Noticias de la empresa (g2.4.0), las mismas del Portal del Conductor ============ -->
@@ -243,51 +415,16 @@
   </div>
 </div>
 
-<!-- ============ ¿Cómo se hace? La guía con dibujos ============ -->
-<div id="guiaSheet" class="sheet-overlay" hidden>
-  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="guiaTitulo">
-    <header class="sheet-head">
-      <h3 id="guiaTitulo">¿Cómo se hace?</h3>
-      <button id="guiaCerrar" class="icon-btn" type="button" aria-label="Cerrar">
-        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-    </header>
-    <div class="sheet-body">
-      <ol class="guia">
-        <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><rect x="22" y="4" width="36" height="62" rx="7" class="g-fondo"/><circle cx="40" cy="26" r="8"/><path d="M27 50c2-8 8-12 13-12s11 4 13 12"/><circle cx="68" cy="50" r="14" class="g-blanco"/><path d="M68 42v8l5 3"/><path d="M76 14h12M82 8l6 6-6 6" class="g-acento"/></svg>
-          <div><b>Al llegar a trabajar</b>
-            <p>Toque <strong>Marcar ENTRADA</strong> y tómese una foto de frente. Queda la hora y dónde está, y se manda a Buk, igual que en el biométrico. Solo se marca en <strong>Almacentro, Nutibara o Terminal Norte</strong>.</p></div></li>
-        <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><rect x="3" y="12" width="50" height="42" rx="7" class="g-fondo"/><rect x="9" y="18" width="38" height="15" rx="3" class="g-blanco"/><path d="M9 43h8M39 43h8"/><circle cx="15" cy="56" r="5" class="g-blanco"/><circle cx="41" cy="56" r="5" class="g-blanco"/><rect x="60" y="6" width="32" height="54" rx="6" class="g-blanco"/><rect x="67" y="16" width="18" height="18" rx="2"/><path d="M71 20h3v3h-3zM78 20h3v3h-3zM71 27h3v3h-3zM78 27h3v3h-3z" class="g-relleno"/><path d="M68 44h16M71 50h10"/></svg>
-          <div><b>Al subir a un bus de Combuses</b>
-            <p>Salude y pídale al conductor que, en <strong>Mi tarjeta</strong>, toque <strong>Personal de la empresa</strong>. Su celular le muestra un código que cambia cada 15 segundos.</p></div></li>
-        <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><rect x="28" y="3" width="40" height="66" rx="7" class="g-fondo"/><path d="M35 17v-5h5M56 12h5v5M61 41v5h-5M40 46h-5v-5"/><rect x="41" y="21" width="14" height="14" rx="2" class="g-blanco"/><path d="M44 24h3v3h-3zM49 29h3v3h-3z" class="g-relleno"/><path d="M31 29h34" class="g-acento"/><path d="M40 57h16"/></svg>
-          <div><b>Lea el código</b>
-            <p>Toque <strong>Leer código del bus</strong> y apunte la cámara al código del celular del conductor.</p></div></li>
-        <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><circle cx="42" cy="36" r="30" class="g-fondo"/><circle cx="42" cy="29" r="9"/><path d="M26 55c3-9 9-13 16-13s13 4 16 13"/><circle cx="74" cy="52" r="13" class="g-ok"/><path d="M68 52l4 4 8-8" class="g-ok-trazo"/></svg>
-          <div><b>Su foto y listo</b>
-            <p>Tómese una foto y toque <strong>Registrarme</strong>. Queda en el viaje de ese bus: cuenta como pasajero, pero no se le cobra.</p></div></li>
-        <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><path d="M20 30a40 40 0 0 1 56 0M29 39a27 27 0 0 1 38 0M38 48a14 14 0 0 1 20 0"/><circle cx="48" cy="57" r="3.5" class="g-relleno"/><path d="M22 66L74 10" class="g-acento"/></svg>
-          <div><b>Si no hay señal</b>
-            <p>El registro del bus se guarda en su celular y se manda solo cuando vuelva. La entrada y la salida sí necesitan internet.</p></div></li>
-        <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><rect x="22" y="4" width="36" height="62" rx="7" class="g-fondo"/><circle cx="40" cy="26" r="8"/><path d="M27 50c2-8 8-12 13-12s11 4 13 12"/><circle cx="68" cy="50" r="14" class="g-blanco"/><path d="M68 42v8l5 3"/><path d="M88 14H76M82 8l-6 6 6 6" class="g-acento"/></svg>
-          <div><b>Al terminar el día</b>
-            <p>Toque <strong>Marcar SALIDA</strong> con otra foto. Si se le olvidó, al otro día toque <strong>Se me olvidó marcar la salida</strong> y diga a qué hora salió.</p></div></li>
-      </ol>
-      <button id="guiaListo" class="btn btn-primary btn-block" type="button">Entendido</button>
-    </div>
-  </div>
-</div>
-
 <!-- Solo la dirección de Supabase y la llave pública (la misma del portal); no inicia sesión. -->
-<script src="../js/portal-config.js?v=g2.5.0"></script>
-<script src="../js/vendor/jsQR.min.js?v=g2.5.0"></script>
-<script src="./gestores-app.js?v=g2.5.0"></script>
+<script src="../js/portal-config.js?v=g2.6.0"></script>
+<script src="../js/vendor/jsQR.min.js?v=g2.6.0"></script>
+<script src="./gestores-app.js?v=g2.6.0"></script>
 <script>
   // La primera vez que se abre después de una actualización, el service worker viejo todavía entrega el
   // programa que tenía guardado (con la g2.0.0 la tarjeta se quedaba en "Consultando…"). Si el programa
   // que corrió no es de esta página, se espera al service worker nuevo y se recarga (máximo 2 veces).
   (function () {
-    var esta = "g2.5.0";
+    var esta = "g2.6.0";
     var corrio = (document.querySelector("[data-version]") || {}).textContent;
     if (!corrio || corrio === esta || !("serviceWorker" in navigator)) return;
     var marca = "personal_app_recarga_" + esta;

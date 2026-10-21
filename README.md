@@ -357,7 +357,26 @@ cédula de ese celular ya escrita (`llenarCedula`). Lo quitado o visto hoy usa l
 **completa en una ventana encima**, una vez al día ("Ahora no" o la X la dejan para mañana; "Ya los inscribí…" la
 quita), y la campana sigue junto al saludo.
 
-La versión de la app del personal va aparte (`g2.5.0`): está en
+**g2.6.0 (21-oct-2026, pedido del usuario: "se ve muy vacía; que tenga un menú que explique, que se vea que es para
+los gestores de servicio y gestores de movilidad, que explique los puntos donde hacer la marcación"):** la app se llama
+**Gestores** ("Gestores · Combuses", *Servicio y movilidad*; el manifest también) y tiene un **menú abajo**:
+
+- **Inicio:** el saludo con el cargo, Mi asistencia, "Leer código del bus", los registros de hoy y dos atajos.
+- **Dónde marcar:** un mapa (Leaflet, el mismo del enturne; se carga al abrir esta parte) con los cuadros de
+  `PUNTOS_MARCA` (los mismos que deciden la marca), los 3 puntos con lo que es cada uno, "Ver en el mapa" y "Cómo
+  llegar" (Google Maps), **"¿A cuánto estoy?"** (pide la ubicación solo al tocarlo: "Usted está en Nutibara: aquí sí
+  puede marcar" o a cuánto queda el más cercano), "Aquí no se marca" (Aeropuerto, Exposiciones, la oficina de la Av.
+  Oriental) y lo del GPS encendido. Los cuadritos del mapa no se guardan en el celular.
+- **Cómo se hace:** la guía con dibujos (antes una hoja; la primera vez sale sola, con la bienvenida) y **"Si algo
+  falla"**: no me deja marcar, la cámara no lee el código, se me olvidó la salida, sin señal, mi cédula no aparece,
+  cambié de celular.
+- **Mi cuenta:** el nombre, el cargo y la cédula (solo los 4 últimos), para quién es la app y "No soy yo: cambiar la
+  cédula".
+
+La noticia del día sale solo en el Inicio. La puede seguir usando cualquier persona vinculada (no se cerró a otros
+cargos).
+
+La versión de la app del personal va aparte (`g2.6.0`): está en
 `gestores/gestores-app.js`, en `gestores/sw.js` y en los `?v=` y el `esta` del
 final de `gestores/index.html`. Si cambia `css/portal.css` o `js/vendor/jsQR.min.js`, hay
 que subirla también, o los celulares siguen con los guardados.

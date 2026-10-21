@@ -110,23 +110,7 @@
 .asis-lugares li span { color: var(--muted); font-size: 13px; }
 .asis-lugares li a { margin-left: auto; color: var(--primary); font-weight: 600; font-size: 13px; }
 
-/* --- ¿Cómo se hace? --- */
-.card-guia {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  text-align: left;
-  font: inherit;
-  color: var(--ink-2);
-  cursor: pointer;
-}
-.card-guia .ico { flex: none; width: 30px; height: 30px; fill: none; stroke: var(--primary); stroke-width: 2; stroke-linecap: round; }
-.card-guia b { display: block; font-size: 16px; color: var(--ink); }
-.card-guia small { display: block; margin-top: 2px; font-size: 13px; color: var(--muted); }
-.card-guia:active { transform: translateY(1px); }
+/* --- Cómo se hace: la guía con dibujos (desde la g2.6.0, una parte del menú) --- */
 
 .guia { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; counter-reset: paso; }
 .guia-paso {
@@ -200,3 +184,252 @@
   background: var(--bg);
 }
 .noticia-pantalla > iframe { flex: 1; width: 100%; min-height: 0; border: 0; }
+
+/* =========================================================================
+   g2.6.0: la app de los gestores con menú abajo (pedido del usuario el 21-oct-2026: "se ve muy vacía; que tenga un
+   menú que explique, que se vea que es para los gestores de servicio y de movilidad, los puntos donde marcar").
+   ========================================================================= */
+.cedula-usos { list-style: none; margin: 2px 0 10px; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.cedula-usos li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+  color: var(--primary-strong);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.cedula-usos .ico { width: 20px; height: 20px; }
+
+/* La barra de arriba y el espacio para el menú de abajo */
+.vista-app { min-height: 100vh; min-height: 100dvh; padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
+.gestores-barra {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: calc(env(safe-area-inset-top) + 9px) max(15px, env(safe-area-inset-right)) 9px max(15px, env(safe-area-inset-left));
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.gestores-logo { width: 42px; height: auto; flex: none; }
+.gestores-barra-titulos { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.2; }
+.gestores-barra-titulos strong { font-size: 18px; font-weight: 800; letter-spacing: -.2px; color: var(--ink); }
+.gestores-barra-titulos span { font-size: 12.5px; color: var(--muted); }
+.app-gestores .vista-app .home { padding-top: 16px; }
+
+.saludo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 2px 2px 0; }
+.saludo h2 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.4px; }
+.cargo-chip {
+  padding: 4px 11px;
+  border-radius: var(--radius-pill);
+  background: var(--soft);
+  color: var(--primary-strong);
+  font-size: 13px;
+  font-weight: 700;
+}
+.cargo-chip:empty { display: none; }
+
+/* Inicio: los dos atajos */
+.atajos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.atajo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  text-align: left;
+  font: inherit;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.atajo .ico { width: 28px; height: 28px; margin-bottom: 5px; color: var(--primary); }
+.atajo b { font-size: 15.5px; color: var(--ink); }
+.atajo small { font-size: 12.5px; line-height: 1.35; color: var(--muted); }
+.atajo:active { transform: translateY(1px); }
+
+.pestana-cabeza { padding: 2px 2px 0; }
+.pestana-cabeza h2 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -.3px; }
+.pestana-cabeza p { margin: 4px 0 0; font-size: 15px; color: var(--ink-2); }
+
+/* Dónde marcar */
+.mapa-puntos {
+  position: relative;
+  isolation: isolate;   /* el mapa no se monta encima de la barra ni del menú */
+  height: 280px;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+}
+.mapa-aviso {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  margin: 0;
+  padding: 16px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
+}
+.mapa-rotulo { font-weight: 700; color: var(--primary-strong); }
+.mapa-rotulo-yo { font-weight: 700; color: #1d4ed8; }
+#btnDondeEstoy .ico { margin-right: 6px; vertical-align: -5px; }
+.puntos-estado {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--ink-2);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.puntos-estado[data-estado="ok"] { background: #e3f4e8; color: #0b6b3a; }
+.puntos-estado[data-estado="lejos"] { background: var(--warn-soft); color: var(--warn-ink); }
+.puntos-estado[data-estado="error"] { background: var(--danger-soft); color: var(--danger); }
+.lista-puntos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.punto {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 4px 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+}
+.punto-icono {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--soft);
+  color: var(--primary);
+}
+.punto-texto { min-width: 0; }
+.punto-texto b { display: block; font-size: 16.5px; color: var(--ink); }
+.punto-texto small { display: block; margin-top: 2px; font-size: 13.5px; line-height: 1.4; color: var(--muted); }
+.punto-distancia {
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--panel-2);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.punto-distancia[data-dentro="true"] { background: #e3f4e8; color: #0b6b3a; }
+.punto-acciones { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 8px; }
+.punto-acciones .btn { flex: 1; }
+.punto-acciones a.btn { text-decoration: none; }
+.lista-no { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.lista-no li { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 600; color: var(--ink); }
+.lista-no li::before {
+  content: "\2715";
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 800;
+}
+.nota-puntos { margin: 10px 0 0; font-size: 14px; color: var(--ink-2); }
+.card-body > .nota-puntos:first-child { margin-top: 0; }
+
+/* Cómo se hace: la bienvenida y "Si algo falla" */
+.guia-bienvenida {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--soft);
+  color: var(--primary-strong);
+  font-size: 15px;
+  font-weight: 600;
+}
+.guia-sub { margin: 10px 2px 0; font-size: 19px; font-weight: 800; }
+.preguntas { display: flex; flex-direction: column; gap: 8px; }
+.preguntas details { padding: 0 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.preguntas summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 0;
+  list-style: none;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+}
+.preguntas summary::-webkit-details-marker { display: none; }
+.preguntas summary::after { content: "+"; flex: none; font-size: 18px; line-height: 1; color: var(--primary); font-weight: 800; }
+.preguntas details[open] summary::after { content: "\2013"; }
+.preguntas details p { margin: 0 0 13px; font-size: 14.5px; color: var(--ink-2); }
+.preguntas a { color: var(--primary); font-weight: 700; }
+
+/* Mi cuenta */
+.cuenta-quien { display: flex; align-items: center; gap: 14px; }
+.cuenta-inicial {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #1fae5b 0%, #0b6b3a 100%);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 800;
+}
+.cuenta-quien div b { display: block; font-size: 19px; color: var(--ink); }
+.cuenta-quien div span { display: block; font-size: 14px; font-weight: 650; color: var(--primary-strong); }
+.cuenta-quien div small { display: block; margin-top: 2px; font-size: 13px; color: var(--muted); }
+.usos { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14.5px; color: var(--ink-2); }
+
+/* El menú de abajo */
+.menu-gestores {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 -6px 18px -12px rgba(11, 47, 25, .25);
+}
+.menu-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  min-height: 62px;
+  padding: 6px 2px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.menu-item .ico { width: 23px; height: 23px; }
+.menu-item.activo { color: var(--primary); }
+.menu-item.activo span { font-weight: 800; }

@@ -20,6 +20,10 @@
         salida" (g2.2.0), el cierre declarado del biométrico: dice a qué hora
         salió y por qué; gestión humana lo revisa y lo pasa a Buk.
      5. ¿Cómo se hace?: la guía con dibujos (sale sola la primera vez).
+     Desde la g2.6.0 todo va con un menú abajo: Inicio, Dónde marcar (el mapa
+     con los 3 puntos y a cuánto queda cada uno), Cómo se hace (la guía y
+     "Si algo falla") y Mi cuenta. Dice que es para los gestores de servicio
+     y los gestores de movilidad (la puede usar cualquier persona vinculada).
      6. Noticias de la empresa (g2.4.0): las mismas del Portal del Conductor;
         desde la g2.5.0 salen completas encima al abrir la app (una vez al día),
         con la campana y la página dentro de la app.
@@ -35,7 +39,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "g2.5.0";
+  var VERSION = "g2.6.0";
   var cfg = window.PORTAL_CONFIG || {};
   var RPC_QUIEN_SOY = "personal_quien_soy";
   var RPC_REGISTRAR = "personal_registrar_subida";
@@ -247,7 +251,9 @@
     var yo = estado.yo;
     $("inicioSaludo").textContent = yo.nombre ? "Hola, " + yo.nombre : "Hola";
     $("inicioCargo").textContent = capitalizar(yo.cargo || "");
+    pintarCuenta();
     mostrarVista("inicio");
+    irA("inicio");
     pintarNoticias();
     presentarNoticia();
     pintarRegistros();
@@ -255,6 +261,39 @@
     enviarPendientes();
     consultarAsistencia();
     if (!leerJson(LS_GUIA, false)) abrirGuia();   // la primera vez, la guía sale sola
+  }
+
+  // ------------------------------------------- el menú de abajo (g2.6.0)
+  // Pedido del usuario (21-oct-2026): "se ve muy vacía; que tenga un menú que explique, que se vea que es para los
+  // gestores de servicio y gestores de movilidad, que explique los puntos donde hacer la marcación". Cuatro partes:
+  // Inicio, Dónde marcar, Cómo se hace y Mi cuenta. La noticia del día solo sale en el Inicio.
+  var pestana = "inicio";
+
+  function irA(cual) {
+    if (!document.querySelector('.pestana[data-pestana="' + cual + '"]')) cual = "inicio";
+    pestana = cual;
+    Array.prototype.forEach.call(document.querySelectorAll(".pestana"), function (p) {
+      p.hidden = p.getAttribute("data-pestana") !== cual;
+    });
+    Array.prototype.forEach.call(document.querySelectorAll(".menu-item"), function (b) {
+      var esta = b.getAttribute("data-ir") === cual;
+      b.classList.toggle("activo", esta);
+      if (esta) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+    });
+    if (cual !== "guia") show($("guiaBienvenida"), false);
+    window.scrollTo(0, 0);
+    if (cual === "puntos") abrirPuntos();
+    if (cual === "inicio") presentarNoticia();
+  }
+
+  // Mi cuenta: quién usa este celular (la cédula, solo los 4 últimos números).
+  function pintarCuenta() {
+    var yo = estado.yo || {};
+    var nombre = yo.nombre || "";
+    $("cuentaInicial").textContent = nombre ? nombre.charAt(0).toUpperCase() : "?";
+    $("cuentaNombre").textContent = nombre || "Sin nombre";
+    $("cuentaCargo").textContent = capitalizar(yo.cargo || "");
+    $("cuentaCedula").textContent = yo.dni ? "Cédula terminada en " + String(yo.dni).slice(-4) : "";
   }
 
   function pintarRegistros() {
@@ -1076,17 +1115,177 @@
     show($("cierreSheet"), false);
   }
 
-  // ------------------------------------------------- 5. ¿Cómo se hace?
+  // ------------------------------------------------- 5. Cómo se hace
+  // Desde la g2.6.0 es una parte del menú (antes, una hoja). La primera vez sale sola, con la bienvenida; "Entendido"
+  // vuelve al inicio, y ahí sale la noticia (la guía va antes que la noticia).
   function abrirGuia() {
-    show($("guiaSheet"), true);
-    var cuerpo = $("guiaSheet").querySelector(".sheet-body");
-    if (cuerpo) cuerpo.scrollTop = 0;
+    var primeraVez = !leerJson(LS_GUIA, false);
+    irA("guia");
+    show($("guiaBienvenida"), primeraVez);
   }
 
   function cerrarGuia() {
     guardarJson(LS_GUIA, true);
-    show($("guiaSheet"), false);
-    presentarNoticia();   // la primera vez la guía va antes que la noticia
+    irA("inicio");
+  }
+
+  // ------------------------------------------------ 5b. Dónde marcar (g2.6.0)
+  // Los mismos cuadros de PUNTOS_MARCA que deciden la marca, en un mapa (Leaflet, el mismo del enturne del portal; se
+  // carga la primera vez que se abre esta parte), qué es cada punto, a cuánto queda y "Cómo llegar" (Google Maps).
+  // La ubicación se pide solo al tocar "¿A cuánto estoy?".
+  var LEAFLET = "https://unpkg.com/leaflet@1.9.4/dist/";
+  var PUNTOS_INFO = [
+    { nombre: "Almacentro", detalle: "La sede de Almacentro y la bahía de despacho del CC San Diego." },
+    { nombre: "Nutibara", detalle: "La bahía de Nutibara. La oficina de la Av. Oriental no cuenta." },
+    { nombre: "Terminal Norte", detalle: "La Terminal del Norte." },
+  ];
+  var ICONO_PUNTO = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg>';
+  var mapa = { carga: null, mapa: null, capas: {}, todos: null, yo: null, marcaYo: null, circuloYo: null };
+
+  function cuadrosDe(nombre) { return PUNTOS_MARCA.filter(function (p) { return p.nombre === nombre; }); }
+
+  function centroDe(nombre) {
+    var lat = 0, lon = 0, n = 0;
+    cuadrosDe(nombre).forEach(function (p) {
+      p.poligono.forEach(function (v) { lat += v[0]; lon += v[1]; n++; });
+    });
+    return { lat: (lat / n).toFixed(6), lon: (lon / n).toFixed(6) };
+  }
+
+  function pintarListaPuntos() {
+    var yo = mapa.yo;
+    $("listaPuntos").innerHTML = PUNTOS_INFO.map(function (p) {
+      var c = centroDe(p.nombre);
+      var chip = "";
+      if (yo && conGps(yo.precision)) {
+        var dist = Math.min.apply(null, cuadrosDe(p.nombre).map(function (q) { return metrosA(yo.lat, yo.lon, q); }));
+        var dentro = dist <= Math.min(yo.precision, TOLERANCIA_GPS_M);
+        chip = '<span class="punto-distancia" data-dentro="' + dentro + '">' +
+          (dentro ? "Usted está aquí" : "a " + escapeHtml(distanciaTexto(dist))) + "</span>";
+      }
+      return '<li class="punto" data-punto="' + escapeHtml(p.nombre) + '">' +
+        '<span class="punto-icono">' + ICONO_PUNTO + "</span>" +
+        '<div class="punto-texto"><b>' + escapeHtml(p.nombre) + "</b><small>" + escapeHtml(p.detalle) + "</small></div>" +
+        chip +
+        '<div class="punto-acciones">' +
+          '<button class="btn btn-ghost btn-sm" type="button" data-ver-punto="' + escapeHtml(p.nombre) + '">Ver en el mapa</button>' +
+          '<a class="btn btn-ghost btn-sm" href="https://www.google.com/maps/dir/?api=1&destination=' + c.lat + "," + c.lon +
+            '" target="_blank" rel="noopener">Cómo llegar</a>' +
+        "</div>" +
+      "</li>";
+    }).join("");
+  }
+
+  function cargarLeaflet() {
+    if (window.L) return Promise.resolve(window.L);
+    if (!mapa.carga) {
+      mapa.carga = new Promise(function (ok, mal) {
+        var css = document.createElement("link");
+        css.rel = "stylesheet";
+        css.href = LEAFLET + "leaflet.css";
+        document.head.appendChild(css);
+        var s = document.createElement("script");
+        s.src = LEAFLET + "leaflet.js";
+        s.onload = function () { ok(window.L); };
+        s.onerror = function () { mapa.carga = null; s.remove(); mal(new Error("No se pudo cargar el mapa")); };
+        document.head.appendChild(s);
+      });
+    }
+    return mapa.carga;
+  }
+
+  function abrirPuntos() {
+    $("btnDondeEstoy").disabled = false;
+    pintarListaPuntos();
+    if (mapa.mapa) {
+      setTimeout(function () { mapa.mapa.invalidateSize(); }, 60);
+      return;
+    }
+    var caja = $("mapaPuntos");
+    cargarLeaflet().then(function (L) {
+      if (mapa.mapa) return;
+      caja.innerHTML = "";
+      var m = L.map(caja, { scrollWheelZoom: false });
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(m);
+      var vertices = [];
+      PUNTOS_MARCA.forEach(function (p) {
+        var capa = L.polygon(p.poligono, { color: "#0b6b3a", weight: 2, fillColor: "#1fae5b", fillOpacity: 0.35 }).addTo(m);
+        if (!mapa.capas[p.nombre]) {
+          mapa.capas[p.nombre] = [];
+          capa.bindTooltip(p.nombre, { permanent: true, direction: "top", className: "mapa-rotulo" });
+        }
+        mapa.capas[p.nombre].push(capa);
+        vertices = vertices.concat(p.poligono);
+      });
+      mapa.todos = L.latLngBounds(vertices);
+      m.fitBounds(mapa.todos, { padding: [28, 28] });
+      mapa.mapa = m;
+      ponerYoEnMapa();
+    }, function () {
+      caja.innerHTML = '<p class="mapa-aviso">Sin internet no se ve el mapa. Los tres puntos están aquí abajo.</p>';
+    });
+  }
+
+  function verPunto(nombre) {
+    var capas = mapa.capas[nombre];
+    if (!mapa.mapa || !capas) return;
+    var caja = window.L.latLngBounds([]);
+    capas.forEach(function (c) { caja.extend(c.getBounds()); });
+    mapa.mapa.fitBounds(caja, { padding: [30, 30], maxZoom: 17 });
+    $("mapaPuntos").scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function ponerYoEnMapa() {
+    if (!mapa.mapa || !mapa.yo) return;
+    var L = window.L, aqui = [mapa.yo.lat, mapa.yo.lon];
+    if (mapa.marcaYo) {
+      mapa.marcaYo.setLatLng(aqui);
+      mapa.circuloYo.setLatLng(aqui).setRadius(mapa.yo.precision);
+    } else {
+      mapa.circuloYo = L.circle(aqui, { radius: mapa.yo.precision, color: "#2563eb", weight: 1, fillOpacity: 0.12 }).addTo(mapa.mapa);
+      mapa.marcaYo = L.circleMarker(aqui, { radius: 8, color: "#fff", weight: 3, fillColor: "#2563eb", fillOpacity: 1 })
+        .addTo(mapa.mapa).bindTooltip("Usted", { permanent: true, direction: "right", className: "mapa-rotulo-yo" });
+    }
+    var vista = L.latLngBounds(mapa.todos.getSouthWest(), mapa.todos.getNorthEast()).extend(aqui);
+    mapa.mapa.fitBounds(vista, { padding: [28, 28], maxZoom: 16 });
+  }
+
+  function estadoPuntos(estadoTxt, texto) {
+    var el = $("puntosEstado");
+    el.setAttribute("data-estado", estadoTxt);
+    el.textContent = texto;
+    show(el, true);
+  }
+
+  function dondeEstoy() {
+    if (!navigator.geolocation) { estadoPuntos("error", "Este celular no da la ubicación."); return; }
+    var btn = $("btnDondeEstoy");
+    btn.disabled = true;
+    estadoPuntos("buscando", "Buscando su ubicación…");
+    ubicacionConGps(function (p) {
+      estadoPuntos("buscando", "Esperando el GPS (± " + Math.round(p.coords.accuracy) + " m)…");
+    }, function (p) {
+      btn.disabled = false;
+      var lat = p.coords.latitude, lon = p.coords.longitude, precision = p.coords.accuracy;
+      mapa.yo = { lat: lat, lon: lon, precision: precision };
+      var cerca = puntoDeMarca(lat, lon, precision);
+      if (!conGps(precision)) {
+        estadoPuntos("error", "El GPS no está dando bien su ubicación (± " + Math.round(precision) + " m). Encienda la " +
+          "ubicación del celular o salga a cielo abierto, y toque otra vez.");
+      } else if (cerca.dentro) {
+        estadoPuntos("ok", "Usted está en " + cerca.nombre + ": aquí sí puede marcar.");
+      } else {
+        estadoPuntos("lejos", "Usted está a " + distanciaTexto(cerca.distancia) + " de " + cerca.nombre +
+          ", el punto más cercano. Aquí no puede marcar.");
+      }
+      pintarListaPuntos();
+      ponerYoEnMapa();
+    }, function (err) {
+      btn.disabled = false;
+      estadoPuntos("error", err && err.code === 1
+        ? "La app no tiene permiso de ubicación. Actívelo en el celular y toque otra vez."
+        : "No se pudo saber dónde está. Encienda la ubicación (GPS) y toque otra vez.");
+    });
   }
 
   // ------------------------------------------- 6. noticias de la empresa (g2.4.0)
@@ -1169,8 +1368,8 @@
     clearTimeout(presentarTimer);
     presentarTimer = setTimeout(function () {
       var ventana = $("noticiaVentana");
-      if (!ventana.hidden || $("vistaInicio").hidden || !$("noticiaPantalla").hidden) return;
-      var ocupado = ["registroSheet", "asistenciaSheet", "cierreSheet", "guiaSheet", "noticiasSheet"]
+      if (!ventana.hidden || $("vistaInicio").hidden || pestana !== "inicio" || !$("noticiaPantalla").hidden) return;
+      var ocupado = ["registroSheet", "asistenciaSheet", "cierreSheet", "noticiasSheet"]
         .some(function (id) { return !$(id).hidden; });
       if (ocupado) return;
       var hoy = hoyCol();
@@ -1321,10 +1520,20 @@
       errorCierre("");
       pintarResumenCierre();
     });
-    $("btnGuia").addEventListener("click", abrirGuia);
-    $("guiaCerrar").addEventListener("click", cerrarGuia);
     $("guiaListo").addEventListener("click", cerrarGuia);
     initNoticias();
+    // El menú de abajo, los atajos del inicio y los enlaces de la guía (data-ir)
+    document.addEventListener("click", function (ev) {
+      var b = ev.target.closest ? ev.target.closest("[data-ir]") : null;
+      if (!b) return;
+      ev.preventDefault();
+      if (b.getAttribute("data-ir") === "guia") abrirGuia(); else irA(b.getAttribute("data-ir"));
+    });
+    $("btnDondeEstoy").addEventListener("click", dondeEstoy);
+    $("listaPuntos").addEventListener("click", function (ev) {
+      var b = ev.target.closest ? ev.target.closest("[data-ver-punto]") : null;
+      if (b) verPunto(b.getAttribute("data-ver-punto"));
+    });
 
     window.addEventListener("online", function () {
       pintarRed();

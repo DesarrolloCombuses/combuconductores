@@ -13,7 +13,7 @@
 
 // Igual a VERSION de gestores-app.js y a los ?v= de index.html. Que este
 // archivo cambie es lo que avisa a los teléfonos de que hay una versión nueva.
-const VERSION = "g2.5.0";
+const VERSION = "g2.6.0";
 const CACHE = "gestores-" + VERSION;
 
 const ARCHIVOS = [
@@ -32,7 +32,8 @@ const ARCHIVOS = [
   "../assets/logo-combuses.webp",
 ];
 
-const HOSTS_SIN_CACHE = ["supabase.co", "supabase.in"];
+// Los cuadritos del mapa de "Dónde marcar" (g2.6.0) no se guardan: serían cada vez más.
+const HOSTS_SIN_CACHE = ["supabase.co", "supabase.in", "tile.openstreetmap.org"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
