@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="./css/portal.css?v=1.20.0">
+  <link rel="stylesheet" href="./css/portal.css?v=1.21.0">
 </head>
 <body>
 
@@ -421,6 +421,78 @@
   </div>
 </div>
 
+<!-- ============ Corregir un número de la tarjeta (v1.21.0): cómo se hace, antes de empezar ============ -->
+<div id="corrSheet" class="sheet-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="corrSheetTitle">
+    <header class="sheet-head">
+      <h3 id="corrSheetTitle">Corregir un número</h3>
+      <button id="corrSheetClose" class="icon-btn" type="button" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <div class="corr-viaje">
+        <span id="corrViajeNum" class="viaje-num"></span>
+        <div><b id="corrViajeTitulo"></b><span id="corrViajeRuta"></span></div>
+      </div>
+      <div>
+        <p class="corr-sub">Puedes corregir</p>
+        <div id="corrSheetValores" class="corr-valores"></div>
+      </div>
+
+      <p class="corr-sub">Así se hace</p>
+      <ol class="corr-pasos">
+        <li>
+          <span class="corr-num">1</span>
+          <div>
+            <b>Escribe el número bueno</b>
+            <p>Solo en lo que quedó mal. Lo demás lo dejas en blanco.</p>
+            <div class="corr-demo">
+              <span class="corr-demo-etq">Pasajeros · ahora dice 15</span>
+              <span class="corr-demo-campo">16</span>
+            </div>
+          </div>
+        </li>
+        <li>
+          <span class="corr-num">2</span>
+          <div>
+            <b>Escoge por qué</b>
+            <p>Lo escribí mal, conté mal u otra razón (la escribes).</p>
+            <div class="corr-demo corr-demo-pills">
+              <span class="corr-demo-pill" data-activa>Lo escribí mal</span>
+              <span class="corr-demo-pill">Conté mal</span>
+              <span class="corr-demo-pill">Otra razón</span>
+            </div>
+          </div>
+        </li>
+        <li>
+          <span class="corr-num">3</span>
+          <div>
+            <b>Revisa y confirma</b>
+            <p>Ves el número de antes tachado y el nuevo. Si está bien, tocas "Sí, corregir".</p>
+            <div class="corr-demo corr-demo-final">
+              <span class="corr-demo-num"><s>15</s> → 16</span>
+              <span class="corr-demo-boton">Sí, corregir</span>
+            </div>
+          </div>
+        </li>
+      </ol>
+
+      <div class="corr-ojo">
+        <b>Antes de seguir</b>
+        <ul>
+          <li>Cada número se corrige <strong>una sola vez</strong>, y solo <strong>hoy</strong> (hasta las 2:30 a. m.).</li>
+          <li>Después, solo el despachador lo puede corregir.</li>
+          <li>El despachador ve el número de antes, el nuevo y por qué lo corregiste.</li>
+        </ul>
+      </div>
+
+      <button id="corrSeguir" class="btn btn-primary btn-block" type="button">Sí, quiero corregir</button>
+      <button id="corrCancelar" class="btn btn-ghost btn-block" type="button">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ Recordatorio del vehículo antes de validar tiquetes ============ -->
 <div id="tiquetesSheet" class="sheet-overlay" hidden>
   <div class="sheet" role="alertdialog" aria-modal="true" aria-labelledby="tiquetesSheetTitle">
@@ -654,7 +726,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./js/portal-config.js?v=1.20.0"></script>
-<script src="./js/portal.js?v=1.20.0"></script>
+<script src="./js/portal-config.js?v=1.21.0"></script>
+<script src="./js/portal.js?v=1.21.0"></script>
 </body>
 </html>

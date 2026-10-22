@@ -508,6 +508,37 @@ que $240.000 son en tiquetes y $140.000 en efectivo (7 pasajeros).
   de 19 dice *"Máximo 19 pasajeros: es el cupo del bus"* y el botón Guardar se apaga; igual si tiquetes y cívicas
   pasan de los pasajeros. La lectura que escribe dice cómo le queda el viaje anterior (si no cuadra, avisa).
 
+### El conductor corrige su tarjeta (v1.21.0)
+
+Pedido del usuario el 22-oct-2026: "poner corrección en la app del portal conductor en la tarjeta". Escogió que el
+conductor corrija él mismo, **el mismo día y una sola vez por número**. Ejemplo: el conductor del 722 guardó 15
+pasajeros y eran 16.
+
+- En **Mi tarjeta**, el viaje tiene el botón **Corregir** (junto a *Reportar novedad*) cuando algo se puede corregir.
+- Al tocarlo sale primero la ventana **"Corregir un número"** (`#corrSheet`; la pidió el usuario: "un modal de
+  confirmación mostrando cómo se hace el proceso"). Muestra:
+  - el viaje (número, hora y ruta);
+  - *Puedes corregir*: lo de ese viaje que se puede corregir, con su número;
+  - *Así se hace*, en 3 pasos con un ejemplo (15 → 16): escribe el bueno, escoge por qué, revisa y confirma;
+  - *Antes de seguir*: una sola vez, solo hoy, después el despachador, y que él ve lo de antes, lo nuevo y por qué;
+  - los botones **Sí, quiero corregir** y **Cancelar**.
+- Con *Sí, quiero corregir* se abre la corrección en el viaje, con cada número guardado que se puede corregir
+  (*"Pasajeros · ahora dice 15"*). El conductor escribe solo el bueno y escoge por qué: *Lo escribí mal*, *Conté
+  mal* u *Otra razón* (la escribe).
+- La cuenta en vivo es la misma de cuando lo llenó: más de 19 o más tiquetes que pasajeros no deja seguir, y si cambia
+  la cívica dice cómo quedan este viaje y el siguiente. Después, *"¿Corregir el viaje 3?"* con el número de antes
+  tachado y el nuevo, y **Sí, corregir**.
+- Queda en el viaje: *"Corregidos por ti"* (o *"por el despachador"*, si fue él). No se borra nada: es otro renglón
+  con `corrige_a` y el motivo, como las correcciones de Control. Allá sale en *Lo que escribieron* con *desde el
+  celular* y el motivo.
+- **Quién puede, lo decide la base** (`almacentro/enturnes/sql/conductor_corrige_tarjeta.sql`, v14). El conductor
+  puede corregir si el número lo escribió el celular con su misma cédula, es del día de hoy (2:30 a. m. a 2:30 a. m.)
+  y nadie lo ha corregido. Si ya lo corrigió el despachador, o pasó el día, ya no puede; su corrección sí la puede
+  corregir después el despachador. Para devolverse: `quitar_conductor_corrige_tarjeta.sql`.
+- El portal pregunta una vez si la base ya tiene la función (`tarjeta_conductor_puede_corregir`): mientras el SQL no
+  esté corrido, el botón no sale. Para saber qué es suyo lee `id, clave_viaje, corrige_a, origen, cedula` de las tres
+  hojas; la cédula no se guarda en el celular, solo si es la suya.
+
 ### La noticia en una ventana encima (v1.20.0)
 
 El aviso pequeño de abajo "no es informativo" (usuario, 20-oct): ahora, al abrir el Inicio, la noticia vigente sale

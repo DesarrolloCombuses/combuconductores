@@ -1669,7 +1669,7 @@
       var ventana = $("noticiaVentana");
       if (!ventana || !ventana.hidden || state.vista !== "inicio" || $("appView").hidden) return;
       var ocupado = ["bootOverlay", "perfilSheet", "tiquetesSheet", "instalarSheet", "noticiasSheet", "danoSheet",
-        "sinInternet", "sinUbicacion"].some(function (id) { return $(id) && !$(id).hidden; });
+        "corrSheet", "sinInternet", "sinUbicacion"].some(function (id) { return $(id) && !$(id).hidden; });
       if (ocupado) return;
       var hoy = hoyColombia();
       var vistas = noticiasPresentadas();
@@ -2167,8 +2167,9 @@
   // Los viajes los publica el programa de enturnes en tarjeta_viajes, y la
   // vista v_tarjeta_viajes los junta con las lecturas, los pasajeros del
   // conductor, los tiquetes, los daños del validador y el pasaje. Lo guardado
-  // no se cambia desde aquí: si quedó mal lo corrige un despachador, y queda
-  // quién y por qué (almacentro/enturnes/sql/tarjeta_despacho.sql).
+  // no se borra: si quedó mal, desde la v1.21.0 el conductor lo corrige una vez,
+  // el mismo día (sql v14 conductor_corrige_tarjeta.sql); después, el
+  // despachador. Queda quién y por qué (almacentro/enturnes/sql/tarjeta_despacho.sql).
   var CAMPOS_TARJETA = "clave,dia,interno,viaje,sin_despacho,hora_salida,pasajeros,subidas,itinerario,ruta," +
     "civica_lectura,civicas,estado_civica,lectura_corregida,tiquetes_escaneados,tiquetes_corregidos,estado_calculo," +
     "pasajeros_conductor,pasajeros_conductor_corregidos,tarifa";
@@ -2186,7 +2187,28 @@
     mensaje: null,     // { clave, tipo: ok|error, texto } debajo de un renglón
     novedades: [],     // v11.1: las novedades que reportó en los viajes de hoy (con su número)
     novPendientes: [], // las que siguen en el celular, por enviar o subiendo el video
+    // v1.21.0: { civica: [...], pasajeros: [...], tiquetes: [...] } los renglones de lo escrito (original y
+    // correcciones) con id, clave_viaje, corrige_a, origen y mio (si es de su cédula; la cédula no se guarda).
+    registros: null,
+    corr: null,          // la corrección abierta: { clave, campos, valores, motivo, otra, avisos, confirmando, guardando }
+    conCorreccion: null, // la base ya deja corregir al conductor (sql v14); null: no se sabe todavía
   };
+
+  // Corregir lo guardado (v1.21.0, pedido del usuario: "poner corrección en la app del conductor en la tarjeta").
+  // El conductor corrige un número que ya guardó: el mismo día, una sola vez y si nadie lo ha corregido. Lo decide la
+  // base (sql v14 conductor_corrige_tarjeta.sql); aquí solo se esconde el botón cuando no se puede. La corrección es
+  // otro renglón con corrige_a y el motivo: no se borra nada, y en Control sale "desde el celular".
+  // Ej. el conductor del 722 guardó 15 pasajeros y eran 16: "Corregir", escribe 16 y por qué.
+  var CORREGIBLES = ["civica", "pasajeros", "tiquetes"];
+  var CORREGIR = {
+    civica: { tabla: cfg.TABLA_CIVICA_LECTURAS, columna: "civica_lectura", valor: "lectura",
+              corregido: "lectura_corregida", etiqueta: "Cívica", largo: 9 },
+    pasajeros: { tabla: cfg.TABLA_TARJETA_PASAJEROS, columna: "pasajeros_conductor", valor: "cantidad",
+                 corregido: "pasajeros_conductor_corregidos", etiqueta: "Pasajeros", largo: 2 },
+    tiquetes: { tabla: cfg.TABLA_TARJETA_TIQUETES, columna: "tiquetes_escaneados", valor: "cantidad",
+                corregido: "tiquetes_corregidos", etiqueta: "Tiquetes", largo: 3 },
+  };
+  var MOTIVOS_CORRECCION = ["Lo escribí mal", "Conté mal"];
 
   // Lo que dice cada estado de la cívica (estado_civica de la vista), en las
   // palabras del conductor.
@@ -2218,8 +2240,35 @@
 
   function horaViaje(f) { return horaDeMs(Date.parse(f.hora_salida)); }
 
+  // ¿La base ya deja corregir al conductor (sql v14)? Se pregunta una vez: si la función no está, no sale "Corregir".
+  function baseDejaCorregir() {
+    if (tarj.conCorreccion !== null) return Promise.resolve(tarj.conCorreccion);
+    return conTiempoLimite(client.rpc("tarjeta_conductor_puede_corregir", { p_tabla: "", p_corrige_a: 0, p_cedula: "" }))
+      .then(function (r) { tarj.conCorreccion = !r.error; return tarj.conCorreccion; })
+      .catch(function () { return false; });           // sin red: se pregunta otra vez en la próxima carga
+  }
+
+  // Lo escrito en estos viajes, de las tres hojas. La cédula solo sirve para saber si es suya.
+  function registrosDeTarjeta(res) {
+    if (res.some(function (r) { return !r || r.error; })) return null;
+    var yo = String(state.dni || "").replace(/\D/g, "");
+    var regs = {};
+    CORREGIBLES.forEach(function (campo, j) {
+      regs[campo] = (res[j].data || []).map(function (x) {
+        return { id: x.id, clave_viaje: x.clave_viaje, corrige_a: x.corrige_a, origen: x.origen,
+                 mio: !!yo && String(x.cedula || "").replace(/\D/g, "") === yo };
+      });
+    });
+    return regs;
+  }
+
   async function consultarTarjeta(vehiculo, dia) {
     var internos = variantesInterno(vehiculo);
+    var escritos = Promise.all(CORREGIBLES.map(function (campo) {
+      return conTiempoLimite(
+        client.from(CORREGIR[campo].tabla).select("id,clave_viaje,corrige_a,origen,cedula").in("interno", internos).eq("dia", dia)
+      ).catch(function () { return { error: true }; });
+    }));
     var res = await Promise.all([
       conTiempoLimite(
         client.from(cfg.VISTA_TARJETA_VIAJES)
@@ -2243,6 +2292,9 @@
           .eq("dia", dia)
           .order("numero", { ascending: true })
       ).catch(function () { return { data: [] }; }),
+      // v1.21.0: quién escribió cada número (para "Corregir"). También son un extra.
+      escritos,
+      baseDejaCorregir(),
     ]);
     if (res[0].error && tarjetaConPersonal && /personal/.test(res[0].error.message || "")) {
       tarjetaConPersonal = false;            // la base todavía no tiene la v10
@@ -2251,7 +2303,7 @@
     if (res[0].error) throw res[0].error;
     // Los daños son un extra: si esa consulta falla, la tarjeta sirve igual.
     return { filas: res[0].data || [], danos: res[1].error ? [] : (res[1].data || []),
-      novedades: res[2] && !res[2].error ? (res[2].data || []) : [] };
+      novedades: res[2] && !res[2].error ? (res[2].data || []) : [], registros: registrosDeTarjeta(res[3]) };
   }
 
   function cargarTarjeta() {
@@ -2281,10 +2333,12 @@
       tarj.filas = cache && cache.datos ? cache.datos.filas : null;
       tarj.danos = cache && cache.datos ? cache.datos.danos || [] : [];
       tarj.novedades = cache && cache.datos ? cache.datos.novedades || [] : [];
+      tarj.registros = cache && cache.datos ? cache.datos.registros || null : null;
       tarj.guardadoEn = tarj.filas ? cache.guardadoEn : null;
       tarj.error = null;
       tarj.borrador = {};
       tarj.confirmando = null;
+      tarj.corr = null;
       tarj.mensaje = null;
     }
 
@@ -2309,6 +2363,7 @@
         tarj.filas = datos.filas;
         tarj.danos = datos.danos;
         tarj.novedades = datos.novedades;
+        tarj.registros = datos.registros;
         tarj.guardadoEn = Date.now();
         tarj.error = null;
         guardarCache("tarjeta_" + clave, datos);
@@ -2570,10 +2625,12 @@
     var box = $("tarjetaBody");
     var filas = tarj.filas || [];
 
-    // Si estaba escribiendo un número, el campo vuelve a quedar listo.
+    // Si estaba escribiendo un número (o una corrección), el campo vuelve a quedar listo.
     var activo = document.activeElement;
-    var enfocado = activo && box.contains(activo) && activo.getAttribute("data-lectura")
-      ? { clave: activo.getAttribute("data-lectura"), campo: activo.getAttribute("data-campo") }
+    var enfocado = activo && box.contains(activo) &&
+      (activo.getAttribute("data-lectura") || activo.getAttribute("data-corr") || activo.hasAttribute("data-corr-otra"))
+      ? { lectura: activo.getAttribute("data-lectura"), corr: activo.getAttribute("data-corr"),
+          otra: activo.hasAttribute("data-corr-otra"), campo: activo.getAttribute("data-campo") }
       : null;
 
     var n = filas.length;
@@ -2649,8 +2706,9 @@
     pintarResumenTarjeta();
 
     if (enfocado) {
-      Array.prototype.some.call(box.querySelectorAll("[data-lectura]"), function (campo) {
-        if (campo.getAttribute("data-lectura") !== enfocado.clave ||
+      Array.prototype.some.call(box.querySelectorAll("[data-lectura], [data-corr], [data-corr-otra]"), function (campo) {
+        if (campo.getAttribute("data-lectura") !== enfocado.lectura || campo.getAttribute("data-corr") !== enfocado.corr ||
+            campo.hasAttribute("data-corr-otra") !== enfocado.otra ||
             campo.getAttribute("data-campo") !== enfocado.campo) return false;
         campo.focus();
         try { campo.setSelectionRange(campo.value.length, campo.value.length); } catch (_) {}
@@ -2700,7 +2758,7 @@
           ? "<span>" + escapeHtml(f.civicas) + (Number(f.civicas) === 1 ? " cívica" : " cívicas") + "</span>"
           : "") +
         (est ? '<span class="tv-chip" data-nivel="' + est.nivel + '">' + escapeHtml(est.texto) + "</span>" : "") +
-        (f.lectura_corregida ? '<span class="tv-chip" data-nivel="espera">Corregida por el despachador</span>' : "") +
+        chipCorregido(f, "civica", "Corregida") +
       "</div>";
     }
     var r = plataDelViaje(f);
@@ -2708,7 +2766,7 @@
       html += '<div class="tv-civica">' +
         "<span>Pasajeros que llevaste <b>" + escapeHtml(f.pasajeros_conductor) + "</b></span>" +
         (r && r.total != null ? '<span class="tv-plata">' + pesos(r.total) + "</span>" : "") +
-        (f.pasajeros_conductor_corregidos ? '<span class="tv-chip" data-nivel="espera">Corregidos por el despachador</span>' : "") +
+        chipCorregido(f, "pasajeros", "Corregidos") +
       "</div>";
     }
     // v10: el personal de la empresa que se registró en este viaje
@@ -2726,15 +2784,19 @@
       html += '<div class="tv-civica">' +
         "<span>Tiquetes escaneados <b>" + escapeHtml(f.tiquetes_escaneados) + "</b></span>" +
         (enTiquetes != null ? '<span class="tv-plata">' + pesos(enTiquetes) + "</span>" : "") +
-        (f.tiquetes_corregidos ? '<span class="tv-chip" data-nivel="espera">Corregidos por el despachador</span>' : "") +
+        chipCorregido(f, "tiquetes", "Corregidos") +
       "</div>";
     }
     // El resto de los que se cobran: con la cívica y en efectivo (juntos mientras no se saben las cívicas).
     if (r && r.tiquetes != null) html += lineasDelReparto(r, f);
 
+    // v1.21.0: la corrección abierta en este viaje (mientras tanto no sale el formulario de lo que falta)
+    var corr = tarj.corr && tarj.corr.clave === f.clave ? tarj.corr : null;
+    if (corr) html += bloqueCorreccion(f, i, corr);
+
     // Lo que falta: el "¿Guardar?" o el formulario
     var c = tarj.confirmando;
-    if (falta && c && c.clave === f.clave) {
+    if (!corr && falta && c && c.clave === f.clave) {
       var guardando = tarj.guardando === f.clave;
       var valores = [];
       if (c.civica != null) valores.push(["Cívica", c.civica]);
@@ -2753,7 +2815,7 @@
           return "<div><span>" + v[0] + '</span><strong class="tv-numero">' + v[1] + "</strong></div>";
         }).join("") + "</div>" +
         '<div class="tv-cuenta">' + cuentaDelFormulario(f, i).lineas + "</div>" +
-        "<p>Después solo el despachador lo puede corregir.</p>" +
+        "<p>Si te equivocas, lo puedes corregir hoy una sola vez, con el botón Corregir de este viaje.</p>" +
         '<div class="tv-acciones">' +
           '<button class="btn btn-primary btn-sm" type="button" data-confirmar="' + escapeHtml(f.clave) + '"' +
             (tarj.guardando ? " disabled" : "") + ">" + (guardando ? "Guardando…" : "Sí, guardar") + "</button>" +
@@ -2761,7 +2823,7 @@
             (guardando ? " disabled" : "") + ">Cambiar</button>" +
         "</div>" +
       "</div>";
-    } else if (falta) {
+    } else if (!corr && falta) {
       var faltan = [];
       if (faltaCivica) faltan.push("la cívica");
       if (faltaPasajeros) faltan.push("los pasajeros");
@@ -2804,8 +2866,250 @@
     html += '<div class="tv-extra">' +
       (i === 0 ? '<button class="btn btn-ghost btn-sm" type="button" data-personal-qr>' + ICONO_QR + "Personal de la empresa</button>" : "") +
       '<button class="btn btn-ghost btn-sm" type="button" data-novedad="' + escapeHtml(f.clave) + '">' + ICONO_NOVEDAD + "Reportar novedad</button>" +
+      (!corr && camposCorregibles(f).length
+        ? '<button class="btn btn-ghost btn-sm" type="button" data-corregir="' + escapeHtml(f.clave) + '">' + ICONO_LAPIZ + "Corregir</button>"
+        : "") +
     "</div>";
     return '<li class="tv"' + (falta ? " data-falta" : "") + ">" + html + "</li>";
+  }
+
+  // ------------------------------------------- corregir lo guardado (v1.21.0)
+  var ICONO_LAPIZ = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+
+  // El original y sus correcciones de un número de un viaje, en orden.
+  function cadenaEscrita(f, campo) {
+    var lista = ((tarj.registros && tarj.registros[campo]) || []).filter(function (x) { return x.clave_viaje === f.clave; });
+    var actual = lista.filter(function (x) { return x.corrige_a == null; })[0];
+    var cadena = [];
+    while (actual && cadena.length < 20) {
+      cadena.push(actual);
+      var id = actual.id;
+      actual = lista.filter(function (x) { return x.corrige_a != null && x.corrige_a === id; })[0];
+    }
+    return cadena;
+  }
+
+  // El renglón que este conductor puede corregir (su id), o null: el original del celular, suyo, de hoy y sin corregir.
+  function corregible(f, campo) {
+    if (!tarj.conCorreccion || !tarj.registros || tarj.dia !== diaDeTarjeta() || f[CORREGIR[campo].columna] == null) return null;
+    var cadena = cadenaEscrita(f, campo);
+    var o = cadena[0];
+    return o && cadena.length === 1 && o.origen === "celular" && o.mio ? o.id : null;
+  }
+
+  function camposCorregibles(f) {
+    return CORREGIBLES.filter(function (campo) { return corregible(f, campo) != null; });
+  }
+
+  // "Corregidos por ti" o "por el despachador" (si no se sabe quién, el despachador, como antes).
+  function chipCorregido(f, campo, palabra) {
+    if (!f[CORREGIR[campo].corregido]) return "";
+    var cadena = cadenaEscrita(f, campo);
+    var ultimo = cadena.length > 1 ? cadena[cadena.length - 1] : null;
+    return '<span class="tv-chip" data-nivel="espera">' + palabra +
+      (ultimo && ultimo.origen === "celular" ? " por ti" : " por el despachador") + "</span>";
+  }
+
+  function motivoDe(corr) {
+    return corr.motivo === "otra" ? String(corr.otra || "").trim() : corr.motivo;
+  }
+
+  // Lo que va a cambiar: [{ campo, antes, ahora }], solo lo que escribió.
+  function cambiosDeCorreccion(f, corr) {
+    return corr.campos.filter(function (campo) { return String(corr.valores[campo] || "") !== ""; })
+      .map(function (campo) { return { campo: campo, antes: f[CORREGIR[campo].columna], ahora: String(corr.valores[campo]) }; });
+  }
+
+  // La cuenta del viaje con los números nuevos (la misma de cuando lo llenó, también la del viaje siguiente).
+  function cuentaDeCorreccion(f, i) {
+    var g = Object.assign({}, f);
+    cambiosDeCorreccion(f, tarj.corr).forEach(function (c) {
+      g[CORREGIR[c.campo].columna] = Number(c.ahora);
+      if (c.campo === "civica") { g.civicas = null; g.civicaNueva = true; }
+    });
+    return cuentaDelFormulario(g, i);
+  }
+
+  function campoCorreccion(f, i, campo, corr) {
+    var d = CORREGIR[campo];
+    var id = "corr" + campo + i;
+    return '<label class="tv-campo tv-campo-' + campo + '" for="' + id + '"><span>' + d.etiqueta + " · ahora dice " +
+        escapeHtml(f[d.columna]) + "</span>" +
+      '<input id="' + id + '" data-corr="' + escapeHtml(f.clave) + '" data-campo="' + campo + '" type="text" ' +
+        'inputmode="numeric" pattern="[0-9]*" maxlength="' + d.largo + '" autocomplete="off" placeholder="El bueno" ' +
+        'value="' + escapeHtml(corr.valores[campo] || "") + '">' +
+    "</label>";
+  }
+
+  function bloqueCorreccion(f, i, corr) {
+    if (corr.confirmando) {
+      return '<div class="tv-confirma tv-corr-confirma">' +
+        corr.avisos.map(function (a) {
+          return '<p class="tv-aviso" data-tipo="' + a.tipo + '">' + escapeHtml(a.texto) +
+            (a.tipo === "bajo"
+              ? '<button class="btn-link" type="button" data-dano="' + escapeHtml(a.clave) + '">Reportar daño del validador</button>'
+              : "") +
+            "</p>";
+        }).join("") +
+        "<p>¿Corregir el " + escapeHtml(nombreViaje(f)) + "?</p>" +
+        '<div class="tv-valores">' + cambiosDeCorreccion(f, corr).map(function (c) {
+          return "<div><span>" + CORREGIR[c.campo].etiqueta + '</span><strong class="tv-numero"><s>' + escapeHtml(c.antes) +
+            "</s> → " + escapeHtml(c.ahora) + "</strong></div>";
+        }).join("") + "</div>" +
+        '<div class="tv-cuenta">' + cuentaDeCorreccion(f, i).lineas + "</div>" +
+        "<p>Por qué: “" + escapeHtml(motivoDe(corr)) + "”. Se corrige una sola vez: después, solo el despachador.</p>" +
+        '<div class="tv-acciones">' +
+          '<button class="btn btn-primary btn-sm" type="button" data-corr-confirmar' + (corr.guardando ? " disabled" : "") + ">" +
+            (corr.guardando ? "Corrigiendo…" : "Sí, corregir") + "</button>" +
+          '<button class="btn btn-ghost btn-sm" type="button" data-corr-cambiar' + (corr.guardando ? " disabled" : "") + ">Cambiar</button>" +
+        "</div>" +
+      "</div>";
+    }
+    return '<form class="tv-form tv-corr" data-corr-form="' + escapeHtml(f.clave) + '" novalidate>' +
+      '<p class="tv-etiqueta">Corregir el ' + escapeHtml(nombreViaje(f)) + "</p>" +
+      '<p class="tv-ayuda">Escribe solo el número que quedó mal. Se corrige una sola vez, hoy; después, solo el despachador.</p>' +
+      corr.campos.map(function (campo) { return campoCorreccion(f, i, campo, corr); }).join("") +
+      '<div class="tv-cuenta" data-corr-cuenta="' + escapeHtml(f.clave) + '" aria-live="polite"></div>' +
+      '<fieldset class="tv-motivos"><legend>¿Por qué lo corriges?</legend>' +
+        MOTIVOS_CORRECCION.concat(["Otra razón"]).map(function (m, j) {
+          var valor = j < MOTIVOS_CORRECCION.length ? m : "otra";
+          return '<label class="tv-motivo"><input type="radio" name="corrMotivo" value="' + escapeHtml(valor) + '"' +
+            (corr.motivo === valor ? " checked" : "") + "><span>" + escapeHtml(m) + "</span></label>";
+        }).join("") +
+      "</fieldset>" +
+      (corr.motivo === "otra"
+        ? '<label class="tv-campo tv-corr-otra"><span>Cuenta qué pasó</span><input type="text" data-corr-otra maxlength="120" ' +
+          'autocomplete="off" placeholder="Ej. conté dos veces a un pasajero" value="' + escapeHtml(corr.otra || "") + '"></label>'
+        : "") +
+      '<div class="tv-acciones tv-corr-acciones">' +
+        '<button class="btn btn-primary btn-sm tv-corr-revisar" type="submit">Revisar la corrección</button>' +
+        '<button class="btn btn-ghost btn-sm" type="button" data-corr-cancelar>Cancelar</button>' +
+      "</div>" +
+    "</form>";
+  }
+
+  // Antes de corregir, una ventana con lo que se puede corregir de ese viaje, cómo se hace (tres pasos con un ejemplo)
+  // y que es una sola vez y solo hoy. "Sí, quiero corregir" abre la corrección en el viaje.
+  var avisoCorr = { clave: null };
+
+  function abrirAvisoCorreccion(clave) {
+    var f = (tarj.filas || []).find(function (x) { return x.clave === clave; });
+    var campos = f ? camposCorregibles(f) : [];
+    if (!campos.length) return;
+    avisoCorr.clave = clave;
+    $("corrViajeNum").textContent = f.sin_despacho ? "–" : String(f.viaje || "–");
+    var nombre = nombreViaje(f);
+    $("corrViajeTitulo").textContent = nombre.charAt(0).toUpperCase() + nombre.slice(1) + " · salió " + horaViaje(f);
+    $("corrViajeRuta").textContent = f.sin_despacho ? "Sin despacho"
+      : f.itinerario ? rutaLegible(f.itinerario) : f.ruta ? "Ruta " + f.ruta : "Sin itinerario";
+    $("corrSheetValores").innerHTML = campos.map(function (campo) {
+      return "<span>" + CORREGIR[campo].etiqueta + " <b>" + escapeHtml(f[CORREGIR[campo].columna]) + "</b></span>";
+    }).join("");
+    show($("corrSheet"), true);
+    $("corrSheet").querySelector(".sheet").scrollTop = 0;     // que se lea desde arriba: el viaje y lo que puede corregir
+    try { $("corrSeguir").focus({ preventScroll: true }); } catch (_) { /* navegador viejo: sin foco */ }
+  }
+
+  function cerrarAvisoCorreccion() {
+    show($("corrSheet"), false);
+    avisoCorr.clave = null;
+  }
+
+  function abrirCorreccion(clave) {
+    var f = (tarj.filas || []).find(function (x) { return x.clave === clave; });
+    var campos = f ? camposCorregibles(f) : [];
+    if (!campos.length) return;
+    if (tarj.confirmando && tarj.confirmando.clave === clave) tarj.confirmando = null;
+    tarj.corr = { clave: clave, campos: campos, valores: {}, motivo: MOTIVOS_CORRECCION[0], otra: "", avisos: [],
+                  confirmando: false, guardando: false };
+    tarj.mensaje = null;
+    pintarTarjeta();
+    enfocarCorreccion();
+  }
+
+  function enfocarCorreccion() {
+    var campo = $("tarjetaBody").querySelector("[data-corr]");
+    if (campo) campo.focus();
+  }
+
+  function prepararCorreccion(clave) {
+    var corr = tarj.corr;
+    var filas = tarj.filas || [];
+    var i = filas.findIndex(function (x) { return x.clave === clave; });
+    if (!corr || corr.clave !== clave || i < 0) return;
+    var f = filas[i];
+    var cambios = cambiosDeCorreccion(f, corr);
+    var falla = !cambios.length ? "Escribe el número bueno en lo que quedó mal."
+      : cambios.some(function (c) { return Number(c.ahora) === Number(c.antes); }) ? "Ese ya es el número que tiene: escribe el bueno."
+      : cuentaDeCorreccion(f, i).mal
+      || (corr.motivo === "otra" && motivoDe(corr).length < 3 ? "Cuenta por qué lo corriges." : "")
+      || (!navigator.onLine ? "Necesitas conexión para corregir." : "");
+    if (falla) {
+      tarj.mensaje = { clave: clave, tipo: "error", texto: falla };
+      pintarTarjeta();
+      return;
+    }
+    var civica = cambios.filter(function (c) { return c.campo === "civica"; })[0];
+    corr.avisos = (civica ? avisosDeLectura(filas, i, Number(civica.ahora)) : [])
+      .concat(cuentaDeCorreccion(f, i).avisos.map(function (t) { return { tipo: "salto", texto: t }; }));
+    corr.confirmando = true;
+    tarj.mensaje = null;
+    pintarTarjeta();
+  }
+
+  function errorAlCorregir(err, campo) {
+    var codigo = err && err.code;
+    if (codigo === "23505") return "Eso ya estaba corregido (por ti o por el despachador): mira el número que quedó.";
+    if (codigo === "42501") {
+      return "No se pudo corregir " + NOMBRE_CAMPO[campo] + ": ya no se puede desde aquí (pasó el día o no lo escribiste tú). " +
+        "Pídeselo al despachador.";
+    }
+    if (codigo === "23514") return "Escribe por qué lo corriges.";
+    return "No se pudo corregir " + NOMBRE_CAMPO[campo] + (err && err.message ? " (" + err.message + ")" : "") + ". Intenta otra vez.";
+  }
+
+  async function guardarCorreccion() {
+    var corr = tarj.corr;
+    if (!corr || !corr.confirmando || corr.guardando) return;
+    var f = (tarj.filas || []).find(function (x) { return x.clave === corr.clave; });
+    if (!f) return;
+    corr.guardando = true;
+    pintarTarjeta();
+    var motivo = motivoDe(corr);
+    var hecho = [];
+    var errores = [];
+    var cambios = cambiosDeCorreccion(f, corr);
+    for (var k = 0; k < cambios.length; k++) {
+      var c = cambios[k];
+      var d = CORREGIR[c.campo];
+      var id = corregible(f, c.campo);
+      if (id == null) {
+        errores.push("No se pudo corregir " + NOMBRE_CAMPO[c.campo] + ": ya no se puede desde aquí. Pídeselo al despachador.");
+        continue;
+      }
+      var fila = { clave_viaje: f.clave, dia: f.dia, interno: f.interno, corrige_a: id, motivo: motivo,
+                   cedula: state.dni || null, nombre: nombreConductor(), origen: "celular" };
+      fila[d.valor] = Number(c.ahora);
+      try {
+        var r = await conTiempoLimite(client.from(d.tabla).insert(fila));
+        if (r.error) throw r.error;
+        // Se ve al instante; la recarga trae lo que dice la base.
+        if (c.campo === "civica") ponerLecturaEnFila(f, Number(c.ahora));
+        else f[d.columna] = Number(c.ahora);
+        f[d.corregido] = true;
+        tarj.registros[c.campo].push({ id: "celular-" + c.campo + "-" + Date.now(), clave_viaje: f.clave, corrige_a: id,
+                                       origen: "celular", mio: true });
+        hecho.push(NOMBRE_CAMPO[c.campo]);
+      } catch (err) {
+        errores.push(errorAlCorregir(err, c.campo));
+      }
+    }
+    tarj.corr = null;
+    tarj.mensaje = errores.length
+      ? { clave: f.clave, tipo: "error", texto: (hecho.length ? "Se corrigió " + listaY(hecho) + ". " : "") + errores.join(" ") }
+      : { clave: f.clave, tipo: "ok", texto: "Corregido a las " + horaDeMs(Date.now()) + ". El despachador ve el número de antes y el nuevo." };
+    pintarTarjeta();
+    cargarTarjeta();
   }
 
   function lineaPlata(etiqueta, n, plata, extra) {
@@ -2834,9 +3138,9 @@
   // guardado. mal: lo que no deja guardar (más de 19, o más tiquetes que
   // pasajeros). Las cívicas de este viaje salen de la lectura que escribe menos
   // la del anterior: si con ellas no cuadra, solo avisa (puede estar mal escrita
-  // la del viaje anterior, y esa ya solo la corrige el despachador). Si el viaje
-  // siguiente ya tiene su lectura, también dice cómo le queda a ese:
-  // también dice cómo le queda (avisos, si no cuadra; eso no tranca).
+  // la del viaje anterior). Si el viaje siguiente ya tiene su lectura, también
+  // dice cómo le queda (avisos, si no cuadra; eso no tranca). Sirve igual para
+  // corregir (v1.21.0): f trae los números nuevos y civicaNueva si cambió la cívica.
   function cuentaDelFormulario(f, i) {
     var filas = tarj.filas || [];
     function escrito(x, campo, guardado) {
@@ -2873,7 +3177,7 @@
         lineas.push(textoCuenta(r));
       }
     }
-    if (f.civica_lectura == null && lectura != null && sig && sig.civica_lectura != null &&
+    if ((f.civica_lectura == null || f.civicaNueva) && lectura != null && sig && sig.civica_lectura != null &&
         sig.pasajeros_conductor != null && Number(sig.civica_lectura) >= lectura) {
       var civSig = Number(sig.civica_lectura) - lectura;
       var rSig = repartir(sig.pasajeros_conductor, sig.personal, sig.tiquetes_escaneados, civSig, sig.tarifa);
@@ -2907,6 +3211,18 @@
       if (!form) return;
       if (c.mal) form.setAttribute("data-mal", ""); else form.removeAttribute("data-mal");
       var btn = form.querySelector(".tv-guardar");
+      if (btn) btn.disabled = !!c.mal;
+    });
+    // v1.21.0: la cuenta de la corrección abierta
+    Array.prototype.forEach.call(box.querySelectorAll("[data-corr-cuenta]"), function (el) {
+      var i = filas.findIndex(function (x) { return x.clave === el.getAttribute("data-corr-cuenta"); });
+      if (i < 0 || !tarj.corr) return;
+      var c = cuentaDeCorreccion(filas[i], i);
+      if (el.innerHTML !== c.html) el.innerHTML = c.html;
+      var form = el.closest(".tv-form");
+      if (!form) return;
+      if (c.mal) form.setAttribute("data-mal", ""); else form.removeAttribute("data-mal");
+      var btn = form.querySelector(".tv-corr-revisar");
       if (btn) btn.disabled = !!c.mal;
     });
   }
@@ -2976,6 +3292,16 @@
       (err && err.message ? " (" + err.message + ")" : "") + ". Intenta otra vez.";
   }
 
+  // La lectura recién guardada (o corregida) se ve al instante, con las cívicas de este viaje (su lectura - la del
+  // anterior); la recarga trae lo que dice la base (salto, daño, corregida).
+  function ponerLecturaEnFila(f, lectura) {
+    f.civica_lectura = lectura;
+    var antes = tarj.filas[tarj.filas.indexOf(f) + 1];
+    var lecAntes = antes ? antes.civica_lectura : f.lectura_anterior;
+    f.civicas = lecAntes != null && lectura >= Number(lecAntes) ? lectura - Number(lecAntes) : null;
+    f.estado_civica = lecAntes == null ? "falta_lectura_anterior" : f.civicas == null ? "bajo" : "ok";
+  }
+
   async function guardarLectura(clave) {
     var c = tarj.confirmando;
     if (!c || c.clave !== clave || tarj.guardando) return;
@@ -2995,13 +3321,7 @@
           clave_viaje: f.clave, dia: f.dia, interno: f.interno, lectura: c.civica,
         }, quien)));
         if (r1.error) throw r1.error;
-        // Se ve al instante, con las cívicas de este viaje (su lectura - la del anterior); la recarga trae lo
-        // que dice la base (salto, daño, corregida).
-        f.civica_lectura = c.civica;
-        var antes = tarj.filas[tarj.filas.indexOf(f) + 1];
-        var lecAntes = antes ? antes.civica_lectura : f.lectura_anterior;
-        f.civicas = lecAntes != null && c.civica >= Number(lecAntes) ? c.civica - Number(lecAntes) : null;
-        f.estado_civica = lecAntes == null ? "falta_lectura_anterior" : f.civicas == null ? "bajo" : "ok";
+        ponerLecturaEnFila(f, c.civica);
         delete borrador.civica;
         hecho.push("la cívica");
       } catch (err) {
@@ -3186,6 +3506,24 @@
 
     var box = $("tarjetaBody");
     box.addEventListener("input", function (ev) {
+      // v1.21.0: lo que escribe en la corrección
+      var corr = tarj.corr;
+      if (corr && ev.target.hasAttribute && ev.target.hasAttribute("data-corr-otra")) {
+        corr.otra = ev.target.value;
+        return;
+      }
+      if (corr && ev.target.getAttribute && ev.target.getAttribute("data-corr")) {
+        var solo = ev.target.value.replace(/\D/g, "");
+        if (solo !== ev.target.value) ev.target.value = solo;
+        corr.valores[ev.target.getAttribute("data-campo")] = solo;
+        actualizarCuentas();
+        if (tarj.mensaje && tarj.mensaje.clave === corr.clave && tarj.mensaje.tipo === "error") {
+          tarj.mensaje = null;
+          var aviso = ev.target.closest(".tv") && ev.target.closest(".tv").querySelector(".tv-msg");
+          if (aviso) aviso.remove();
+        }
+        return;
+      }
       var clave = ev.target.getAttribute && ev.target.getAttribute("data-lectura");
       if (!clave) return;
       var limpio = ev.target.value.replace(/\D/g, "");
@@ -3199,11 +3537,19 @@
         if (msg) msg.remove();
       }
     });
+    box.addEventListener("change", function (ev) {
+      if (!tarj.corr || !ev.target || ev.target.name !== "corrMotivo") return;
+      tarj.corr.motivo = ev.target.value;
+      pintarTarjeta();
+      var otra = box.querySelector("[data-corr-otra]");
+      if (otra && tarj.corr.motivo === "otra") otra.focus();
+    });
     box.addEventListener("submit", function (ev) {
       var form = ev.target.closest ? ev.target.closest(".tv-form") : null;
       if (!form) return;
       ev.preventDefault();
-      prepararLectura(form.getAttribute("data-clave"));
+      if (form.hasAttribute("data-corr-form")) prepararCorreccion(form.getAttribute("data-corr-form"));
+      else prepararLectura(form.getAttribute("data-clave"));
     });
     box.addEventListener("click", function (ev) {
       var b = ev.target.closest ? ev.target.closest("button") : null;
@@ -3227,7 +3573,31 @@
         abrirPersonal();
       } else if (b.hasAttribute("data-nov-quitar")) {
         novBorrar(b.getAttribute("data-nov-quitar")).catch(noHacerNada).then(pintarNovedadesMias);
+      } else if (b.hasAttribute("data-corregir")) {
+        abrirAvisoCorreccion(b.getAttribute("data-corregir"));
+      } else if (b.hasAttribute("data-corr-cancelar")) {
+        tarj.corr = null;
+        tarj.mensaje = null;
+        pintarTarjeta();
+      } else if (b.hasAttribute("data-corr-cambiar")) {
+        if (tarj.corr) tarj.corr.confirmando = false;
+        pintarTarjeta();
+        enfocarCorreccion();
+      } else if (b.hasAttribute("data-corr-confirmar")) {
+        guardarCorreccion();
       }
+    });
+
+    // v1.21.0: la ventana de antes de corregir
+    $("corrSheetClose").addEventListener("click", cerrarAvisoCorreccion);
+    $("corrCancelar").addEventListener("click", cerrarAvisoCorreccion);
+    $("corrSheet").addEventListener("click", function (ev) {
+      if (ev.target === $("corrSheet")) cerrarAvisoCorreccion();
+    });
+    $("corrSeguir").addEventListener("click", function () {
+      var clave = avisoCorr.clave;
+      cerrarAvisoCorreccion();
+      if (clave) abrirCorreccion(clave);
     });
 
     $("danoSheetClose").addEventListener("click", cerrarDano);
@@ -3246,10 +3616,10 @@
     });
 
     // Con el inicio o la tarjeta a la vista se vuelve a consultar cada 2 min;
-    // mientras confirma o guarda un número, no se le mueve la pantalla.
+    // mientras confirma, guarda o corrige un número, no se le mueve la pantalla.
     setInterval(function () {
       if (!state.user || !VISTAS_NATIVAS[state.vista] || document.hidden || $("appView").hidden) return;
-      if (tarj.confirmando || tarj.guardando) return;
+      if (tarj.confirmando || tarj.guardando || tarj.corr) return;
       cargarTarjeta();
     }, cfg.TARJETA_REFRESCO_MS || 120000);
   }
