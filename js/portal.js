@@ -944,6 +944,7 @@
     MODULOS_CON_CONDUCTOR.forEach(empujarConductor);
     pintarPerfil();
     enviarConfirmacionesPendientes(); // lo confirmado sin señal en la sesión anterior
+    enviarPersonalPendientes();       // el personal que registró sin señal (v1.24.0)
 
     // Deja panel, pestaña activa e iframe alineados con la vista guardada
     // (puede venir del hash de un acceso directo del instalador PWA). Si es
@@ -4375,9 +4376,14 @@
   }
 
   async function abrirPersonal() {
+    pmApagar();
+    show($("personalManual"), false);
+    show($("personalPrincipal"), true);
+    $("personalTitulo").textContent = "Registrar personal de la empresa";
     show($("personalSheet"), true);
     $("personalLista").innerHTML = "";
     var bus = busDelCodigo();
+    show($("personalOtra"), !!bus);
     if (!bus) {
       $("personalQr").innerHTML = '<p class="qr-vencido">Primero confirme su bus en el inicio: el código va con el número del bus.</p>';
       $("personalBus").textContent = "";
@@ -4385,6 +4391,7 @@
       return;
     }
     $("personalBus").textContent = "Bus " + bus;
+    enviarPersonalPendientes();
     try {
       await cargarScript("./js/vendor/qrcode.min.js");
     } catch (_) {
@@ -4416,11 +4423,16 @@
     $("personalQueda").textContent = "El código cambia solo en " + Math.ceil(queda / 1000) + " s.";
   }
 
-  function cerrarPersonal() {
+  function pararCodigoPersonal() {
     clearInterval(personalQr.reloj);
     clearInterval(personalQr.lista);
     personalQr.reloj = personalQr.lista = null;
     $("personalQr").innerHTML = "";
+  }
+
+  function cerrarPersonal() {
+    pararCodigoPersonal();
+    pmApagar();
     show($("personalSheet"), false);
   }
 
@@ -4442,18 +4454,438 @@
     } catch (_) {
       lista = null;
     }
-    if ($("personalSheet").hidden) return;
+    if ($("personalSheet").hidden || $("personalPrincipal").hidden) return;
+    // Lo que registró este celular y todavía no está en la lista del servidor: por enviar o rechazado
+    // (sin internet, también lo que sí quedó).
+    var bus = busDelCodigo();
+    var mios = leerListaPersonal(LS_PERSONAL_HECHOS).filter(function (h) {
+      return h.bus === bus && Date.now() - h.leido_ms < 4 * 3600 * 1000 && (lista == null || h.estado !== "ok");
+    }).reverse();
+    var html = mios.map(filaHechoPersonal).join("");
     if (lista == null) {
-      ul.innerHTML = '<li class="personal-nadie">Sin internet: el código sí sirve. La lista se ve cuando vuelva la señal.</li>';
+      ul.innerHTML = html + '<li class="personal-nadie">Sin internet: el código sí sirve. La lista se ve cuando vuelva la señal.</li>';
       return;
     }
-    ul.innerHTML = lista.length
-      ? lista.map(function (p) {
-          return '<li><span class="personal-check" aria-hidden="true">✓</span><span><b>' + escapeHtml(p.nombre) +
-            "</b> · " + escapeHtml(capitalizarPalabras(p.cargo || "")) + "</span><span>" +
-            escapeHtml(horaDeMs(Date.parse(p.leido_en))) + "</span></li>";
-        }).join("")
-      : '<li class="personal-nadie">Todavía nadie en las últimas 4 horas.</li>';
+    html += lista.map(function (p) {
+      return '<li><span class="personal-check" aria-hidden="true">✓</span><span><b>' + escapeHtml(p.nombre) +
+        "</b> · " + escapeHtml(capitalizarPalabras(p.cargo || "")) + "</span><span>" +
+        escapeHtml(horaDeMs(Date.parse(p.leido_en))) + "</span></li>";
+    }).join("");
+    ul.innerHTML = html || '<li class="personal-nadie">Todavía nadie en las últimas 4 horas.</li>';
+  }
+
+  function filaHechoPersonal(h) {
+    var quien = h.nombre ? escapeHtml(h.nombre) : "Cédula terminada en " + escapeHtml(String(h.dni).slice(-4));
+    var marca = h.estado === "ok" ? '<span class="personal-check" aria-hidden="true">✓</span>'
+      : h.estado === "error" ? '<span class="personal-mal" aria-hidden="true">!</span>'
+      : '<span class="personal-pend" aria-hidden="true">…</span>';
+    var estado = h.estado === "ok" ? "" : h.estado === "error" ? "No quedó" : "Por enviar";
+    return '<li data-estado="' + escapeHtml(h.estado) + '">' + marca + "<span><b>" + quien + "</b>" +
+      (h.cargo ? " · " + escapeHtml(capitalizarPalabras(h.cargo)) : "") +
+      (estado ? ' <em class="personal-estado">' + estado + "</em>" : "") +
+      (h.estado !== "ok" && h.texto ? '<small class="personal-motivo">' + escapeHtml(h.texto) + "</small>" : "") +
+      "</span><span>" + escapeHtml(horaDeMs(h.leido_ms)) + "</span></li>";
+  }
+
+  // ---------------------------------------- el conductor registra a la persona (v1.24.0, sql v17)
+  // Pedido del usuario el 22-oct-2026: los gestores dicen que no tienen datos, y es requisito que queden registrados.
+  // Si la persona no puede leer el código del bus, el conductor la registra desde aquí, de dos formas:
+  //   - "Leer su código": la app del personal muestra "Mi código" aunque no tenga internet
+  //         CBPP1.<cédula>.<hora ms>.<al azar>[.<nombre|cargo en base64url>]
+  //     Cada código sirve una vez en la base: una foto del código no registra a nadie dos veces.
+  //   - "Escribir la cédula": le sale el nombre completo y el cargo (personal_buscar_cedula) y confirma.
+  // Después, una foto de la persona con la cámara de atrás (obligatoria: prueba de que iba en el bus) y
+  // "Registrar" (personal_registrar_por_conductor). Cuenta igual que si la persona leyera el código: suma en los
+  // pasajeros y no se cobra. Sin internet queda en el celular y se manda sola cuando vuelva la señal (el nombre se
+  // confirma entonces). En Control sale "Lo registró el conductor" y un despachador lo puede anular.
+  var RPC_PERSONAL_BUSCAR = "personal_buscar_cedula";
+  var RPC_PERSONAL_REGISTRAR = "personal_registrar_por_conductor";
+  var LS_PERSONAL_COLA = "portal_personal_cola";       // lo registrado que falta mandar (con la foto)
+  var LS_PERSONAL_HECHOS = "portal_personal_hechos";   // lo registrado desde este celular, para la lista (sin foto)
+  var PERSONAL_SU_CODIGO_VENCE_MS = 9 * 60 * 1000;     // la base acepta hasta 10 min entre su código y la lectura
+  var pm = { forma: null, dni: "", codigo: null, nombre: "", cargo: "", leido: 0, foto: null, gps: null,
+             lector: null, timer: null, canvas: null, camara: null, enviando: false, cola: null };
+
+  function leerListaPersonal(clave) {
+    try {
+      var lista = JSON.parse(localStorage.getItem(clave) || "[]");
+      return Array.isArray(lista) ? lista : [];
+    } catch (_) { return []; }
+  }
+
+  function guardarListaPersonal(clave, lista, maximo) {
+    try {
+      localStorage.setItem(clave, JSON.stringify(lista.slice(-maximo)));
+      return true;
+    } catch (_) {
+      try { localStorage.setItem(clave, JSON.stringify(lista.slice(-3))); return true; } catch (__) { return false; }
+    }
+  }
+
+  function anotarHechoPersonal(reg, estado, texto, nombre, cargo) {
+    var lista = leerListaPersonal(LS_PERSONAL_HECHOS).filter(function (h) { return h.id_local !== reg.id_local; });
+    lista.push({ id_local: reg.id_local, dni: reg.dni, bus: reg.bus, leido_ms: reg.leido_ms, estado: estado,
+                 texto: texto || "", nombre: nombre || reg.nombre || "", cargo: cargo || reg.cargo || "" });
+    guardarListaPersonal(LS_PERSONAL_HECHOS, lista, 40);
+  }
+
+  function pmPaso(cual) {
+    show($("pmLeer"), cual === "leer");
+    show($("pmCedulaForm"), cual === "cedula");
+    show($("pmConfirmar"), cual === "confirmar");
+    show($("pmFoto"), cual === "foto");
+    show($("pmResultado"), cual === "resultado");
+    $("pmVolver").textContent = cual === "resultado" ? "Listo" : "Volver al código del bus";
+    pmError("");
+  }
+
+  function pmError(texto) {
+    $("pmError").textContent = texto || "";
+    show($("pmError"), !!texto);
+  }
+
+  function apagarCamara(stream) {
+    if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+  }
+
+  // Apaga la cámara (lector o foto) y el reloj del lector. Los videos se sueltan: si no, se quedan con la última
+  // imagen y "Tomar la foto" podría sacar a la persona anterior.
+  function pmApagar() {
+    clearInterval(pm.timer);
+    pm.timer = null;
+    apagarCamara(pm.lector);
+    apagarCamara(pm.camara);
+    pm.lector = pm.camara = null;
+    $("pmLectorVideo").srcObject = null;
+    $("pmFotoVideo").srcObject = null;
+  }
+
+  // Dónde estaba el bus (si el celular lo deja): ayuda a control a ver que la persona iba en él.
+  function pmUbicacion() {
+    pm.gps = null;
+    if (!navigator.geolocation) return;
+    try {
+      navigator.geolocation.getCurrentPosition(function (p) {
+        pm.gps = { lat: p.coords.latitude, lon: p.coords.longitude, precision: Math.round(p.coords.accuracy) };
+      }, function () {}, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+    } catch (_) { /* sin ubicación: se registra igual */ }
+  }
+
+  function abrirRegistroPorConductor(forma) {
+    pararCodigoPersonal();
+    show($("personalPrincipal"), false);
+    show($("personalManual"), true);
+    $("personalTitulo").textContent = "Registrar a la persona";
+    $("pmBus").textContent = "Bus " + busDelCodigo();
+    pm.forma = forma;
+    pm.dni = pm.nombre = pm.cargo = "";
+    pm.codigo = pm.foto = null;
+    pm.leido = 0;
+    pmUbicacion();
+    if (forma === "qr") {
+      pmAbrirLector();
+    } else {
+      pmPaso("cedula");
+      $("pmCedula").value = "";
+      setTimeout(function () { try { $("pmCedula").focus(); } catch (_) {} }, 120);
+    }
+  }
+
+  async function pmAbrirLector() {
+    pmPaso("leer");
+    $("pmLectorAyuda").textContent = "Apunte la cámara al código del celular de la persona.";
+    try {
+      await cargarScript("./js/vendor/jsQR.min.js");
+    } catch (_) { /* abajo se avisa */ }
+    if (typeof window.jsQR !== "function") {
+      pmError("No se pudo preparar el lector. Escriba la cédula de la persona.");
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      pmError("Este celular no deja usar la cámara aquí. Escriba la cédula de la persona.");
+      return;
+    }
+    try {
+      pm.lector = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false,
+      });
+    } catch (_) {
+      pmError("No se pudo abrir la cámara. Dele permiso de cámara al portal, o escriba la cédula de la persona.");
+      return;
+    }
+    if ($("personalSheet").hidden || $("pmLeer").hidden) { pmApagar(); return; }
+    var v = $("pmLectorVideo");
+    v.srcObject = pm.lector;
+    try { await v.play(); } catch (_) {}
+    pm.canvas = pm.canvas || document.createElement("canvas");
+    clearInterval(pm.timer);
+    pm.timer = setInterval(pmMirarFotograma, 250);
+  }
+
+  function pmMirarFotograma() {
+    var v = $("pmLectorVideo");
+    if (!v.videoWidth || !pm.lector) return;
+    var ancho = Math.min(v.videoWidth, 800);
+    var alto = Math.round(v.videoHeight * ancho / v.videoWidth);
+    var c = pm.canvas;
+    c.width = ancho;
+    c.height = alto;
+    var ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(v, 0, 0, ancho, alto);
+    var r = window.jsQR(ctx.getImageData(0, 0, ancho, alto).data, ancho, alto, { inversionAttempts: "dontInvert" });
+    if (r && r.data) pmRevisarCodigo(String(r.data).trim());
+  }
+
+  // El nombre y el cargo que trae el código (los puso la app de la persona): solo para mostrarlos sin internet.
+  function quienDelCodigo(parte) {
+    try {
+      var b64 = String(parte || "").replace(/-/g, "+").replace(/_/g, "/");
+      while (b64.length % 4) b64 += "=";
+      var p = decodeURIComponent(escape(atob(b64))).split("|");
+      return { nombre: (p[0] || "").slice(0, 60), cargo: (p[1] || "").slice(0, 60) };
+    } catch (_) { return { nombre: "", cargo: "" }; }
+  }
+
+  // CBPP1.<cédula>.<hora ms>.<al azar>[.<nombre|cargo>]
+  function pmRevisarCodigo(texto) {
+    var p = texto.split(".");
+    if (p[0] === "CBP1") {
+      $("pmLectorAyuda").textContent = "Ese es el código de un bus. Pídale a la persona que toque «Mostrar mi código» en su app.";
+      return;
+    }
+    if ((p.length !== 4 && p.length !== 5) || p[0] !== "CBPP1" || !/^\d{5,15}$/.test(p[1]) || !/^\d{12,14}$/.test(p[2]) ||
+        !/^[A-Za-z0-9_-]{6,40}$/.test(p[3])) {
+      $("pmLectorAyuda").textContent = "Ese no es el código de la app del personal. Pídale que toque «Mostrar mi código».";
+      return;
+    }
+    var ahora = Date.now();
+    if (Math.abs(ahora - Number(p[2])) > PERSONAL_SU_CODIGO_VENCE_MS) {
+      $("pmLectorAyuda").textContent = "Ese código ya venció (o la hora de un celular está mal). Pídale que lo muestre otra vez.";
+      return;
+    }
+    if (p[1] === String(state.dni || "").replace(/\D/g, "")) {
+      $("pmLectorAyuda").textContent = "Ese es su propio código: usted no se registra aquí.";
+      return;
+    }
+    pmApagar();
+    if (navigator.vibrate) { try { navigator.vibrate(80); } catch (_) {} }
+    var quien = quienDelCodigo(p[4]);
+    pm.dni = p[1];
+    pm.codigo = texto;
+    pm.leido = ahora;
+    pm.nombre = quien.nombre;
+    pm.cargo = quien.cargo;
+    pmBuscarNombre();
+  }
+
+  async function pmEnviarCedula(ev) {
+    ev.preventDefault();
+    var dni = String($("pmCedula").value || "").replace(/\D/g, "");
+    if (dni.length < 5) { pmError("Escriba la cédula de la persona, solo los números."); return; }
+    if (dni === String(state.dni || "").replace(/\D/g, "")) { pmError("Esa es su propia cédula: usted no se registra aquí."); return; }
+    pm.dni = dni;
+    pm.codigo = null;
+    pm.leido = Date.now();
+    pmBuscarNombre();
+  }
+
+  // El nombre completo y el cargo, de la base. Sin internet: el del código (si lo leyó) o "se confirma después".
+  async function pmBuscarNombre() {
+    var btn = $("pmBuscar");
+    btn.disabled = true;
+    btn.textContent = "Buscando…";
+    var nota = "";
+    try {
+      if (!internet.ok || !navigator.onLine) throw new Error("sin internet");
+      var res = await conTiempoLimite(client.rpc(RPC_PERSONAL_BUSCAR, {
+        p_dni: pm.dni, p_dni_conductor: String(state.dni || ""), p_interno: busDelCodigo(),
+      }), 12000);
+      if (res.error) {
+        if (res.error.code === "P0001") { pmVolverACedula(res.error.message); return; }
+        throw res.error;
+      }
+      if (!res.data || res.data.no_es) {
+        pmVolverACedula("La cédula terminada en " + pm.dni.slice(-4) + " no aparece como personal vinculado a la empresa. " +
+          "Revísela; si está bien, la persona paga su pasaje y se le avisa a control.");
+        return;
+      }
+      pm.nombre = res.data.nombre || pm.nombre;
+      pm.cargo = res.data.cargo || pm.cargo;
+    } catch (_) {
+      nota = pm.nombre
+        ? "Sin internet: el nombre sale del código de su app. Se confirma cuando vuelva la señal."
+        : "Sin internet no se puede ver el nombre. Puede registrarla igual: se confirma cuando vuelva la señal.";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Buscar";
+    }
+    pmPaso("confirmar");
+    $("pmNombre").textContent = pm.nombre || "Cédula terminada en " + pm.dni.slice(-4);
+    $("pmCargo").textContent = pm.nombre
+      ? (pm.cargo ? capitalizarPalabras(pm.cargo) + " · " : "") + "cédula terminada en " + pm.dni.slice(-4)
+      : "";
+    $("pmNota").textContent = nota;
+    show($("pmNota"), !!nota);
+  }
+
+  // La cédula no sirvió (no está vinculada, o demasiadas búsquedas): se queda escrita para revisarla.
+  function pmVolverACedula(texto) {
+    pm.forma = "mano";
+    pm.codigo = null;
+    pmPaso("cedula");
+    $("pmCedula").value = pm.dni;
+    pmError(texto);
+  }
+
+  function pmFotoTomada(si) {
+    show($("pmFotoVideo"), !si);
+    show($("pmFotoImg"), si);
+    show($("pmTomar"), !si);
+    show($("pmRegistrar"), si);
+    show($("pmOtraFoto"), si);
+  }
+
+  async function pmAbrirFoto() {
+    pmPaso("foto");
+    pm.foto = null;
+    pmFotoTomada(false);
+    $("pmFotoTexto").innerHTML = "Tómele una foto a <b>" + escapeHtml(pm.nombre || "la persona") + "</b>, de frente y dentro del bus. " +
+      "Sin foto no se puede registrar.";
+    apagarCamara(pm.camara);
+    pm.camara = null;
+    $("pmFotoVideo").srcObject = null;
+    try {
+      pm.camara = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 960 }, height: { ideal: 960 } }, audio: false,
+      });
+    } catch (_) {
+      pmError("No se pudo abrir la cámara. Dele permiso de cámara al portal y vuelva a intentar.");
+      return;
+    }
+    if ($("personalSheet").hidden || $("pmFoto").hidden) { pmApagar(); return; }
+    var v = $("pmFotoVideo");
+    v.srcObject = pm.camara;
+    try { await v.play(); } catch (_) {}
+  }
+
+  function pmTomarFoto() {
+    var v = $("pmFotoVideo");
+    if (!pm.camara || v.srcObject !== pm.camara || !v.videoWidth || v.readyState < 2) {
+      pmError("La cámara todavía no arranca: espere un segundo.");
+      return;
+    }
+    var lado = Math.min(v.videoWidth, v.videoHeight);
+    var c = document.createElement("canvas");
+    c.width = c.height = 320;   // chica: va en la base y control la ve en la tarjeta del viaje
+    c.getContext("2d").drawImage(v, (v.videoWidth - lado) / 2, (v.videoHeight - lado) / 2, lado, lado, 0, 0, 320, 320);
+    pm.foto = c.toDataURL("image/jpeg", 0.72);
+    $("pmFotoImg").src = pm.foto;
+    pmError("");
+    pmFotoTomada(true);
+  }
+
+  async function pmRegistrar() {
+    if (!pm.foto || !pm.dni || pm.enviando) return;
+    pm.enviando = true;
+    var btn = $("pmRegistrar");
+    btn.disabled = true;
+    btn.textContent = "Registrando…";
+    apagarCamara(pm.camara);
+    pm.camara = null;
+    $("pmFotoVideo").srcObject = null;
+    var reg = {
+      id_local: idLocal(), dni: pm.dni, forma: pm.forma === "qr" ? "qr" : "mano", codigo: pm.codigo, bus: busDelCodigo(),
+      dni_conductor: String(state.dni || ""), leido_ms: pm.leido || Date.now(),
+      lat: pm.gps ? pm.gps.lat : null, lon: pm.gps ? pm.gps.lon : null, precision: pm.gps ? pm.gps.precision : null,
+      foto: pm.foto, dispositivo: String(navigator.userAgent || "").slice(0, 300), nombre: pm.nombre, cargo: pm.cargo,
+    };
+    // Primero queda en el celular: si se cae la señal a mitad de camino, no se pierde.
+    var cola = leerListaPersonal(LS_PERSONAL_COLA);
+    cola.push(reg);
+    guardarListaPersonal(LS_PERSONAL_COLA, cola, 20);
+    anotarHechoPersonal(reg, "pendiente");
+    var r = await enviarPersonalUno(reg);
+    if (r.estado !== "pendiente") quitarDeColaPersonal(reg.id_local);
+    pm.enviando = false;
+    btn.disabled = false;
+    btn.textContent = "Registrar";
+    pmMostrarResultado(reg, r);
+  }
+
+  function quitarDeColaPersonal(id) {
+    guardarListaPersonal(LS_PERSONAL_COLA, leerListaPersonal(LS_PERSONAL_COLA).filter(function (x) { return x.id_local !== id; }), 20);
+  }
+
+  // Devuelve "ok", "pendiente" (sin señal, o la base todavía no lo tiene: queda en la cola) o "error" (la base no lo
+  // aceptó: se dice por qué y sale de la cola).
+  async function enviarPersonalUno(reg) {
+    var res;
+    try {
+      if (!state.user || !internet.ok || !navigator.onLine) throw new Error("sin internet");
+      res = await conTiempoLimite(client.rpc(RPC_PERSONAL_REGISTRAR, {
+        p_id_local: reg.id_local, p_dni: reg.dni, p_forma: reg.forma, p_codigo: reg.codigo, p_interno: reg.bus,
+        p_dni_conductor: reg.dni_conductor, p_leido_en: new Date(reg.leido_ms).toISOString(),
+        p_lat: reg.lat, p_lon: reg.lon, p_precision: reg.precision, p_foto: reg.foto, p_dispositivo: reg.dispositivo,
+      }), 20000);
+    } catch (_) {
+      anotarHechoPersonal(reg, "pendiente");
+      return { estado: "pendiente" };
+    }
+    if (res.error) {
+      if (res.error.code === "P0001") {
+        anotarHechoPersonal(reg, "error", res.error.message);
+        return { estado: "error", texto: res.error.message };
+      }
+      var noEsta = res.error.code === "PGRST202" || res.error.code === "42883";
+      var texto = noEsta ? "El registro por el conductor todavía no está habilitado en el servidor. Avísele a control: se manda solo cuando lo habiliten." : "";
+      anotarHechoPersonal(reg, "pendiente", texto);
+      return { estado: "pendiente", texto: texto };
+    }
+    var d = res.data || {};
+    anotarHechoPersonal(reg, "ok", "", d.nombre, d.cargo);
+    return { estado: "ok", nombre: d.nombre, cargo: d.cargo, repetido: !!d.repetido };
+  }
+
+  function enviarPersonalPendientes() {
+    if (pm.cola) return pm.cola;
+    pm.cola = (async function () {
+      var lista = leerListaPersonal(LS_PERSONAL_COLA);
+      for (var i = 0; i < lista.length; i++) {
+        if (!state.user || !internet.ok || !navigator.onLine) break;
+        var r = await enviarPersonalUno(lista[i]);
+        if (r.estado === "pendiente") break;          // sigue sin señal: se intenta después
+        quitarDeColaPersonal(lista[i].id_local);
+      }
+    })().finally(function () {
+      pm.cola = null;
+      if (!$("personalSheet").hidden && !$("personalPrincipal").hidden) cargarListaPersonal();
+    });
+    return pm.cola;
+  }
+
+  function pmMostrarResultado(reg, r) {
+    pmPaso("resultado");
+    var el = $("pmResultado");
+    var hora = horaDeMs(reg.leido_ms);
+    var nombre = escapeHtml(r.nombre || reg.nombre || "La persona");
+    var foto = '<img src="' + escapeHtml(reg.foto) + '" alt="">';
+    if (r.estado === "ok") {
+      el.setAttribute("data-ok", "true");
+      el.innerHTML = foto + '<p class="resultado-titulo">✓ Quedó registrada</p>' +
+        '<p class="resultado-nombre">' + nombre + "</p>" +
+        '<p class="resultado-texto">Bus <b>' + escapeHtml(reg.bus) + "</b> · " + escapeHtml(hora) + "</p>" +
+        '<p class="resultado-nota">Va en su viaje: cuenta como pasajero, pero su pasaje no se cobra.</p>';
+    } else if (r.estado === "pendiente") {
+      el.setAttribute("data-ok", "true");
+      el.innerHTML = foto + '<p class="resultado-titulo">✓ Quedó guardada en su celular</p>' +
+        '<p class="resultado-nombre">' + nombre + "</p>" +
+        '<p class="resultado-texto">Bus <b>' + escapeHtml(reg.bus) + "</b> · " + escapeHtml(hora) + "</p>" +
+        '<p class="resultado-nota">' + escapeHtml(r.texto || "No hay señal: se manda sola cuando vuelva. No tiene que hacer nada más.") + "</p>";
+    } else {
+      el.setAttribute("data-ok", "false");
+      el.innerHTML = '<p class="resultado-titulo">No quedó registrada</p>' +
+        '<p class="resultado-texto">' + escapeHtml(r.texto || "") + "</p>";
+    }
   }
 
   // En la pantalla de "Sin conexión": el código del bus sí sale sin internet.
@@ -4467,6 +4899,16 @@
     $("btnSinInternetPersonal").addEventListener("click", abrirPersonal);
     $("personalCerrar").addEventListener("click", cerrarPersonal);
     $("personalListo").addEventListener("click", cerrarPersonal);
+    $("personalLeerSuCodigo").addEventListener("click", function () { abrirRegistroPorConductor("qr"); });
+    $("personalEscribirCedula").addEventListener("click", function () { abrirRegistroPorConductor("mano"); });
+    $("pmCedulaForm").addEventListener("submit", pmEnviarCedula);
+    $("pmSi").addEventListener("click", pmAbrirFoto);
+    $("pmNo").addEventListener("click", function () { abrirRegistroPorConductor(pm.forma); });
+    $("pmTomar").addEventListener("click", pmTomarFoto);
+    $("pmOtraFoto").addEventListener("click", function () { pmError(""); pmAbrirFoto(); });
+    $("pmRegistrar").addEventListener("click", pmRegistrar);
+    $("pmVolver").addEventListener("click", abrirPersonal);
+    window.addEventListener("online", enviarPersonalPendientes);
   }
 
   // ============================================================ NOVEDADES
@@ -5285,6 +5727,7 @@
     if (state.user && !$("appView").hidden && state.vista === "tarjeta") cargarTarjeta();
     enviarConfirmacionesPendientes();
     enviarNovedadesPendientes();
+    enviarPersonalPendientes();
   }
 
   function pintarVerificando(activo) {

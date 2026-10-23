@@ -30,6 +30,9 @@
      6. Noticias de la empresa (g2.4.0): las mismas del Portal del Conductor;
         desde la g2.5.0 salen completas encima al abrir la app (una vez al día),
         con la campana y la página dentro de la app.
+     7. Mi código (g2.7.0): si la persona no tiene internet, muestra su código
+        (sale sin internet) y el conductor la registra desde su portal con una
+        foto (sql v17, personal_por_conductor.sql).
 
    Sin sesión, la app solo usa dos funciones de Supabase
    (almacentro/enturnes/sql/personal_empresa.sql, la v10):
@@ -42,7 +45,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "g2.6.1";
+  var VERSION = "g2.7.0";
   var cfg = window.PORTAL_CONFIG || {};
   var RPC_QUIEN_SOY = "personal_quien_soy";
   var RPC_REGISTRAR = "personal_registrar_subida";
@@ -558,6 +561,64 @@
     selfie.stream = null;
     errorRegistro("");
     show($("registroSheet"), false);
+  }
+
+  // ------------------------------------------- 3b. Mi código (g2.7.0)
+  // Pedido del usuario (22-oct-2026): los gestores dicen que no tienen datos. Si la persona no puede leer el código
+  // del bus, muestra éste y el CONDUCTOR lo lee con su portal ("Leer su código") y le toma una foto: el registro lo
+  // manda el celular del conductor (personal_registrar_por_conductor, sql v17). Sale sin internet:
+  //     CBPP1.<cédula>.<hora ms>.<al azar>.<"Nombre|Cargo" en base64url>
+  // El nombre y el cargo solo son para que el conductor los vea sin internet; la base los saca de colaboradores.
+  // Cambia cada 30 s y la base acepta cada código una sola vez: una foto del código no sirve para otro registro.
+  var MI_CODIGO_MS = 30 * 1000;
+  var miCodigo = { reloj: null, fin: 0 };
+
+  function base64url(texto) {
+    var b = unescape(encodeURIComponent(texto));
+    return btoa(b).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  function textoMiCodigo() {
+    var yo = estado.yo || {};
+    var quien = base64url((String(yo.nombre || "").slice(0, 30) + "|" + String(yo.cargo || "").slice(0, 40)));
+    if (quien.length > 120) quien = base64url(String(yo.nombre || "").slice(0, 30));
+    return ["CBPP1", normalizarDni(yo.dni), String(Date.now()), alAzar(8), quien].join(".");
+  }
+
+  function abrirMiCodigo() {
+    if (!estado.yo || !estado.yo.dni) return;
+    show($("miCodigoSheet"), true);
+    if (typeof window.qrcode !== "function") {
+      $("miCodigoQr").innerHTML = '<p class="qr-vencido">No se pudo preparar el código. Cierre y vuelva a abrir la app.</p>';
+      return;
+    }
+    $("miCodigoQuien").textContent = (estado.yo.nombre || "Personal") + " · cédula terminada en " + String(estado.yo.dni).slice(-4);
+    pintarMiCodigo();
+    clearInterval(miCodigo.reloj);
+    miCodigo.reloj = setInterval(contarMiCodigo, 1000);
+  }
+
+  function pintarMiCodigo() {
+    var q = window.qrcode(0, "M");
+    q.addData(textoMiCodigo());
+    q.make();
+    $("miCodigoQr").innerHTML = q.createImgTag(6, 12, "Mi código para el conductor");
+    miCodigo.fin = Date.now() + MI_CODIGO_MS;
+    contarMiCodigo();
+  }
+
+  function contarMiCodigo() {
+    var queda = miCodigo.fin - Date.now();
+    if (queda <= 0) { pintarMiCodigo(); return; }
+    $("miCodigoBarra").style.width = (100 * queda / MI_CODIGO_MS) + "%";
+    $("miCodigoQueda").textContent = "El código cambia solo en " + Math.ceil(queda / 1000) + " s.";
+  }
+
+  function cerrarMiCodigo() {
+    clearInterval(miCodigo.reloj);
+    miCodigo.reloj = null;
+    $("miCodigoQr").innerHTML = "";
+    show($("miCodigoSheet"), false);
   }
 
   // ------------------------------------------------- 4. Mi asistencia
@@ -1498,6 +1559,9 @@
     $("confirmarNo").addEventListener("click", irACedula);
     $("btnCambiarCedula").addEventListener("click", cambiarCedula);
     $("btnLeerBus").addEventListener("click", abrirLector);
+    $("btnMiCodigo").addEventListener("click", abrirMiCodigo);
+    $("miCodigoCerrar").addEventListener("click", cerrarMiCodigo);
+    $("miCodigoListo").addEventListener("click", cerrarMiCodigo);
     $("registroCerrar").addEventListener("click", cerrarRegistro);
     $("registroListo").addEventListener("click", cerrarRegistro);
     $("selfieTomar").addEventListener("click", tomarSelfie);

@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="./css/portal.css?v=1.23.0">
+  <link rel="stylesheet" href="./css/portal.css?v=1.24.0">
 </head>
 <body>
 
@@ -611,15 +611,67 @@
         <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
     </header>
-    <div class="sheet-body">
+    <div id="personalPrincipal" class="sheet-body">
       <p class="dano-lead">Que la persona abra la <b>app del personal</b>, toque <b>Leer código del bus</b> y apunte aquí.</p>
       <div id="personalQr" class="qr-caja" aria-label="Código del bus"></div>
       <p id="personalBus" class="qr-nombre"></p>
       <div class="qr-tiempo" aria-hidden="true"><div id="personalBarra" class="qr-barra"></div></div>
       <p id="personalQueda" class="qr-queda" role="status"></p>
+      <!-- v1.24.0: si la persona no tiene internet, la registra el conductor (con su código o con la cédula) -->
+      <div id="personalOtra" class="personal-otra" hidden>
+        <p class="personal-otra-titulo">¿La persona no tiene internet?</p>
+        <p class="personal-otra-texto">Regístrela usted: lea su código o escriba su cédula, y tómele una foto.</p>
+        <div class="personal-otra-botones">
+          <button id="personalLeerSuCodigo" class="btn btn-ghost" type="button">
+            <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>
+            Leer su código
+          </button>
+          <button id="personalEscribirCedula" class="btn btn-ghost" type="button">
+            <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14.5 10h4M14.5 13.5h3"/></svg>
+            Escribir la cédula
+          </button>
+        </div>
+      </div>
       <h4 class="personal-titulo">Se registraron en este bus</h4>
       <ul id="personalLista" class="personal-lista" aria-live="polite"></ul>
       <button id="personalListo" class="btn btn-ghost btn-block" type="button">Listo</button>
+    </div>
+    <!-- El conductor registra a la persona: leer su código o escribir la cédula -> confirmar -> foto -> Registrar -->
+    <div id="personalManual" class="sheet-body personal-manual" hidden>
+      <p id="pmBus" class="qr-nombre"></p>
+      <div id="pmLeer" hidden>
+        <p class="dano-lead">Pídale que abra la <b>app del personal</b> y toque <b>Mostrar mi código</b>. Apunte la cámara a ese código.</p>
+        <div class="lector-camara"><video id="pmLectorVideo" playsinline muted></video><div class="lector-marco"></div></div>
+        <p id="pmLectorAyuda" class="lector-ayuda" role="status"></p>
+      </div>
+      <form id="pmCedulaForm" novalidate hidden>
+        <label class="field">
+          <span>Cédula de la persona</span>
+          <input id="pmCedula" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="15" autocomplete="off" placeholder="Solo los números">
+        </label>
+        <button id="pmBuscar" class="btn btn-primary btn-block" type="submit">Buscar</button>
+      </form>
+      <div id="pmConfirmar" class="pm-confirmar" hidden>
+        <p class="pm-pregunta">¿Es esta persona?</p>
+        <p id="pmNombre" class="pm-nombre"></p>
+        <p id="pmCargo" class="pm-cargo"></p>
+        <p id="pmNota" class="pm-nota" hidden></p>
+        <button id="pmSi" class="btn btn-primary btn-block" type="button">Sí, tomarle la foto</button>
+        <button id="pmNo" class="btn btn-ghost btn-block" type="button">No, volver</button>
+      </div>
+      <div id="pmFoto" hidden>
+        <p id="pmFotoTexto" class="dano-lead"></p>
+        <div class="lector-camara">
+          <video id="pmFotoVideo" playsinline muted></video>
+          <img id="pmFotoImg" class="pm-foto-img" alt="La foto que tomó" hidden>
+        </div>
+        <button id="pmTomar" class="btn btn-primary btn-block" type="button">Tomar la foto</button>
+        <button id="pmRegistrar" class="btn btn-primary btn-block" type="button" hidden>Registrar</button>
+        <button id="pmOtraFoto" class="btn btn-ghost btn-block" type="button" hidden>Tomar otra foto</button>
+      </div>
+      <div id="pmResultado" class="lector-resultado" role="status" hidden></div>
+      <p id="pmError" class="form-error" role="alert" hidden></p>
+      <button id="pmVolver" class="btn btn-ghost btn-block" type="button">Volver al código del bus</button>
     </div>
   </div>
 </div>
@@ -742,7 +794,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./js/portal-config.js?v=1.23.0"></script>
-<script src="./js/portal.js?v=1.23.0"></script>
+<script src="./js/portal-config.js?v=1.24.0"></script>
+<script src="./js/portal.js?v=1.24.0"></script>
 </body>
 </html>

@@ -17,6 +17,11 @@
 /* El botón grande: lo único que hace falta al subir al bus */
 .btn-leer-bus { min-height: 76px; font-size: 19px; border-radius: var(--radius-lg); }
 .btn-leer-bus .ico { width: 26px; height: 26px; margin-right: 8px; vertical-align: -6px; }
+/* g2.7.0: Mi código (sin internet, el conductor lo lee) */
+.btn-mi-codigo { min-height: 56px; margin-top: -4px; border-radius: var(--radius-lg); }
+.btn-mi-codigo .ico { width: 22px; height: 22px; margin-right: 8px; flex: none; }
+.btn-mi-codigo span { text-align: left; line-height: 1.2; }
+.btn-mi-codigo small { display: block; font-size: 12.5px; font-weight: 500; color: var(--muted); }
 
 .registros-hoy { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
 .registros-hoy li {

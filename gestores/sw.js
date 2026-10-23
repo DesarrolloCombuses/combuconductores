@@ -13,7 +13,7 @@
 
 // Igual a VERSION de gestores-app.js y a los ?v= de index.html. Que este
 // archivo cambie es lo que avisa a los teléfonos de que hay una versión nueva.
-const VERSION = "g2.6.1";
+const VERSION = "g2.7.0";
 const CACHE = "gestores-" + VERSION;
 
 const ARCHIVOS = [
@@ -29,6 +29,7 @@ const ARCHIVOS = [
   "../css/portal.css",
   "../js/portal-config.js",
   "../js/vendor/jsQR.min.js",
+  "../js/vendor/qrcode.min.js",   // Mi código (g2.7.0), también sin internet
   "../assets/logo-combuses.webp",
 ];
 

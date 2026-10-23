@@ -508,6 +508,25 @@ que $240.000 son en tiquetes y $140.000 en efectivo (7 pasajeros).
   de 19 dice *"Máximo 19 pasajeros: es el cupo del bus"* y el botón Guardar se apaga; igual si tiquetes y cívicas
   pasan de los pasajeros. La lectura que escribe dice cómo le queda el viaje anterior (si no cuadra, avisa).
 
+### El conductor registra al personal sin internet (v1.24.0, app del personal g2.7.0, SQL v17)
+
+Pedido del usuario el 22-oct-2026: los gestores dicen que no tienen datos, y es requisito que queden registrados al
+subir al bus. En la hoja **Registrar personal de la empresa**, debajo del código del bus, sale *"¿La persona no tiene
+internet?"* con dos botones; el conductor la registra desde su celular:
+
+- **Leer su código:** en la app del personal la persona toca **Mostrar mi código** (sale sin internet y cambia cada 30 s):
+  `CBPP1.<cédula>.<hora ms>.<al azar>.<"Nombre|Cargo" en base64url>`. El conductor lo lee con la cámara de atrás.
+  La base acepta cada código **una sola vez**: una foto del código no sirve para registrar dos veces.
+- **Escribir la cédula:** `personal_buscar_cedula` le muestra el nombre completo y el cargo (*"¿Es esta persona?"*).
+  Su propia cédula no se deja. Cada búsqueda queda anotada (`personal_busquedas`, máx. 30 por conductor en una hora).
+- Después, **una foto de la persona** con la cámara de atrás (obligatoria, decisión del usuario: es la prueba de que
+  iba en el bus) y **Registrar** (`personal_registrar_por_conductor`). Cuenta igual que si la persona leyera el código:
+  suma en los pasajeros y no se cobra.
+- **Sin internet** (botón en la pantalla de "Sin conexión"): queda en el celular (`portal_personal_cola`) con la foto y
+  se manda sola cuando vuelve la señal; el nombre se confirma entonces. En la lista sale *"Por enviar"*; si la base no
+  lo acepta, *"No quedó"* con el motivo. Si la base todavía no tiene la v17, avisa y queda guardado.
+- En Control sale **"Lo registró el conductor"** con la foto, y un despachador lo puede **anular**.
+
 ### El alistamiento del bus (v1.23.0)
 
 Pedido del usuario el 22-oct-2026: *"integremos la aplicación de alistamiento, va atada a todo"*. Es la revisión diaria

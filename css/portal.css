@@ -1835,6 +1835,33 @@ button.turno-opcion:focus-visible { outline: none; border-color: var(--primary);
 .personal-lista li > span:nth-child(2) { flex: 1; }
 .personal-lista .personal-check { color: var(--primary); font-weight: 800; }
 .personal-lista .personal-nadie { background: none; padding: 4px 0; color: var(--muted); font-size: 13.5px; }
+/* v1.24.0: lo que registró el conductor y falta mandar, o que la base no aceptó */
+.personal-lista .personal-pend { color: var(--muted); font-weight: 800; }
+.personal-lista .personal-mal { color: var(--danger); font-weight: 800; }
+.personal-lista li[data-estado="error"] { background: var(--danger-soft); }
+.personal-lista .personal-estado { font-style: normal; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.personal-lista li[data-estado="error"] .personal-estado { color: var(--danger); }
+.personal-lista .personal-motivo { display: block; font-size: 12.5px; color: var(--danger); }
+
+/* v1.24.0: si la persona no tiene internet, la registra el conductor */
+.personal-otra { margin: 2px 0 14px; padding: 12px; border-radius: var(--radius); border: 1px dashed var(--line-strong); }
+.personal-otra-titulo { margin: 0; font-size: 15px; font-weight: 750; color: var(--ink); }
+.personal-otra-texto { margin: 2px 0 10px; font-size: 13.5px; color: var(--muted); }
+.personal-otra-botones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.personal-otra-botones .btn { min-width: 0; padding-left: 8px; padding-right: 8px; font-size: 14px; }
+.personal-otra-botones .ico { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
+@media (max-width: 340px) { .personal-otra-botones { grid-template-columns: 1fr; } }
+.personal-manual { display: flex; flex-direction: column; gap: 10px; }
+.personal-manual .qr-nombre { margin: 0; }
+.personal-manual .field { margin-bottom: 4px; }
+.personal-manual .field input { font-size: 20px; letter-spacing: .04em; }
+.pm-confirmar { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: var(--radius-lg);
+  background: var(--soft); text-align: center; }
+.pm-confirmar .pm-pregunta { margin: 0; font-size: 14px; color: var(--muted); }
+.pm-confirmar .pm-nombre { margin: 0; font-size: 21px; font-weight: 800; color: var(--ink); overflow-wrap: anywhere; }
+.pm-confirmar .pm-cargo { margin: 0 0 6px; font-size: 14.5px; color: var(--ink-2); }
+.pm-confirmar .pm-nota { margin: 0 0 4px; font-size: 13px; color: var(--muted); }
+.lector-camara .pm-foto-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .tv-personal { flex-wrap: wrap; }
 .tv-personal-quien { flex-basis: 100%; font-size: 13px; color: var(--muted); }
 

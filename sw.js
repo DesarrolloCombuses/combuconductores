@@ -23,7 +23,7 @@
 // Igual a APP_VERSION de js/portal-config.js. No se cambia a mano: lo hace
 // nueva-version.ps1 en todos los sitios a la vez. Que este archivo cambie es
 // lo que avisa a los teléfonos de que hay una versión nueva.
-const VERSION = "v1.23.0";
+const VERSION = "v1.24.0";
 const CACHE_APP = "portal-app-" + VERSION;
 const CACHE_CDN = "portal-cdn-" + VERSION;
 const CACHE_TILES = "portal-tiles-" + VERSION;
@@ -39,8 +39,10 @@ const APP_SHELL = [
   "./css/portal.css",
   "./js/portal-config.js",
   "./js/portal.js",
-  // El código del bus para el personal de la empresa sale sin internet
+  // El código del bus para el personal de la empresa sale sin internet, y el lector del código de la persona
+  // (v1.24.0: el conductor la registra si ella no tiene internet) también sirve sin internet
   "./js/vendor/qrcode.min.js",
+  "./js/vendor/jsQR.min.js",
   "./manifest.webmanifest",
   "./assets/logo-combuses.webp",
   "./assets/icon-192.png",

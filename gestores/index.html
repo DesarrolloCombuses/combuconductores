@@ -13,7 +13,10 @@
          - Dónde marcar: el mapa con los 3 puntos (Almacentro, Nutibara y Terminal Norte), a cuánto queda cada uno
            y dónde no se marca.
          - Cómo se hace: la guía con dibujos y "Si algo falla".
-         - Mi cuenta: quién es, para quién es la app y cambiar la cédula. -->
+         - Mi cuenta: quién es, para quién es la app y cambiar la cédula.
+       g2.7.0: "Mostrar mi código" (sirve sin internet): si la persona no puede leer el código del bus, el conductor
+       lee este con su portal (o escribe la cédula) y le toma una foto. -->
+
   <link rel="manifest" href="./manifest.webmanifest">
   <meta name="theme-color" content="#0b6b3a">
   <meta name="mobile-web-app-capable" content="yes">
@@ -26,8 +29,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="../css/portal.css?v=g2.6.1">
-  <link rel="stylesheet" href="./gestores.css?v=g2.6.1">
+  <link rel="stylesheet" href="../css/portal.css?v=g2.7.0">
+  <link rel="stylesheet" href="./gestores.css?v=g2.7.0">
 </head>
 <body class="app-gestores">
 
@@ -113,6 +116,11 @@
       <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>
       Leer código del bus
     </button>
+    <!-- g2.7.0: sin internet, el conductor lee este código con su portal y le toma una foto -->
+    <button id="btnMiCodigo" class="btn btn-ghost btn-block btn-mi-codigo" type="button">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>
+      <span>Mostrar mi código <small>si no tengo internet</small></span>
+    </button>
 
     <article class="card">
       <header class="card-head">
@@ -197,8 +205,8 @@
         <div><b>Su foto y listo</b>
           <p>Tómese una foto y toque <strong>Registrarme</strong>. Queda en el viaje de ese bus: cuenta como pasajero, pero no se le cobra.</p></div></li>
       <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><path d="M20 30a40 40 0 0 1 56 0M29 39a27 27 0 0 1 38 0M38 48a14 14 0 0 1 20 0"/><circle cx="48" cy="57" r="3.5" class="g-relleno"/><path d="M22 66L74 10" class="g-acento"/></svg>
-        <div><b>Si no hay señal</b>
-          <p>El registro del bus se guarda en su celular y se manda solo cuando vuelva. La entrada y la salida sí necesitan internet.</p></div></li>
+        <div><b>Si no tiene internet</b>
+          <p>Toque <strong>Mostrar mi código</strong> y muéstreselo al conductor: él lo lee con su celular (o escribe su cédula) y le toma una foto. Así queda registrado. La entrada y la salida sí necesitan internet.</p></div></li>
       <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><rect x="22" y="4" width="36" height="62" rx="7" class="g-fondo"/><circle cx="40" cy="26" r="8"/><path d="M27 50c2-8 8-12 13-12s11 4 13 12"/><circle cx="68" cy="50" r="14" class="g-blanco"/><path d="M68 42v8l5 3"/><path d="M88 14H76M82 8l-6 6 6 6" class="g-acento"/></svg>
         <div><b>Al terminar el día</b>
           <p>Toque <strong>Marcar SALIDA</strong> con otra foto. Si se le olvidó, al otro día toque <strong>Se me olvidó marcar la salida</strong> y diga a qué hora salió.</p></div></li>
@@ -222,9 +230,9 @@
           qué no quedó marcada. Gestión humana la revisa.</p>
       </details>
       <details>
-        <summary>No tengo señal</summary>
-        <p>Igual puede leer el código del bus: el registro queda guardado en su celular y se manda solo. La entrada y la
-          salida sí necesitan internet.</p>
+        <summary>No tengo señal o no tengo datos</summary>
+        <p>Toque <strong>Mostrar mi código</strong> y muéstreselo al conductor: él lo registra desde su celular y le toma
+          una foto. Si no tiene la app a mano, dígale su cédula. La entrada y la salida sí necesitan internet.</p>
       </details>
       <details>
         <summary>Mi cédula no aparece</summary>
@@ -262,6 +270,7 @@
         <ul class="usos">
           <li>Marca su entrada y su salida en los puntos autorizados, con una foto. Va a la asistencia y a Buk.</li>
           <li>Se registra al subir a un bus leyendo el código del conductor. Cuenta como pasajero, pero no se cobra.</li>
+          <li>Si no tiene internet, muestra su código y el conductor lo registra con una foto.</li>
           <li>Ve las noticias de la empresa en la campana.</li>
         </ul>
       </div>
@@ -316,6 +325,26 @@
 
 <!-- La noticia abierta, dentro de la app: "Volver" arriba y su página debajo (con la cédula ya escrita) -->
 <div id="noticiaPantalla" class="noticia-pantalla" hidden></div>
+
+<!-- ============ Mi código (g2.7.0): sin internet, el conductor lo lee con su portal ============ -->
+<div id="miCodigoSheet" class="sheet-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="miCodigoTitulo">
+    <header class="sheet-head">
+      <h3 id="miCodigoTitulo">Mi código</h3>
+      <button id="miCodigoCerrar" class="icon-btn" type="button" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <p class="dano-lead">Muéstreselo al conductor. Él toca <b>Personal de la empresa</b> → <b>Leer su código</b> y le toma una foto. Sirve sin internet.</p>
+      <div id="miCodigoQr" class="qr-caja" aria-label="Mi código"></div>
+      <p id="miCodigoQuien" class="qr-nombre"></p>
+      <div class="qr-tiempo" aria-hidden="true"><div id="miCodigoBarra" class="qr-barra"></div></div>
+      <p id="miCodigoQueda" class="qr-queda" role="status"></p>
+      <button id="miCodigoListo" class="btn btn-ghost btn-block" type="button">Listo</button>
+    </div>
+  </div>
+</div>
 
 <!-- ============ Leer el código del bus, la selfie y el resultado ============ -->
 <div id="registroSheet" class="sheet-overlay" hidden>
@@ -417,15 +446,16 @@
 </div>
 
 <!-- Solo la dirección de Supabase y la llave pública (la misma del portal); no inicia sesión. -->
-<script src="../js/portal-config.js?v=g2.6.1"></script>
-<script src="../js/vendor/jsQR.min.js?v=g2.6.1"></script>
-<script src="./gestores-app.js?v=g2.6.1"></script>
+<script src="../js/portal-config.js?v=g2.7.0"></script>
+<script src="../js/vendor/jsQR.min.js?v=g2.7.0"></script>
+<script src="../js/vendor/qrcode.min.js?v=g2.7.0"></script>
+<script src="./gestores-app.js?v=g2.7.0"></script>
 <script>
   // La primera vez que se abre después de una actualización, el service worker viejo todavía entrega el
   // programa que tenía guardado (con la g2.0.0 la tarjeta se quedaba en "Consultando…"). Si el programa
   // que corrió no es de esta página, se espera al service worker nuevo y se recarga (máximo 2 veces).
   (function () {
-    var esta = "g2.6.1";
+    var esta = "g2.7.0";
     var corrio = (document.querySelector("[data-version]") || {}).textContent;
     if (!corrio || corrio === esta || !("serviceWorker" in navigator)) return;
     var marca = "personal_app_recarga_" + esta;
