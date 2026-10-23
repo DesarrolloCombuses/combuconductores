@@ -75,6 +75,23 @@ quién es y qué vehículo tiene hoy:
 
 Sin programación para hoy puede escribir el vehículo a mano (opcional) y seguir.
 
+**Solo conductores (v1.24.1).** Antes de mostrar nada se mira el cargo en
+`colaboradores` (la tabla de la asistencia, columna `especialidad`): tiene que
+decir **CONDUCTOR** y estar **VINCULADO**. La nómina de Google Sheets no sirve para
+esto: es la lista de Sonar y trae también gestores, auxiliares y líderes.
+
+- Personal vinculado con otro cargo → *"Este portal es solo para conductores"* y
+  el botón a la app del personal (`gestores/`).
+- Cédula que no está en `colaboradores` → no entra (*"pide en Gestión Humana que
+  revisen tu cargo"*). Un conductor nuevo entra cuando aparezca allí.
+- Sin poder consultar y sin nada guardado de hoy → *"Intenta de nuevo"*.
+- Una elección guardada antes se vuelve a revisar al abrir el portal y al volver la
+  señal; si el cargo no es conductor, se borra y vuelve a pedir la cédula.
+
+Al hacerlo (23-oct-2026) las 139 cédulas programadas del último mes eran todas
+CONDUCTOR VINCULADO. Es un control del portal: todos los conductores entran con el
+mismo usuario Combuses, así que la base no distingue quién escribe.
+
 La elección se guarda en el dispositivo (`localStorage`, clave
 `portal_seleccion`) y **vale por el día**. Si el turno cruza la medianoche se
 mantiene hasta 4 h después de la hora fin, para no volver a preguntar a mitad de

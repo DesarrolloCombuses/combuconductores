@@ -662,29 +662,61 @@
       guardadoEn: resultados[1].guardadoEn,
       error: resultados[1].error,
       estado: resultados[2],
-      colaborador: resultados[3],
+      colaborador: resultados[3].fila,
+      colaboradorError: resultados[3].error,
     };
   }
 
-  // ¿Es un gestor? Sale de colaboradores (la tabla de la asistencia): ahí está
-  // el cargo, en "especialidad". La nómina de Google Sheets es solo de conductores.
+  // ¿Qué cargo tiene? Sale de colaboradores (la tabla de la asistencia): ahí está
+  // el cargo, en "especialidad". La nómina de Google Sheets NO sirve para eso: es la
+  // lista de Sonar y trae también gestores, auxiliares y líderes (29 el 23-oct-2026).
+  // Se guarda también el "no está", para que sin señal tampoco entre.
   async function consultarColaborador(dni) {
     try {
       var res = await conTiempoLimite(client.from(cfg.TABLA_COLABORADORES || "colaboradores")
         .select("dni,nombre,especialidad,estado").eq("dni", dni).limit(1), 10000);
       if (res.error) throw res.error;
       var fila = (res.data || [])[0] || null;
-      if (fila) guardarCache("colaborador_" + dni, fila);
-      return fila;
+      guardarCache("colaborador_" + dni, fila);
+      return { fila: fila, error: null };
     } catch (err) {
       var cache = leerCache("colaborador_" + dni);
-      return cache ? cache.datos : null;
+      return cache ? { fila: cache.datos, error: null } : { fila: null, error: err || true };
     }
   }
 
-  function esGestor(colaborador) {
-    return !!colaborador && /gestor/i.test(colaborador.especialidad || "") &&
-      String(colaborador.estado || "").toUpperCase() === "VINCULADO";
+  function esVinculado(colaborador) {
+    return !!colaborador && String(colaborador.estado || "").toUpperCase() === "VINCULADO";
+  }
+
+  // El portal es solo para conductores (v1.24.1): el cargo de colaboradores tiene que decir CONDUCTOR.
+  function esConductor(colaborador) {
+    return esVinculado(colaborador) && /conductor/i.test(colaborador.especialidad || "");
+  }
+
+  var TEXTO_SOLO_CONDUCTORES = "Este portal es solo para conductores y esa cédula no aparece como conductor " +
+    "vinculado. Si eres conductor, pide en Gestión Humana que revisen tu cargo.";
+
+  // Una elección guardada antes de la v1.24.1 pudo ser de alguien que no es conductor: se revisa al abrir y al
+  // volver la señal, y si el cargo no es CONDUCTOR se le saca. Sin señal y sin nada guardado no se puede saber.
+  var cargoRevisado = null;   // la cédula que ya se revisó
+
+  async function revisarCargo() {
+    var dni = state.dni;
+    if (!dni || cargoRevisado === dni) return;
+    var r = await consultarColaborador(dni);
+    if (state.dni !== dni || r.error) return;
+    cargoRevisado = dni;
+    if (esConductor(r.fila)) return;
+    borrarSeleccion();
+    aplicarSeleccion(null);   // que la carga del inicio que iba en camino no la vuelva a guardar
+    descartarModulos();
+    mostrarIdentify();
+    $("identifyError").textContent = esVinculado(r.fila)
+      ? "Este portal es solo para conductores. Para marcar su asistencia o registrarse en un bus use la app " +
+        "del personal de la empresa."
+      : TEXTO_SOLO_CONDUCTORES;
+    show($("identifyError"), true);
   }
 
   function initIdentify() {
@@ -707,28 +739,20 @@
       try {
         var ident = await buscarIdentidad(dni);
 
-        // Un gestor no maneja: tiene su propia app (gestores/), sin el usuario Combuses.
-        if (esGestor(ident.colaborador) && !ident.turnos.length) {
-          mostrarConfirmacionGestor(dni, ident);
+        // Solo conductores (v1.24.1). El personal de la empresa (gestores, auxiliares,
+        // líderes...) no maneja: tiene su propia app (gestores/), sin el usuario Combuses.
+        if (esVinculado(ident.colaborador) && !esConductor(ident.colaborador)) {
+          mostrarConfirmacionPersonal(dni, ident.colaborador);
           return;
         }
-
-        if (!ident.conductor && !ident.turnos.length) {
-          if (ident.error) {
-            errorBox.textContent = navigator.onLine
-              ? "No se pudo consultar la programación. Intenta de nuevo."
-              : "Sin conexión. Conéctate para buscar tu programación.";
-            show(errorBox, true);
-            return;
-          }
-          // Si la nómina cargó y la cédula no está ni ahí ni en la
-          // programación, es un error de digitación casi seguro.
-          if (conductoresCache && conductoresCache.length) {
-            errorBox.textContent = "No encontramos esa cédula en la nómina ni en la programación.";
-            show(errorBox, true);
-            return;
-          }
+        if (!esConductor(ident.colaborador)) {
+          errorBox.textContent = !ident.colaboradorError ? TEXTO_SOLO_CONDUCTORES
+            : navigator.onLine ? "No se pudo comprobar tu cédula. Intenta de nuevo."
+            : "Sin conexión. Conéctate para buscar tu programación.";
+          show(errorBox, true);
+          return;
         }
+        cargoRevisado = dni;
 
         mostrarConfirmacion(dni, ident);
       } finally {
@@ -773,11 +797,10 @@
     window.scrollTo(0, 0);
   }
 
-  function mostrarConfirmacionGestor(dni, ident) {
-    var g = ident.colaborador;
-    identificacion = { dni: dni, gestor: g, conductor: null, turnos: [], estado: null };
-    $("confirmarNombre").textContent = g.nombre || "Gestor";
-    $("confirmarDni").textContent = "Cédula " + dni + " · " + capitalizarPalabras(g.especialidad || "Gestor");
+  function mostrarConfirmacionPersonal(dni, p) {
+    identificacion = { dni: dni, gestor: p, conductor: null, turnos: [], estado: null };
+    $("confirmarNombre").textContent = p.nombre || "Personal de la empresa";
+    $("confirmarDni").textContent = "Cédula " + dni + " · " + capitalizarPalabras(p.especialidad || "Personal de la empresa");
     $("confirmarPregunta").textContent = "";
     $("turnosLista").innerHTML = "";
     show($("sinProgramacionForm"), false);
@@ -790,7 +813,8 @@
     show($("confirmarGestor"), false);
 
     var nombre = (ident.conductor && ident.conductor.nombre) ||
-      (ident.turnos[0] && ident.turnos[0].nombre_programacion) || "";
+      (ident.turnos[0] && ident.turnos[0].nombre_programacion) ||
+      (ident.colaborador && ident.colaborador.nombre) || "";
     $("confirmarNombre").textContent = nombre || "Conductor sin nombre en la nómina";
     $("confirmarDni").textContent = "Cédula " + dni;
 
@@ -926,6 +950,7 @@
     aplicarSeleccion(sel);
     mostrarApp();
     completarConductorEnFondo();
+    revisarCargo();
   }
 
   function mostrarApp() {
@@ -5728,6 +5753,7 @@
     enviarConfirmacionesPendientes();
     enviarNovedadesPendientes();
     enviarPersonalPendientes();
+    if (state.user && !$("appView").hidden) revisarCargo();
   }
 
   function pintarVerificando(activo) {
