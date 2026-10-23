@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Alistamiento diario — SICOV</title>
+<meta name="description" content="Verificación previa a la operación del vehículo.">
+<meta name="theme-color" content="#1a4fa0">
+<!-- Módulo del Portal del Conductor (v1.23.0): el mismo formulario de la app de alistamiento (gesmovil-sicov,
+     web/ en b0a1cbd), dentro del portal. Sin manifest ni service worker propios: el portal es la app. Lo que cambia
+     en el portal lo hace modo-portal.js (ver README.md de esta carpeta). -->
+<link rel="stylesheet" href="./assets/app.css">
+<link rel="stylesheet" href="./modo-portal.css">
+</head>
+<body>
+
+<div class="cinta" id="cinta-version" hidden></div>
+<div class="cinta" id="cinta-conexion" hidden></div>
+
+<div class="envoltura">
+  <!-- La cabecera lleva el progreso dentro. Antes el titulo iba arriba y el
+       contador abajo en la barra: el conductor tenia que mirar a dos sitios
+       para saber como va, y el titulo ocupaba una franja que no decia nada
+       despues del primer segundo. -->
+  <header class="hero">
+    <div class="hero-fila">
+      <div class="hero-texto">
+        <p class="hero-rotulo">Alistamiento diario</p>
+        <h1>Revisión del vehículo</h1>
+      </div>
+      <div class="hero-cifra" aria-hidden="true">
+        <strong id="hero-hechas">0</strong><span id="hero-total">/0</span>
+      </div>
+    </div>
+    <div class="progreso-riel" role="progressbar" aria-label="Puntos verificados">
+      <div class="progreso-lleno" id="progreso-lleno"></div>
+    </div>
+    <p class="hero-pie" id="progreso-texto" aria-live="polite">Sin empezar</p>
+  </header>
+
+  <div id="cargando" class="cargando">Cargando…</div>
+  <div id="aviso" class="aviso error" hidden></div>
+
+  <form id="formulario" hidden>
+    <!-- Va primero a proposito. Si fuera al final, se responderia con el
+         formulario ya lleno y la respuesta "no" costaria tirar el trabajo:
+         la pregunta dejaria de ser una pregunta. -->
+    <div class="panel panel-declaracion">
+      <h2>Antes de empezar</h2>
+
+      <fieldset class="declaracion" data-campo="apto-descanso">
+        <legend>
+          ¿Se encuentra en condiciones óptimas de descanso, sin fatiga ni
+          somnolencia, para operar el vehículo de manera segura?
+        </legend>
+        <div class="si-no" role="radiogroup" aria-label="Condiciones de descanso">
+          <button type="button" data-pregunta="descanso" data-valor="si"
+                  role="radio" aria-checked="false">
+            <span class="si-no-glifo" aria-hidden="true">✓</span>
+            <span class="si-no-texto">Sí</span>
+          </button>
+          <button type="button" data-pregunta="descanso" data-valor="no"
+                  role="radio" aria-checked="false">
+            <span class="si-no-glifo" aria-hidden="true">✕</span>
+            <span class="si-no-texto">No</span>
+          </button>
+        </div>
+        <span class="error-campo" id="err-apto-descanso" role="alert" hidden></span>
+      </fieldset>
+
+      <fieldset class="declaracion" data-campo="apto-sustancias">
+        <legend>
+          ¿Declara no haber consumido alcohol, sustancias psicoactivas ni
+          medicamentos que afecten la conducción?
+        </legend>
+        <div class="si-no" role="radiogroup" aria-label="Alcohol y sustancias">
+          <button type="button" data-pregunta="sustancias" data-valor="si"
+                  role="radio" aria-checked="false">
+            <span class="si-no-glifo" aria-hidden="true">✓</span>
+            <span class="si-no-texto">Sí</span>
+          </button>
+          <button type="button" data-pregunta="sustancias" data-valor="no"
+                  role="radio" aria-checked="false">
+            <span class="si-no-glifo" aria-hidden="true">✕</span>
+            <span class="si-no-texto">No</span>
+          </button>
+        </div>
+        <span class="error-campo" id="err-apto-sustancias" role="alert" hidden></span>
+      </fieldset>
+
+      <!-- Solo aparece si alguna respuesta fue "No". Opcional: obligar a
+           justificar una respuesta incomoda empuja a cambiarla. -->
+      <label id="apto-explicacion" hidden>
+        <span class="etiqueta">¿Quiere agregar algo? <span class="pista enlinea">(opcional)</span></span>
+        <textarea id="apto-observacion" maxlength="300"
+                  placeholder="Lo que considere importante que quede registrado"></textarea>
+      </label>
+    </div>
+
+    <!-- El resto no aparece hasta que las dos esten respondidas. No es un
+         adorno: con todo el formulario a la vista, la declaracion se salta y se
+         vuelve a ella al final, cuando responder "no" ya cuesta tirar el
+         trabajo. Asi la pregunta llega cuando todavia no cuesta nada. -->
+    <div id="resto" hidden>
+
+    <div class="panel">
+      <h2>Vehículo y conductor</h2>
+
+      <label data-campo="placa">
+        <span class="etiqueta">Placa</span>
+        <select id="placa" required aria-describedby="err-placa">
+          <option value="">Selecciona el vehículo…</option>
+        </select>
+        <span class="pista" id="pista-placa"></span>
+        <span class="error-campo" id="err-placa" role="alert" hidden></span>
+      </label>
+
+      <label data-campo="cedula">
+        <span class="etiqueta">Cédula del conductor</span>
+        <!-- inputmode numeric y pattern: en iOS abre el teclado de numeros sin
+             convertir el campo en type=number, que admite signos y notacion
+             cientifica y deja el valor vacio si el texto no es un numero. -->
+        <input id="cedula" type="text" inputmode="numeric" pattern="[0-9]*"
+               autocomplete="off" autocapitalize="off" autocorrect="off"
+               spellcheck="false" enterkeyhint="next" maxlength="10"
+               required aria-describedby="err-cedula pista-conductor"
+               placeholder="Sin puntos ni espacios">
+        <span class="pista" id="pista-conductor"></span>
+        <span class="error-campo" id="err-cedula" role="alert" hidden></span>
+      </label>
+
+      <!-- readonly: el nombre lo pone la nomina, no el conductor. Sirve para
+           que confirme que es el, no para aportar el dato. -->
+      <label data-campo="nombre">
+        <span class="etiqueta">Nombre del conductor</span>
+        <input id="nombre" type="text" autocomplete="off" required readonly
+               tabindex="-1" placeholder="Se completa con la cédula">
+      </label>
+
+      <label data-campo="kilometraje">
+        <span class="etiqueta">Kilometraje <span class="pista enlinea">(opcional)</span></span>
+        <input id="kilometraje" type="text" inputmode="numeric" pattern="[0-9]*"
+               autocomplete="off" autocapitalize="off" autocorrect="off"
+               spellcheck="false" enterkeyhint="done" maxlength="9"
+               aria-describedby="err-kilometraje">
+        <span class="error-campo" id="err-kilometraje" role="alert" hidden></span>
+      </label>
+    </div>
+
+    <div class="panel">
+      <h2>Verificación</h2>
+      <p class="sub nota">
+        Toca <strong>✓</strong> si el punto está bien o <strong>!</strong> si encontraste una
+        novedad. Al terminar un bloque se abre el siguiente.
+      </p>
+      <div id="checklist"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Observaciones</h2>
+      <label>
+        <textarea id="observaciones" maxlength="500" enterkeyhint="done"
+                  placeholder="Algo más que deba quedar registrado (opcional)"></textarea>
+        <span class="contador" id="cuenta-obs" aria-live="polite"></span>
+      </label>
+    </div>
+    </div><!-- /#resto -->
+  </form>
+
+  <!-- Lo que falta, en una lista donde cada punto lleva a su sitio. Un aviso
+       suelto arriba obliga a buscar a mano cual de los cuarenta y tantos
+       campos es el que reclama. -->
+  <div class="pendientes" id="pendientes" hidden>
+    <p class="pendientes-titulo">
+      <span class="pendientes-icono" aria-hidden="true">!</span>
+      <span id="pendientes-titulo-texto">Falta completar</span>
+    </p>
+    <ul class="pendientes-lista" id="pendientes-lista"></ul>
+  </div>
+
+  <footer class="pie">
+    <button type="button" class="version-caja" id="version-caja" data-estado="sinsw">
+      <span class="version-luz" aria-hidden="true"></span>
+      <span class="version-datos">
+        <span class="version-num">SICOV <span id="version">…</span></span>
+        <span class="version-nota" id="version-nota">comprobando…</span>
+      </span>
+      <span class="version-refrescar" aria-hidden="true">&#8635;</span>
+    </button>
+  </footer>
+</div>
+
+<!-- Solo el boton: el progreso ya vive en la cabecera. El rotulo del boton
+     dice que falta, para que no haya que subir a mirar por que esta apagado. -->
+<div class="barra" id="barra" hidden>
+  <div class="barra-interna">
+    <button type="button" class="primario ancho" id="enviar" disabled>
+      <span id="enviar-texto">Registrar alistamiento</span>
+    </button>
+  </div>
+</div>
+
+<!-- comun.js primero: registra el service worker y define window.SICOV, del
+     que depende el resto. Los dos son clasicos (no modulos) para que se
+     ejecuten en orden sin defer. -->
+<script src="./assets/comun.js"></script>
+<!-- modo-portal.js va en medio: necesita window.SICOV (comun.js) y tiene que estar escuchando antes de que
+     alistamiento.js pida el formulario. -->
+<script src="./modo-portal.js"></script>
+<script src="./assets/alistamiento.js"></script>
+</body>
+</html>

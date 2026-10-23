@@ -1,0 +1,1303 @@
+/* ---------------------------------------------------------------------------
+   Estilos de la plataforma SICOV
+   ---------------------------------------------------------------------------
+   Compartidos por los dos formularios. Estan en un archivo aparte (y no inline
+   en cada HTML) para que el service worker los cachee una vez y los reuse: con
+   estilos inline, cada cambio en un formulario obliga a volver a descargar
+   todo lo demas.
+
+   Mobile-first sin media queries para crecer: el formulario se llena de pie
+   junto al vehiculo, en un telefono. El escritorio solo necesita que la
+   columna no se estire, y eso lo resuelve un max-width.
+
+   DOS COSAS MANDAN EN ESTE DISENO, y no son esteticas:
+
+   1. Se usa a pleno sol. De ahi que los estados marcados sean rellenos de
+      color con texto blanco, y no fondos tenidos con texto de color: un tinte
+      claro desaparece bajo el sol directo.
+
+   2. Se toca con una mano, de pie, a veces con guantes. Ningun objetivo
+      tactil baja de 48px.
+
+   Lo marcado RECEDE y lo pendiente resalta: un item ya verificado se tine y
+   baja de contraste, mientras los que faltan siguen en blanco. Asi el ojo va
+   solo a lo que queda, que es la pregunta que el conductor se hace al bajar
+   la lista.
+--------------------------------------------------------------------------- */
+
+:root {
+  --tinta: #16202c;
+  --suave: #5b6b7d;
+  /* #93a1b2 daba 2.63:1 sobre blanco. AA pide 4.5:1 para texto normal, y este
+     gris lo usan las pistas, los contadores y las notas -- texto chico que ya
+     cuesta leer. #616e81 da 5.18:1 sin cambiar el tono. */
+  --tenue: #616e81;
+  --linea: #e3e8ef;
+  --linea-fuerte: #cdd6e0;
+  --fondo: #f1f4f8;
+  --panel: #ffffff;
+  --campo: #ffffff;
+
+  --ok: #16794a;
+  --ok-claro: #1f9a5e;
+  --ok-suave: #e9f6ef;
+  --ok-borde: #a8ddc1;
+
+  --mal: #b3261e;
+  --mal-claro: #d13a30;
+  --mal-suave: #fdedeb;
+  --mal-borde: #f2b9b4;
+
+  --acento: #1a4fa0;
+  --acento-claro: #2a66c4;
+  --acento-suave: #eaf1fb;
+  --acento-borde: #bed3f0;
+
+  /* Radios grandes y sombras en capas. Una sola sombra difusa aplana el
+     panel; dos (una de contacto, corta y oscura, y otra de elevacion, larga y
+     tenue) es como se comporta una sombra real y es lo que separa una tarjeta
+     de un recuadro con borde. */
+  --radio: 20px;
+  --radio-chico: 14px;
+  --radio-mini: 11px;
+  --sombra:
+    0 1px 2px rgba(16, 28, 44, 0.05),
+    0 8px 24px -8px rgba(16, 28, 44, 0.10);
+  --sombra-alta:
+    0 2px 4px rgba(16, 28, 44, 0.06),
+    0 16px 40px -12px rgba(16, 28, 44, 0.18);
+  --sombra-barra: 0 -1px 0 rgba(16, 28, 44, 0.06), 0 -12px 32px -8px rgba(16, 28, 44, 0.12);
+
+  color-scheme: light;
+}
+
+/* Sin modo oscuro a proposito. Se probo y el resultado no convence: en una
+   app de trabajo que se llena a la carrera, el fondo negro hace que el verde y
+   el rojo de OK/Falla pierdan la contundencia que tienen sobre blanco, que es
+   lo unico que el conductor mira. Si mas adelante hace falta para el turno de
+   madrugada, se redefinen los tokens de :root y ninguna regla de abajo se
+   entera. */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  /* El padding inferior deja sitio a la barra fija de envio, y el
+     safe-area-inset evita que el boton quede bajo la barra del sistema en los
+     telefonos con notch. */
+  padding: env(safe-area-inset-top, 0) 0 calc(env(safe-area-inset-bottom, 0) + 108px);
+  background: var(--fondo);
+  color: var(--tinta);
+  /* La familia del sistema, pero pidiendo la optica de texto de iOS y las
+     formas mas modernas en Android. Sin fuente web: la app tiene que abrir
+     igual sin red, y una fuente que no carga deja el formulario saltando de
+     tamano justo cuando el conductor empieza a tocar. */
+  /* 17px y no 16. Todo lo demas se mide en rem, asi que subir la base sube el
+     documento entero. Lo leen conductores adultos, de pie junto al bus y a
+     menudo a contraluz: 16px es el minimo para que iOS no haga zoom al
+     enfocar un campo, no un tamano comodo para leer cuarenta renglones.
+     El interlineado sube a 1.55 por lo mismo -- a esta distancia y con
+     movimiento, las lineas apretadas se saltan. */
+  font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
+        "Segoe UI", Roboto, system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-text-size-adjust: 100%;
+  /* La app instalada no debe dar el efecto de rebote de una pagina web. */
+  overscroll-behavior-y: contain;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.envoltura { max-width: 660px; margin: 0 auto; padding: 16px; }
+
+/* Entrada escalonada de los bloques. Un retardo corto por tarjeta hace que la
+   pantalla se arme en vez de aparecer de golpe; es la diferencia entre una
+   pagina y una app. Se anula si el sistema pide menos movimiento. */
+@keyframes surgir {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.hero, .panel { animation: surgir .32s cubic-bezier(.22,.61,.36,1) backwards; }
+.panel:nth-of-type(1) { animation-delay: .04s; }
+.panel:nth-of-type(2) { animation-delay: .08s; }
+.panel:nth-of-type(3) { animation-delay: .12s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero, .panel { animation: none; }
+}
+
+/* --- Cabecera ---
+   Lleva el progreso dentro. Un titulo que solo dice el nombre de la pantalla
+   deja de aportar al segundo de abrirla; el estado, en cambio, se consulta
+   cada pocos toques. El degradado no es adorno: separa el bloque de contexto
+   del area donde se trabaja, sin una linea divisoria mas. */
+.hero {
+  position: relative;
+  margin-bottom: 16px;
+  padding: 20px;
+  border-radius: var(--radio);
+  /* El azul claro era #2f6fd0, y sobre el ni el blanco puro llegaba a 4.5:1
+     (daba 4.88, y el texto secundario al 62% caia a 2.86). Con #1f4d96 el
+     blanco sube a 8.20:1 y el secundario al 80% a 5.88:1. */
+  background:
+    radial-gradient(120% 140% at 100% 0%, #1f4d96 0%, rgba(31,77,150,0) 55%),
+    linear-gradient(160deg, #1a4e9c 0%, #133a72 100%);
+  color: #fff;
+  box-shadow: var(--sombra-alta);
+  overflow: hidden;
+}
+.hero-fila {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.hero-texto { min-width: 0; }
+.hero-rotulo {
+  margin: 0 0 3px;
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.82);
+}
+.hero h1 {
+  margin: 0;
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: -0.028em;
+  line-height: 1.15;
+}
+/* La cifra grande es lo unico que se mira al volver a la pantalla, asi que
+   manda sobre el titulo en tamano. */
+.hero-cifra {
+  flex-shrink: 0;
+  display: flex;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+.hero-cifra strong { font-size: 2.1rem; font-weight: 750; line-height: 1; }
+.hero-cifra span {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.80);
+}
+.hero-pie {
+  margin: 10px 0 0;
+  font-size: 0.92rem;
+  color: rgba(255, 255, 255, 0.86);
+}
+.hero-pie strong { color: #fff; font-variant-numeric: tabular-nums; }
+.hero-pie .fallas { color: #ffc4bd; font-weight: 650; }
+
+/* El riel dentro del degradado necesita su propio contraste: el gris de la
+   version clara desaparece sobre azul. */
+.hero .progreso-riel { background: rgba(255, 255, 255, 0.18); height: 8px; }
+.hero .progreso-lleno { background: #fff; }
+.hero .progreso-lleno[data-lleno="si"] { background: #5ee29a; }
+
+h1 {
+  margin: 0 0 4px;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+}
+.sub { margin: 0; color: var(--suave); font-size: 1.01rem; }
+
+/* --- Paneles --- */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  padding: 20px;
+  margin-bottom: 14px;
+  box-shadow: var(--sombra);
+}
+/* Un punto de color delante del titulo. Cuesta nada y convierte una lista de
+   rotulos grises en secciones que se distinguen de reojo al hacer scroll. */
+.panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 18px;
+  /* Las mayusculas se leen mas despacio que la minuscula, asi que un
+     titulo en versalitas necesita mas cuerpo del que parece. */
+  font-size: 0.84rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--suave);
+  font-weight: 750;
+}
+.panel h2::before {
+  content: "";
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--acento-claro);
+  flex-shrink: 0;
+}
+.panel .nota { margin: -8px 0 16px; font-size: 0.9rem; }
+
+/* --- Campos --- */
+label { display: block; margin-bottom: 16px; }
+label:last-child { margin-bottom: 0; }
+.etiqueta { display: block; font-size: 0.97rem; font-weight: 600; margin-bottom: 8px; }
+.pista {
+  display: block;
+  font-size: 0.92rem;
+  color: var(--suave);
+  font-weight: 400;
+  margin-top: 7px;
+}
+.pista.enlinea { display: inline; margin: 0; font-weight: 400; }
+.pista.bien { color: var(--ok); font-weight: 600; }
+
+input, select, textarea {
+  width: 100%;
+  /* Hereda los 16px del body a proposito: por debajo de 16px, iOS hace zoom
+     al enfocar el campo y descoloca el formulario. */
+  font: inherit;
+  padding: 13px 14px;
+  min-height: 50px;
+  border: 1.5px solid var(--linea-fuerte);
+  border-radius: var(--radio-chico);
+  background: var(--campo);
+  color: inherit;
+  transition: border-color .15s, box-shadow .15s;
+}
+input::placeholder, textarea::placeholder { color: var(--tenue); }
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: none;
+  border-color: var(--acento);
+  box-shadow: 0 0 0 3px var(--acento-suave);
+}
+textarea { min-height: 88px; resize: vertical; line-height: 1.5; }
+
+/* La flecha del select se dibuja con dos gradientes en vez de una imagen:
+   hereda el color del tema y no cuesta una peticion mas. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 40px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--suave) 50%),
+                    linear-gradient(135deg, var(--suave) 50%, transparent 50%);
+  background-position: calc(100% - 20px) calc(50% + 2px), calc(100% - 15px) calc(50% + 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.par { display: flex; gap: 12px; }
+.par > label { flex: 1; min-width: 0; }
+@media (max-width: 420px) { .par { flex-direction: column; gap: 0; } }
+
+/* --- Declaracion del conductor ---
+   Va antes que todo lo demas en el formulario, y nada mas aparece hasta que
+   este respondida. Es lo unico que el conductor afirma sobre si mismo, y lo
+   que puede acabar en un expediente si pasa algo. */
+.panel-declaracion {
+  border-color: var(--acento-borde);
+  background: linear-gradient(180deg, var(--acento-suave) 0%, var(--panel) 80px);
+}
+
+.declaracion {
+  margin: 0 0 20px;
+  padding: 0;
+  /* El fieldset trae borde y padding propios del navegador. Sin quitarlos, el
+     bloque se ve como un recuadro de formulario de 1998. */
+  border: 0;
+  min-width: 0;
+}
+.declaracion legend {
+  display: block;
+  width: 100%;
+  padding: 0;
+  margin-bottom: 14px;
+  font-size: 1.08rem;
+  font-weight: 550;
+  line-height: 1.42;
+  color: var(--tinta);
+}
+
+/* --- Si / No ---
+   Los dos del mismo tamano y con el mismo peso visual. Hacer el "Si" mas
+   grande o mas vistoso seria inducir la respuesta, y en una declaracion que
+   puede acabar en un expediente eso no es un detalle de estilo.
+
+   Grandes porque son lo primero que se toca, de pie y con prisa, y porque un
+   control que no se ve como control se salta. */
+.si-no { display: flex; gap: 12px; }
+.si-no button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 76px;
+  padding: 10px;
+  border: 2px solid var(--linea-fuerte);
+  border-radius: var(--radio-chico);
+  background: var(--campo);
+  color: var(--suave);
+  cursor: pointer;
+  transition: background-color .16s, border-color .16s, color .16s,
+              box-shadow .16s, transform .12s;
+}
+.si-no button:active { transform: scale(0.97); }
+
+.si-no-glifo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  font: 700 0.95rem/1 system-ui, sans-serif;
+}
+.si-no-texto { font: 700 0.95rem/1 system-ui, sans-serif; letter-spacing: 0.01em; }
+
+/* Elegido: relleno solido y halo del mismo color. El halo es lo que hace que
+   se lea "esto quedo marcado" desde lejos y a pleno sol, donde un borde de
+   color se pierde. */
+.si-no button[data-elegido="si"] {
+  background: var(--ok-claro);
+  border-color: var(--ok-claro);
+  color: #fff;
+  box-shadow: 0 0 0 4px var(--ok-suave), 0 6px 16px -8px rgba(31, 154, 94, 0.7);
+}
+.si-no button[data-elegido="no"] {
+  background: var(--mal-claro);
+  border-color: var(--mal-claro);
+  color: #fff;
+  box-shadow: 0 0 0 4px var(--mal-suave), 0 6px 16px -8px rgba(209, 58, 48, 0.7);
+}
+.si-no button[data-elegido="si"] .si-no-glifo,
+.si-no button[data-elegido="no"] .si-no-glifo {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.85);
+}
+
+/* El no elegido se apaga, para que de un vistazo se lea cual quedo. */
+.declaracion[data-respondida="si"] .si-no button:not([data-elegido]) {
+  opacity: 0.4;
+  border-color: var(--linea);
+}
+
+.declaracion[data-error="si"] .si-no button { border-color: var(--mal-borde); }
+
+/* Entrada del resto del formulario al responder las dos. Aparece deslizando
+   para que se vea de donde salio, en vez de materializarse de golpe. */
+#resto { animation: surgir .34s cubic-bezier(.22,.61,.36,1) backwards; }
+@media (prefers-reduced-motion: reduce) {
+  #resto { animation: none; }
+}
+
+/* --- Campo con error ---
+   El mensaje va pegado a su campo. Un aviso suelto arriba que dice "faltan
+   datos" obliga a recorrer el formulario buscando cual es. */
+.error-campo {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 8px;
+  font-size: 0.94rem;
+  line-height: 1.35;
+  font-weight: 550;
+  color: var(--mal);
+}
+.error-campo::before {
+  content: "!";
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px; height: 16px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--mal-claro);
+  color: #fff;
+  font: 700 0.7rem/1 system-ui, sans-serif;
+}
+.error-campo[hidden] { display: none; }
+
+[data-campo][data-error="si"] input,
+[data-campo][data-error="si"] select {
+  border-color: var(--mal-claro);
+  background: var(--mal-suave);
+}
+[data-campo][data-error="si"] input:focus-visible,
+[data-campo][data-error="si"] select:focus-visible {
+  box-shadow: 0 0 0 3px var(--mal-suave);
+}
+
+/* --- Contador de caracteres --- */
+.contador {
+  display: block;
+  margin-top: 6px;
+  text-align: right;
+  font-size: 0.86rem;
+  color: var(--tenue);
+  font-variant-numeric: tabular-nums;
+}
+.contador[data-cerca="limite"] { color: var(--mal); font-weight: 650; }
+.contador[hidden] { display: none; }
+
+/* --- Panel de pendientes ---
+   Aparece al intentar enviar sin completar. Cada linea lleva a su sitio: con
+   el checklist en acordeon, el punto que falta puede estar dentro de un bloque
+   cerrado, donde no basta con desplazar la pantalla. */
+.pendientes {
+  margin-bottom: 14px;
+  padding: 16px 16px 10px;
+  border: 1px solid var(--mal-borde);
+  border-radius: var(--radio);
+  background: var(--mal-suave);
+  animation: surgir .26s cubic-bezier(.22,.61,.36,1) backwards;
+}
+.pendientes[hidden] { display: none; }
+.pendientes-titulo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--mal);
+}
+.pendientes-icono {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--mal-claro);
+  color: #fff;
+  font: 700 0.78rem/1 system-ui, sans-serif;
+}
+.pendientes-lista { margin: 0; padding: 0; list-style: none; }
+.pendiente {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 0;
+  border: 0;
+  border-top: 1px solid var(--mal-borde);
+  background: transparent;
+  color: var(--tinta);
+  font: 500 1.01rem/1.4 system-ui, sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+.pendientes-lista li:first-child .pendiente { border-top: 0; }
+.pendiente::after {
+  content: " →";
+  color: var(--mal);
+  font-weight: 700;
+}
+.pendiente:active { opacity: 0.6; }
+
+/* Sin red el boton sigue activo -- al tocarlo se vuelve a probar la conexion,
+   que es lo que el conductor quiere hacer -- pero cambia de color para que no
+   prometa un envio inmediato. Pintarlo de gris como uno desactivado seria
+   mentir: diria "no se puede tocar" sobre algo que si responde. */
+[data-sinred="si"] button.primario:not(:disabled) {
+  background: linear-gradient(180deg, #8a93a1 0%, #6f7b8a 100%);
+  box-shadow: none;
+}
+
+/* --- Separador de grupo (formulario de mantenimiento) ---
+   Una linea con el nombre del bloque, sin acordeon: el taller llena el
+   formulario sentado y en pantalla grande, donde el scroll no estorba. El
+   acordeon de abajo es del alistamiento, que se llena de pie en un telefono. */
+.grupo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 22px 0 10px;
+  padding-top: 18px;
+  border-top: 1px solid var(--linea);
+}
+.grupo:first-of-type { margin-top: 0; padding-top: 0; border-top: 0; }
+.grupo-nombre {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--suave);
+  font-weight: 700;
+}
+
+/* --- Checklist en acordeon ---
+   Los 40 puntos en una lista plana median casi 3900px: cinco pantallas de
+   telefono de puro scroll, y el conductor no sabia donde estaba. Agrupados en
+   acordeon se ve un grupo a la vez, y al terminarlo se abre el siguiente solo.
+   El scroll pasa a caber en una pantalla y el avance se vuelve evidente sin
+   tener que explicarlo. */
+.bloque {
+  border: 1px solid var(--linea);
+  border-radius: var(--radio-chico);
+  margin-bottom: 10px;
+  background: var(--panel);
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(16, 28, 44, 0.04);
+  transition: box-shadow .2s, border-color .2s;
+}
+/* El abierto se eleva sobre los demas. Es la senal de "estas aqui" que un
+   acordeon necesita para no parecer una lista de botones. */
+.bloque[data-abierto="si"] {
+  box-shadow: var(--sombra);
+  border-color: var(--linea-fuerte);
+}
+.bloque:last-child { margin-bottom: 0; }
+
+/* La cabecera es el boton que abre y cierra. Ocupa el ancho entero para que
+   sea imposible fallar el toque. */
+.bloque-cab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.bloque-cab:active { background: var(--fondo); }
+
+/* El numero de paso responde "cuanto llevo" sin contar cabeceras a ojo. */
+.bloque-paso {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px; height: 28px;
+  border-radius: 99px;
+  background: var(--fondo);
+  border: 1px solid var(--linea);
+  font: 700 0.72rem/1 system-ui, sans-serif;
+  color: var(--tenue);
+  font-variant-numeric: tabular-nums;
+}
+.bloque-nombre {
+  flex: 1;
+  min-width: 0;
+  font-size: 1.06rem;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.bloque-cuenta {
+  flex-shrink: 0;
+  font: 700 0.84rem/1 system-ui, sans-serif;
+  padding: 5px 9px;
+  border-radius: 99px;
+  background: var(--fondo);
+  border: 1px solid var(--linea);
+  color: var(--tenue);
+  font-variant-numeric: tabular-nums;
+}
+.bloque-flecha {
+  flex-shrink: 0;
+  color: var(--tenue);
+  font-size: 0.8rem;
+  transition: transform .18s;
+}
+.bloque[data-abierto="si"] .bloque-flecha { transform: rotate(180deg); }
+
+/* Grupo resuelto: se tine entero y el paso pasa a un check. Al cerrarse, la
+   fila sola dice que ese bloque ya esta, sin volver a abrirlo. */
+.bloque[data-completo="si"] { border-color: var(--ok-borde); }
+.bloque[data-completo="si"] .bloque-cab { background: var(--ok-suave); }
+.bloque[data-completo="si"] .bloque-nombre { color: var(--ok); }
+.bloque[data-completo="si"] .bloque-paso,
+.bloque[data-completo="si"] .bloque-cuenta {
+  background: var(--ok-claro);
+  border-color: var(--ok-claro);
+  color: #fff;
+}
+/* Con una falla dentro, el grupo se marca en rojo aunque este completo: es lo
+   que el taller tiene que ver antes de que el bus salga. */
+.bloque[data-falla="si"] { border-color: var(--mal-borde); }
+.bloque[data-falla="si"] .bloque-cab { background: var(--mal-suave); }
+.bloque[data-falla="si"] .bloque-nombre { color: var(--mal); }
+.bloque[data-falla="si"] .bloque-paso,
+.bloque[data-falla="si"] .bloque-cuenta {
+  background: var(--mal-claro);
+  border-color: var(--mal-claro);
+  color: #fff;
+}
+
+/* Abrir y cerrar se anima con grid-template-rows de 0fr a 1fr: es la unica
+   forma de interpolar hacia una altura 'auto' sin medirla en JS. El hijo
+   necesita min-height:0 y overflow:hidden o se desborda durante la
+   transicion. Un [hidden] seco daba un salto que hacia perder el sitio. */
+.bloque-envoltura {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows .26s cubic-bezier(.22,.61,.36,1);
+}
+.bloque[data-abierto="si"] .bloque-envoltura { grid-template-rows: 1fr; }
+.bloque-cuerpo {
+  min-height: 0;
+  overflow: hidden;
+}
+.bloque-cuerpo > :first-child { margin-top: 2px; }
+.bloque-interior { padding: 2px 10px 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bloque-envoltura { transition: none; }
+}
+
+/* --- "Todo bien" del grupo ---
+   Marca de una vez los pendientes de ESTE grupo, no de la lista entera. Lo de
+   abajo sigue punto por punto: el que encuentre una falla la marca y manda el
+   resto de un toque. */
+.todo-bien {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 46px;
+  margin-bottom: 10px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--ok-suave);
+  color: var(--ok);
+  font: 650 0.97rem/1.25 system-ui, sans-serif;
+  cursor: pointer;
+  transition: background-color .15s, transform .12s;
+}
+.todo-bien:active { transform: scale(0.97); background: var(--ok-borde); }
+.todo-bien[hidden] { display: none; }
+
+/* --- Item del checklist ---
+   GRID de una columna, no flex de una fila. El campo de observacion se anade
+   como segundo hijo cuando se marca Falla, y con flex se metia como tercera
+   columna: aplastaba el texto y lo encimaba con el switch. Con grid cae en su
+   propia fila, a todo el ancho, que es donde se puede escribir. */
+/* Sin borde: dentro del bloque ya hay un contenedor, y encerrar cada punto en
+   otro recuadro es lo que daba el aspecto de formulario viejo. Los separa el
+   fondo, que ademas deja el color del estado como la unica senal fuerte. */
+.item {
+  display: grid;
+  gap: 10px;
+  padding: 7px 10px;
+  margin-bottom: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radio-mini);
+  background: transparent;
+  transition: background-color .18s, border-color .18s;
+}
+.item:last-child { margin-bottom: 0; }
+
+/* Se envuelve a proposito. iOS y Android dejan subir el tamano de letra del
+   sistema, y mucho conductor lo tiene arriba; con el texto grande, la fila se
+   parte en dos lineas en vez de aplastar el nombre de la actividad contra los
+   botones, que no pueden encoger porque son el objetivo tactil. */
+.item-fila {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.item-texto {
+  flex: 1 1 58%;
+  min-width: 0;
+  /* Por encima de la base: es el texto que el conductor lee cuarenta veces,
+     y de los que no puede adivinar por contexto. */
+  font-size: 1.04rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+/* Lo ya resuelto recede para que resalte lo que falta. */
+.item[data-estado="ok"] {
+  background: var(--ok-suave);
+  border-color: var(--ok-borde);
+}
+.item[data-estado="ok"] .item-texto { color: var(--suave); font-weight: 400; }
+.item[data-estado="mal"] {
+  background: var(--mal-suave);
+  border-color: var(--mal-borde);
+}
+
+.item-obs {
+  /* Ocupa la fila entera del grid. Sin esto volveria a competir por el ancho
+     con el texto y el switch. */
+  grid-column: 1 / -1;
+  min-height: 50px;
+  font-size: 1rem;
+}
+
+/* --- El switch OK / Falla ---
+   Relleno solido con texto blanco al marcar, no un tinte claro: el tinte se
+   pierde con el telefono a pleno sol, que es cuando mas se usa.
+
+   Cuadrados con glifo y sin rotulo: con el nombre del punto al lado, "OK" y
+   "Falla" escritos repetian 80 veces lo que la forma y el color ya dicen, y
+   cada palabra costaba ancho que el texto necesitaba. El rotulo sigue ahi para
+   el lector de pantalla. */
+.switch { display: flex; gap: 7px; flex-shrink: 0; }
+.switch button {
+  /* 48px de lado: es el objetivo tactil que se acierta sin precision, con el
+     telefono en una mano y de pie junto al vehiculo. No baja de ahi. */
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  font: 700 1.2rem/1 system-ui, sans-serif;
+  border: 1.5px solid var(--linea);
+  /* Circulos. Dos cuadrados junto a un texto se leen como "otro campo mas";
+     el circulo se lee como un control, que es lo que son. */
+  border-radius: 50%;
+  background: var(--fondo);
+  color: var(--tenue);
+  cursor: pointer;
+  transition: background-color .15s, border-color .15s, color .15s,
+              opacity .15s, transform .12s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.switch button:active { transform: scale(0.88); }
+
+.switch button[aria-pressed="true"][data-valor="ok"] {
+  background: var(--ok-claro);
+  border-color: var(--ok-claro);
+  color: #fff;
+  box-shadow: 0 0 0 4px var(--ok-suave);
+}
+.switch button[aria-pressed="true"][data-valor="mal"] {
+  background: var(--mal-claro);
+  border-color: var(--mal-claro);
+  color: #fff;
+  box-shadow: 0 0 0 4px var(--mal-suave);
+}
+
+/* El no elegido se apaga, para que de un vistazo se lea cual quedo. */
+.item[data-estado] .switch button[aria-pressed="false"] {
+  opacity: 0.35;
+  border-color: var(--linea);
+}
+
+
+/* --- Casillas (mantenimiento) --- */
+.check {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  margin: 0 0 8px;
+  border: 1.5px solid var(--linea);
+  border-radius: var(--radio-chico);
+  background: var(--panel);
+  cursor: pointer;
+  transition: background-color .15s, border-color .15s;
+}
+.check:last-child { margin-bottom: 0; }
+.check:has(input:checked) {
+  background: var(--acento-suave);
+  border-color: var(--acento-borde);
+}
+.check input {
+  width: 24px; height: 24px;
+  flex-shrink: 0;
+  accent-color: var(--acento-claro);
+  cursor: pointer;
+}
+.check span { flex: 1; font-size: 0.96rem; font-weight: 500; }
+
+/* --- Selector de tipo --- */
+.tipos { display: flex; gap: 10px; }
+.tipos button {
+  flex: 1;
+  min-height: 56px;
+  padding: 10px;
+  font: 600 0.95rem/1.3 system-ui, sans-serif;
+  border: 1.5px solid var(--linea-fuerte);
+  border-radius: var(--radio-chico);
+  background: var(--campo);
+  color: var(--suave);
+  cursor: pointer;
+  transition: background-color .12s, border-color .12s, color .12s;
+}
+.tipos button[aria-pressed="true"] {
+  background: var(--acento-claro);
+  border-color: var(--acento-claro);
+  color: #fff;
+}
+
+/* --- Barra fija de envio --- */
+/* Fondo translucido con desenfoque: deja ver que la lista sigue debajo, asi
+   la barra se lee como algo que flota sobre el contenido y no como el final de
+   la pagina. El color opaco queda de respaldo donde no hay backdrop-filter. */
+.barra {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  background: rgba(255, 255, 255, 0.86);
+  border-top: 1px solid rgba(16, 28, 44, 0.07);
+  box-shadow: var(--sombra-barra);
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0));
+}
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .barra {
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+  }
+}
+.barra-interna {
+  max-width: 660px; margin: 0 auto;
+  display: flex; align-items: center; gap: 14px;
+}
+.progreso { flex: 1; min-width: 0; }
+.progreso-texto { font-size: 0.85rem; color: var(--suave); margin-bottom: 7px; }
+/* Mantenimiento usa el texto sin riel debajo, asi que no necesita el hueco. */
+.progreso.progreso-texto { margin-bottom: 0; }
+.progreso-texto strong { color: var(--tinta); font-variant-numeric: tabular-nums; }
+.progreso-texto .fallas { color: var(--mal); font-weight: 600; }
+
+/* Barra visual ademas del numero: al bajar por 40 puntos, "cuanto me queda"
+   se responde mejor con una longitud que leyendo una cifra. */
+.progreso-riel {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--linea);
+  overflow: hidden;
+}
+.progreso-lleno {
+  height: 100%;
+  width: 0;
+  border-radius: 99px;
+  background: var(--acento-claro);
+  transition: width .2s ease-out;
+}
+.progreso-lleno[data-lleno="si"] { background: var(--ok-claro); }
+
+/* --- Botones --- */
+button.primario {
+  font: 700 1rem/1.2 system-ui, sans-serif;
+  padding: 15px 24px;
+  min-height: 56px;
+  border: 0;
+  border-radius: 99px;
+  background: linear-gradient(180deg, #2a66c4 0%, #1a4fa0 100%);
+  color: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 6px 16px -6px rgba(26, 79, 160, 0.55);
+  transition: background-color .15s, box-shadow .15s, transform .12s;
+}
+button.primario:active { transform: scale(0.985); }
+/* Apagado pero legible: un boton desactivado que no se puede leer obliga a
+   adivinar por que no deja seguir. El rotulo dice cuanto falta. */
+button.primario:disabled {
+  background: var(--linea);
+  color: var(--suave);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+button.primario.ancho { width: 100%; }
+
+button.discreto {
+  font: 600 0.88rem/1 system-ui, sans-serif;
+  padding: 11px 14px;
+  min-height: 44px;
+  border: 1.5px solid var(--linea-fuerte);
+  border-radius: var(--radio-chico);
+  background: var(--campo);
+  color: var(--suave);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* --- Modal ---
+   Para los dos momentos que exigen que el conductor pare y lea: el
+   alistamiento quedo registrado, o la placa que eligio ya se alisto hoy. */
+.modal-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(16, 24, 34, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* En un telefono bajo, con el teclado abierto o con el modal largo, tiene
+     que poder desplazarse. De ahi el overflow y el padding de seguridad. */
+  overflow-y: auto;
+  padding: calc(20px + env(safe-area-inset-top, 0px)) 16px
+           calc(20px + env(safe-area-inset-bottom, 0px));
+  animation: modal-aparece .16s ease-out;
+}
+@keyframes modal-aparece { from { opacity: 0; } to { opacity: 1; } }
+
+.modal {
+  width: 100%;
+  max-width: 420px;
+  margin: auto;
+  background: var(--panel);
+  border-radius: var(--radio);
+  padding: 28px 22px 22px;
+  box-shadow: 0 12px 40px rgba(16, 24, 34, 0.25);
+  text-align: center;
+  animation: modal-sube .2s ease-out;
+}
+@keyframes modal-sube {
+  from { transform: translateY(12px); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+
+.modal-icono {
+  width: 62px;
+  height: 62px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 32px/1 system-ui, sans-serif;
+}
+.modal-icono[data-tipo="bien"]  { background: var(--ok-suave);     color: var(--ok); }
+.modal-icono[data-tipo="aviso"] { background: #fff4e0;             color: #8a5a00; }
+.modal-icono[data-tipo="error"] { background: var(--mal-suave);    color: var(--mal); }
+
+.modal-titulo { margin: 0 0 8px; font-size: 1.28rem; font-weight: 700; letter-spacing: -0.015em; }
+.modal-mensaje { margin: 0; color: var(--suave); font-size: 0.94rem; line-height: 1.5; }
+
+/* Comprobante. A veces le hacen foto, asi que se lee de un vistazo y los
+   valores van alineados a la derecha, no corridos dentro de un parrafo. */
+.modal-datos {
+  margin: 20px 0 0;
+  padding: 14px 16px;
+  background: var(--fondo);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio-chico);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 9px 16px;
+  text-align: left;
+  font-size: 0.9rem;
+}
+.modal-datos dt { color: var(--suave); }
+.modal-datos dd { margin: 0; text-align: right; font-weight: 600; word-break: break-word; }
+
+.modal-acciones { margin-top: 22px; display: grid; gap: 10px; }
+.modal-acciones button { width: 100%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-fondo, .modal { animation: none; }
+}
+
+/* --- Avisos --- */
+.aviso {
+  padding: 14px 16px;
+  border-radius: var(--radio-chico);
+  margin-bottom: 14px;
+  font-size: 0.92rem;
+  border: 1.5px solid;
+  line-height: 1.45;
+}
+.aviso.error { background: var(--mal-suave); border-color: var(--mal-borde); color: var(--mal); }
+.aviso.info  { background: var(--acento-suave); border-color: var(--acento-borde); color: var(--acento); }
+.aviso.bien  { background: var(--ok-suave); border-color: var(--ok-borde); color: var(--ok); }
+
+.cargando { padding: 48px 0; text-align: center; color: var(--suave); }
+
+/* --- Estado de conexion y version ---
+   Una cinta fija arriba, no un aviso en el flujo: el conductor tiene que poder
+   ver que esta sin red en cualquier momento del formulario, no solo al
+   principio. */
+.cinta {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  /* Contenedor de la barra de cuenta atras, que va en absolute. */
+  isolation: isolate;
+  padding: 10px 16px;
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  font: 600 0.94rem/1.35 system-ui, sans-serif;
+  text-align: center;
+}
+.cinta.sinred { background: #4a3a10; color: #ffe9b0; }
+.cinta.nueva {
+  position: sticky;
+  background: var(--acento);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.cinta-texto { font-variant-numeric: tabular-nums; }
+.cinta-acciones { display: flex; gap: 8px; }
+.cinta button {
+  font: 700 0.82rem/1 system-ui, sans-serif;
+  padding: 9px 13px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--acento);
+  cursor: pointer;
+}
+/* "Luego" no compite con "Ahora": aplazar es lo secundario. */
+.cinta button.discreta {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+/* La barra que se vacia con la cuenta atras. Va pegada al borde inferior de la
+   cinta y no en el flujo: un numero que baja no se percibe mientras se mira
+   otra cosa, una longitud si. */
+.cinta-barra {
+  position: absolute;
+  left: 0; bottom: 0;
+  height: 3px;
+  width: var(--restante, 100%);
+  background: rgba(255, 255, 255, 0.85);
+  transition: width 1s linear;
+}
+
+.pie {
+  margin: 24px 0 0;
+  display: flex;
+  justify-content: center;
+}
+
+/* --- Indicador de version ---
+   Es un boton, no una etiqueta: al tocarlo busca actualizaciones. Asi soporte
+   puede decir "toca el numero de abajo" en vez de explicar como se reinstala
+   una PWA. Y el numero esta a la vista porque es el primer dato que hace falta
+   cuando alguien reporta algo raro desde un telefono. */
+.version-caja {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 7px 14px 7px 12px;
+  border: 1px solid var(--linea);
+  border-radius: 99px;
+  background: var(--panel);
+  color: var(--suave);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color .15s, background-color .15s;
+}
+.version-luz {
+  flex-shrink: 0;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--tenue);
+}
+.version-datos {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.25;
+}
+.version-num {
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: var(--tinta);
+  font-variant-numeric: tabular-nums;
+}
+.version-nota { font-size: 0.8rem; color: var(--tenue); }
+.version-refrescar {
+  flex-shrink: 0;
+  font-size: 0.95rem;
+  color: var(--tenue);
+}
+
+/* Al dia */
+.version-caja[data-estado="aldia"] .version-luz { background: var(--ok-claro); }
+
+/* Version nueva lista para entrar */
+.version-caja[data-estado="nueva"] .version-luz,
+.version-caja[data-estado="pendiente"] .version-luz {
+  background: var(--acento-claro);
+  /* Latido para que se note sin ocupar mas sitio. Se detiene si el sistema
+     pide menos movimiento. */
+  animation: latir 1.6s ease-in-out infinite;
+}
+.version-caja[data-estado="nueva"],
+.version-caja[data-estado="pendiente"] {
+  border-color: var(--acento-borde);
+  background: var(--acento-suave);
+}
+.version-caja[data-estado="nueva"] .version-nota,
+.version-caja[data-estado="pendiente"] .version-nota { color: var(--acento); font-weight: 650; }
+
+@keyframes latir {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: .45; transform: scale(.8); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .version-caja .version-luz { animation: none; }
+}
+
+/* --- Selector de la portada --- */
+.opciones { display: grid; gap: 12px; }
+.opcion {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px;
+  background: var(--panel);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color .15s, transform .12s;
+}
+.opcion:active { transform: scale(0.99); }
+.opcion > div { flex: 1; min-width: 0; }
+.opcion strong {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  font-size: 1.08rem;
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+.opcion span { color: var(--suave); font-size: 0.98rem; line-height: 1.45; }
+.opcion .flecha { color: var(--tenue); font-size: 1.3rem; flex-shrink: 0; }
+
+/* --- Opcion no disponible ---
+   Apagada, pero legible. Un bloque tan atenuado que no se lee obliga a tocarlo
+   para averiguar por que no sirve, que es justo lo que se quiere evitar: el
+   texto de debajo explica el motivo y tiene que poder leerse. */
+.opcion[data-deshabilitado="si"] {
+  background: var(--fondo);
+  border-style: dashed;
+  box-shadow: none;
+  cursor: default;
+}
+.opcion[data-deshabilitado="si"]:active { transform: none; }
+.opcion[data-deshabilitado="si"] strong { color: var(--suave); }
+.opcion[data-deshabilitado="si"] .flecha { visibility: hidden; }
+
+.etiqueta-estado {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 99px;
+  background: var(--linea);
+  color: var(--suave);
+  font: 700 0.72rem/1.4 system-ui, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.etiqueta-estado[hidden] { display: none; }
+
+/* Quien fija "reducir movimiento" no quiere transiciones, ni aqui ni en
+   ningun otro sitio. */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+  button:active, .opcion:active, button.primario:active { transform: none !important; }
+}
+
+[hidden] { display: none !important; }
+
+
+/* ===========================================================================
+   Adaptacion a pantallas
+   ===========================================================================
+   Mobile-first: todo lo de arriba esta pensado para un telefono estrecho, y
+   aqui solo se ajusta lo que se rompe en los extremos.
+
+   Los tamanos reales en los que se usa esto: iPhone SE y Android de gama baja
+   (320-360px), la mayoria de telefonos (375-430px), telefonos grandes y
+   plegables (430-540px), tablets del taller (768px+).
+--------------------------------------------------------------------------- */
+
+/* --- Pantallas muy estrechas (iPhone SE, Android de gama baja: 320-360px) ---
+   Aqui el ancho del texto del checklist es lo que se queda sin sitio, porque
+   los dos botones de 48px no pueden encoger: son el objetivo tactil. Lo que
+   cede es el padding y el tamano de los rotulos, nunca el area de toque. */
+@media (max-width: 374px) {
+  .envoltura { padding: 12px; }
+  .panel { padding: 16px; }
+  .hero { padding: 16px; }
+  .hero h1 { font-size: 1.22rem; }
+  .hero-cifra strong { font-size: 1.7rem; }
+  .bloque-cab { padding: 10px 11px; gap: 8px; }
+  .bloque-nombre { font-size: 0.89rem; }
+  .bloque-interior { padding: 2px 7px 10px; }
+  .item { padding: 6px 6px; }
+  .item-texto { font-size: 0.89rem; }
+  .switch { gap: 6px; }
+  /* El contador del bloque es lo primero que sobra cuando el nombre del grupo
+     no cabe: el mismo dato esta en la cabecera, en grande. */
+  .bloque-cuenta { display: none; }
+}
+
+/* --- Telefonos bajos (y cualquiera en horizontal) ---
+   Con el teclado abierto en una pantalla de 360px de alto, el formulario
+   queda en una franja de unos 180px. La cabecera deja de ocupar sitio. */
+@media (max-height: 560px) {
+  .hero { padding: 14px 16px; margin-bottom: 12px; }
+  .hero-fila { margin-bottom: 12px; }
+  .hero h1 { font-size: 1.15rem; }
+  .hero-cifra strong { font-size: 1.5rem; }
+  .hero-pie { margin-top: 8px; }
+}
+
+/* --- Pantalla grande (tablet del taller, escritorio) ---
+   La columna no se estira: una linea de 900px obliga a mover la cabeza para
+   leerla. Lo que cambia es el aire, no el ancho. */
+@media (min-width: 720px) {
+  .envoltura { padding: 28px 16px; }
+  .hero { padding: 26px 28px; }
+  .hero h1 { font-size: 1.7rem; }
+  .hero-cifra strong { font-size: 2.5rem; }
+  .panel { padding: 24px 26px; }
+  .barra { padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0)); }
+}
+
+/* --- Puntero fino (raton) ---
+   El :active sirve para el dedo; con raton, el estado util es :hover, que en
+   tactil se queda pegado despues de tocar. De ahi el hover:hover. */
+@media (hover: hover) and (pointer: fine) {
+  .bloque-cab:hover { background: var(--fondo); }
+  .switch button:hover { border-color: var(--linea-fuerte); }
+  .todo-bien:hover { background: var(--ok-borde); }
+  button.primario:not(:disabled):hover { filter: brightness(1.06); }
+  .pendiente:hover { color: var(--mal); }
+}
+
+/* --- Seguridad en los bordes de la pantalla ---
+   El notch, la isla dinamica y la barra de gestos de Android. El padding
+   lateral tambien, que en horizontal el notch se come el lado izquierdo. */
+@supports (padding: max(0px)) {
+  .envoltura {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+  .barra {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+}
+
+/* --- Impresion ---
+   Alguna vez alguien imprime la pantalla como respaldo. Sin esto salen el
+   degradado y la barra fija encima del contenido. */
+@media print {
+  .barra, .cinta, .todo-bien { display: none !important; }
+  .hero { background: none; color: var(--tinta); box-shadow: none; border: 1px solid var(--linea); }
+  .hero-rotulo, .hero-pie { color: var(--suave); }
+  .bloque-envoltura { grid-template-rows: 1fr !important; }
+  body { padding-bottom: 0; background: #fff; }
+  .panel, .bloque { box-shadow: none; break-inside: avoid; }
+}

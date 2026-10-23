@@ -437,6 +437,23 @@ a.btn { text-decoration: none; }   /* un enlace con cara de botón (ej. Abrir la
 
 .card-body { padding: 12px 16px 17px; }
 
+/* --- El alistamiento de hoy (v1.23.0): rojo si falta, verde si ya está --- */
+.card-alistamiento[data-tono="falta"] { border-color: var(--danger); box-shadow: 0 0 0 2px var(--danger-soft), var(--shadow); }
+.card-alistamiento[data-tono="falta"] .card-head h3 { color: var(--danger); }
+.card-alistamiento[data-tono="bien"] .card-head h3 { color: var(--primary); }
+.alist-estado { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 16.5px; font-weight: 750; text-wrap: balance; }
+.card-alistamiento[data-tono="falta"] .alist-estado { color: var(--danger); }
+.card-alistamiento[data-tono="bien"] .alist-estado { color: var(--primary-strong); }
+.alist-icono {
+  flex: none; width: 28px; height: 28px; display: grid; place-items: center;
+  border-radius: 50%; background: var(--primary); color: #fff; font-size: 15px; font-weight: 800;
+}
+.card-alistamiento[data-tono="falta"] .alist-icono { background: var(--danger); }
+.alist-detalle { margin: 6px 0 0; color: var(--ink-2); font-size: 14.5px; overflow-wrap: anywhere; }
+.alist-btn { margin-top: 12px; }
+.card-alistamiento[data-tono="falta"] .btn-primary { background: var(--danger); }
+.card-alistamiento[data-tono="falta"] .btn-primary:hover:not(:disabled) { background: #8f1b12; }
+
 /* --- Notificaciones (v1.19.0): en la hoja de la campana, primero los documentos vencidos o por vencer --- */
 .notif-docs { display: flex; flex-direction: column; gap: 10px; }
 .notif-titulo { margin: 2px 0 0; font-size: 12px; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
@@ -1284,8 +1301,15 @@ body:has(.aviso-noticia:not([hidden])) [data-panel="inicio"] .home { padding-bot
 .nav-item:focus-visible { outline: none; box-shadow: inset 0 0 0 3px var(--primary-glow); }
 .nav-item { min-width: 0; padding: 0 2px; }
 .nav-item span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Seis botones en un teléfono angosto: la letra un poco más chica para que quepan. */
-@media (max-width: 400px) { .nav-item { font-size: 10px; letter-spacing: -.01em; } }
+/* Siete botones en un teléfono angosto (v1.23.0, con Alistamiento): la letra más chica para que quepan. */
+@media (max-width: 420px) { .nav-item { font-size: 9.5px; letter-spacing: -.02em; } }
+@media (max-width: 375px) { .nav-item { font-size: 9px; letter-spacing: -.03em; padding: 0 1px; } }
+/* El punto rojo de Alistamiento: falta el de hoy (v1.23.0) */
+.nav-item .nav-punto {
+  position: absolute; top: 9px; left: calc(50% + 6px);
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--danger); box-shadow: 0 0 0 2px var(--panel);
+}
 
 /* --------------------------------------------------------- hoja de perfil */
 .sheet-overlay {
@@ -1730,6 +1754,7 @@ button.turno-opcion:focus-visible { outline: none; border-color: var(--primary);
     font-size: 14.5px;
   }
   .nav-item.active { background: var(--soft); }
+  .nav-item .nav-punto { position: static; flex: none; margin-left: auto; }
   .nav-item.active::before {
     top: 50%;
     left: 0;

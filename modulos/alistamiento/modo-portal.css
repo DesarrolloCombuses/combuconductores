@@ -1,0 +1,52 @@
+/* ==========================================================================
+   Modo portal - módulo de alistamiento (SICOV)
+   Solo aplica dentro del Portal del Conductor (html[data-embed="portal"], lo
+   pone modo-portal.js). Usa los colores de assets/app.css.
+   ========================================================================== */
+
+/* La versión del SICOV no: aquí la que cuenta es la del portal (abajo, en el Inicio). */
+html[data-embed="portal"] .pie { display: none; }
+
+/* Mientras se averigua si el bus ya está alistado hoy: solo "Cargando…". */
+html[data-revisando] #formulario,
+html[data-revisando] #barra,
+html[data-revisando] #pendientes { display: none !important; }
+html[data-revisando] #cargando { display: block !important; }
+
+/* El bus del turno, arriba de la placa */
+.portal-turno {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: var(--radio-chico);
+  background: var(--acento-suave);
+  border: 1px solid var(--acento-borde);
+  color: var(--tinta);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+/* Ya está hecho hoy (el turno 2 o quien vuelva a abrir) */
+.portal-hecho {
+  text-align: center;
+  border-color: var(--ok-borde);
+  background: linear-gradient(180deg, var(--ok-suave) 0%, var(--panel) 120px);
+}
+.portal-hecho h2 {
+  justify-content: center; text-wrap: balance;
+  text-transform: none; letter-spacing: 0; font-size: 1.2rem; color: var(--ok);
+}
+.portal-hecho h2::before { display: none; }
+.portal-hecho-icono {
+  width: 56px; height: 56px; margin: 4px auto 10px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: var(--ok); color: #fff;
+  font-size: 28px; font-weight: 700;
+}
+.portal-hecho dl {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px;
+  margin: 12px auto; max-width: 420px; text-align: left;
+}
+.portal-hecho dt { color: var(--suave); }
+.portal-hecho dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.portal-hecho p { margin: 10px 0 0; color: var(--suave); }

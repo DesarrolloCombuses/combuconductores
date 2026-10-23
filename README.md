@@ -508,6 +508,23 @@ que $240.000 son en tiquetes y $140.000 en efectivo (7 pasajeros).
   de 19 dice *"Máximo 19 pasajeros: es el cupo del bus"* y el botón Guardar se apaga; igual si tiquetes y cívicas
   pasan de los pasajeros. La lectura que escribe dice cómo le queda el viaje anterior (si no cuadra, avisa).
 
+### El alistamiento del bus (v1.23.0)
+
+Pedido del usuario el 22-oct-2026: *"integremos la aplicación de alistamiento, va atada a todo"*. Es la revisión diaria
+del bus que va a la Supertransporte por GESMOVIL (repositorio `gesmovil-sicov`); ya la usaban desde su enlace.
+
+- **Pestaña "Alistar"** abajo (módulo `modulos/alistamiento/`, ver su README): el mismo formulario de la app, con la
+  cédula con la que entró y la placa del bus de su turno ya puestas. Si hoy maneja otro bus, cambia la placa.
+- **Uno por bus y por día:** si el bus ya lo tiene (lo hizo el del turno 1), la pestaña dice que ya está, quién y a
+  qué hora; no hay nada que llenar.
+- **El Inicio** trae la tarjeta *"Alistamiento de hoy"*: en rojo *"Falta el alistamiento del bus 749"* con el botón
+  *"Hacer el alistamiento"*, o en verde *"Hecho hoy a las 03:40"*. Mientras falte, la pestaña lleva un punto rojo.
+  **No bloquea nada** (decisión del usuario): puede marcar, llenar la tarjeta y lo demás.
+- Se pregunta a la función pública del formulario (`sicov-alistar`): `/formulario` una vez por sesión (las placas de
+  cada bus) y `/hoy?placa=` al cargar el turno; hecho no se vuelve a preguntar ese día, pendiente cada 5 minutos como
+  mucho al volver al Inicio. Si el bus no es de la ruta del SICOV (Aeropuerto), la tarjeta no sale.
+- Con siete botones abajo, la letra baja a 9,5 px en teléfonos de 420 px o menos y a 9 px en los de 375 px o menos.
+
 ### Mi tarjeta por conductor (v1.22.0)
 
 Pedido del usuario el 22-oct-2026: *"separar por conductor la liquidación del carro"*. Un bus tiene dos conductores al

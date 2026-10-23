@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="./css/portal.css?v=1.22.0">
+  <link rel="stylesheet" href="./css/portal.css?v=1.23.0">
 </head>
 <body>
 
@@ -183,6 +183,14 @@
           </div>
         </article>
 
+        <!-- El alistamiento de hoy del bus (SICOV, v1.23.0): en rojo si falta, en verde si ya está. No bloquea nada. -->
+        <article class="card card-alistamiento" id="cardAlistamiento" hidden>
+          <header class="card-head">
+            <h3>Alistamiento de hoy</h3>
+          </header>
+          <div id="alistamientoBody" class="card-body"></div>
+        </article>
+
         <!-- Mi tarjeta, en corto: qué falta (cívica, pasajeros, tiquetes) y el botón para abrirla.
              La tarjeta completa está en el menú, en su propia vista. -->
         <article class="card" id="cardTarjetaResumen">
@@ -276,6 +284,8 @@
 
     <!-- ---- Módulos embebidos: los iframes los inserta portal.js ---- -->
     <div class="module-panel" data-panel="asistencia" hidden></div>
+    <!-- El formulario de alistamiento del SICOV (v1.23.0), con la cédula y el bus ya puestos -->
+    <div class="module-panel" data-panel="alistamiento" hidden></div>
     <div class="module-panel" data-panel="aeropuerto" hidden></div>
     <!-- Sistema externo (Distribusion): barra propia + iframe, sin sesión compartida -->
     <div class="module-panel module-panel-externo" data-panel="tiquetes" hidden></div>
@@ -297,6 +307,12 @@
     <button class="nav-item" type="button" data-nav="asistencia">
       <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
       <span>Asistencia</span>
+    </button>
+    <button class="nav-item nav-conductor" type="button" data-nav="alistamiento">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="m9 13 2 2 4-4"/></svg>
+      <!-- "Alistar" y no "Alistamiento": con siete botones no cabe en un teléfono -->
+      <span>Alistar</span>
+      <span class="nav-punto" id="navPuntoAlistamiento" hidden></span>
     </button>
     <button class="nav-item nav-conductor" type="button" data-nav="aeropuerto">
       <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M17.8 19.8 16 14l-4 1-4-1-1.8 5.8"/><path d="M22 12c0-1.1-.9-2-2-2h-3l-4-7h-2l1.5 7H8L6 8H4l1 4-1 4h2l2-2h4.5L11 21h2l4-7h3c1.1 0 2-.9 2-2Z"/></svg>
@@ -726,7 +742,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./js/portal-config.js?v=1.22.0"></script>
-<script src="./js/portal.js?v=1.22.0"></script>
+<script src="./js/portal-config.js?v=1.23.0"></script>
+<script src="./js/portal.js?v=1.23.0"></script>
 </body>
 </html>

@@ -941,7 +941,7 @@
       });
     }
     empujarSesionATodos();
-    empujarConductor("asistencia");
+    MODULOS_CON_CONDUCTOR.forEach(empujarConductor);
     pintarPerfil();
     enviarConfirmacionesPendientes(); // lo confirmado sin señal en la sesión anterior
 
@@ -981,6 +981,7 @@
   var TITULOS = {
     inicio: { titulo: "Inicio", sub: "" },
     asistencia: { titulo: "Asistencia", sub: "Registra tu entrada y salida" },
+    alistamiento: { titulo: "Alistamiento", sub: "Revisión diaria del bus" },
     aeropuerto: { titulo: "Aeropuerto", sub: "Enturnamiento y mapa en vivo" },
     tiquetes: { titulo: "Tiquetes", sub: "Validación en Distribusion" },
     tarjeta: { titulo: "Mi tarjeta", sub: "Cívica, pasajeros y tiquetes de cada despacho" },
@@ -1381,9 +1382,12 @@
   }
 
   // Cédula del conductor elegido, para que el módulo de asistencia no se la
-  // vuelva a pedir (ver modo-portal.js dentro del módulo).
+  // vuelva a pedir (ver modo-portal.js dentro del módulo). El de alistamiento
+  // (v1.23.0) la recibe igual, con el bus del turno.
+  var MODULOS_CON_CONDUCTOR = ["asistencia", "alistamiento"];
+
   function empujarConductor(idModulo) {
-    if (idModulo !== "asistencia" || !state.dni) return;
+    if (MODULOS_CON_CONDUCTOR.indexOf(idModulo) < 0 || !state.dni) return;
     var frame = state.iframes[idModulo];
     if (!frame || !frame.contentWindow) return;
     try {
@@ -1414,8 +1418,13 @@
           break;
 
         case "PORTAL_PEDIR_CONDUCTOR":
-          // El módulo de asistencia arrancó y pide la cédula elegida.
-          empujarConductor("asistencia");
+          // El módulo de asistencia (o el de alistamiento) arrancó y pide la cédula elegida.
+          MODULOS_CON_CONDUCTOR.forEach(empujarConductor);
+          break;
+
+        case "PORTAL_ALISTAMIENTO_REGISTRADO":
+          // El módulo de alistamiento registró el de hoy (o encontró que ya estaba): el Inicio pasa a verde.
+          cargarAlistamiento(true);
           break;
 
         case "BIOMETRICO_SESSION_FAIL":
@@ -1797,6 +1806,7 @@
       cargarTarjeta();
       cargarViajes();
       cargarDocumentos();
+      cargarAlistamiento();
       return;
     }
 
@@ -1805,6 +1815,7 @@
     cargarTarjeta();
     cargarViajes();
     cargarDocumentos();
+    cargarAlistamiento();
 
     var vehiculoAntes = state.vehiculo;
     try {
@@ -1858,6 +1869,7 @@
         cargarTarjeta();
         cargarViajes();
         cargarDocumentos();
+        cargarAlistamiento();
         pintarBusEnBarras();
       }
     } catch (err) {
@@ -4153,6 +4165,124 @@
     // v1.19.0: los vencidos o por vencer también van como notificación (campana y aviso del Inicio).
     notif.docs = alertasDeDocumentos(datos);
     pintarNotificaciones();
+  }
+
+  // ---------------------------------------------------------- ALISTAMIENTO
+  // v1.23.0: la revisión diaria del bus que va a la Supertransporte (la app de alistamiento del SICOV, ahora también
+  // en la pestaña Alistamiento). Es una por bus y por día calendario: la hace el primero que lo maneja y el del turno 2
+  // solo ve que ya está. Si falta, el Inicio lo dice en rojo y la pestaña lleva un punto rojo; no bloquea nada (lo
+  // decidió el usuario el 22-oct-2026). Se pregunta a la misma función pública del formulario: /formulario (las
+  // placas de cada bus, una vez por sesión) y /hoy?placa= (si ya está). Hecho no se vuelve a preguntar ese día;
+  // pendiente, cada 5 minutos como mucho, al volver al Inicio.
+  var alist = { placas: null, promesa: null, bus: null, dia: null, estado: null, consultadoEn: 0, pidiendo: null };
+  var ALISTAMIENTO_REPETIR_MS = 5 * 60 * 1000;
+
+  function urlSicov(ruta) { return cfg.SUPABASE_URL + "/functions/v1/sicov-alistar/" + ruta; }
+
+  function pedirSicov(ruta) {
+    return conTiempoLimite(fetch(urlSicov(ruta), { cache: "no-store" }), 15000).then(function (r) {
+      if (!r.ok) throw new Error("El alistamiento respondió " + r.status);
+      return r.json();
+    });
+  }
+
+  function placasSicov() {
+    if (alist.placas) return Promise.resolve(alist.placas);
+    if (!alist.promesa) {
+      alist.promesa = pedirSicov("formulario").then(function (d) {
+        alist.placas = (d && d.vehiculos) || [];
+        return alist.placas;
+      }).finally(function () { alist.promesa = null; });
+    }
+    return alist.promesa;
+  }
+
+  function busSinCeros(v) { return String(v == null ? "" : v).trim().replace(/^0+/, ""); }
+
+  async function cargarAlistamiento(forzar) {
+    var bus = busSinCeros(state.vehiculo);
+    var dia = hoyColombia();
+    if (!bus) {
+      alist.bus = null;
+      alist.estado = null;
+      pintarAlistamiento();
+      return;
+    }
+    var mismo = alist.bus === bus && alist.dia === dia && alist.estado && !alist.estado.error;
+    if (mismo && !forzar && (alist.estado.hecho || alist.estado.fuera ||
+        Date.now() - alist.consultadoEn < ALISTAMIENTO_REPETIR_MS)) {
+      pintarAlistamiento();
+      return;
+    }
+    if (alist.pidiendo === bus + dia && !forzar) return;
+    if (!mismo) { alist.estado = null; pintarAlistamiento(); }
+    var pedido = alist.pidiendo = bus + dia;
+    try {
+      var suyas = (await placasSicov()).filter(function (v) { return busSinCeros(v.interno) === bus; });
+      var estado;
+      if (!suyas.length) {
+        estado = { fuera: true };       // su bus no es de la ruta del SICOV: no se muestra nada
+      } else {
+        var resp = await Promise.all(suyas.map(function (v) {
+          return pedirSicov("hoy?placa=" + encodeURIComponent(v.placa)).then(function (d) {
+            return d && d.yaRegistrado ? Object.assign({ placa: v.placa }, d.registro || {}) : false;
+          }).catch(function () { return null; });
+        }));
+        var ya = resp.find(Boolean);
+        if (!ya && resp.indexOf(null) >= 0) throw new Error("No se pudo consultar el alistamiento");
+        estado = ya ? { hecho: true, placa: ya.placa, hora: ya.registrado_en, quien: ya.conductor }
+          : { hecho: false, placas: suyas.map(function (v) { return v.placa; }) };
+      }
+      if (alist.pidiendo !== pedido) return;
+      alist.bus = bus;
+      alist.dia = dia;
+      alist.estado = estado;
+      alist.consultadoEn = Date.now();
+    } catch (err) {
+      if (alist.pidiendo !== pedido) return;
+      alist.bus = bus;
+      alist.dia = dia;
+      alist.estado = { error: err };
+    } finally {
+      if (alist.pidiendo === pedido) alist.pidiendo = null;
+    }
+    if (busSinCeros(state.vehiculo) === bus) pintarAlistamiento();
+  }
+
+  function pintarAlistamiento() {
+    var card = $("cardAlistamiento");
+    var box = $("alistamientoBody");
+    var e = alist.bus && alist.bus === busSinCeros(state.vehiculo) ? alist.estado : null;
+    var pendiente = !!(e && e.hecho === false);
+    show($("navPuntoAlistamiento"), pendiente);
+    if (!card || !box) return;
+    card.removeAttribute("data-tono");
+    if (!busSinCeros(state.vehiculo) || (e && e.fuera)) { card.hidden = true; return; }
+    card.hidden = false;
+    if (!e) {
+      box.innerHTML = '<div class="skeleton skeleton-linea"></div>';
+      return;
+    }
+    if (e.error) {
+      box.innerHTML = '<p class="placeholder">No se pudo saber si el bus ' + escapeHtml(alist.bus) +
+        ' ya tiene el alistamiento de hoy.</p><button class="btn btn-ghost btn-sm alist-btn" type="button" data-alist-reintentar>Reintentar</button>';
+      box.querySelector("[data-alist-reintentar]").addEventListener("click", function () { cargarAlistamiento(true); });
+      return;
+    }
+    if (e.hecho) {
+      card.setAttribute("data-tono", "bien");
+      box.innerHTML = '<p class="alist-estado"><span class="alist-icono" aria-hidden="true">✓</span>Hecho hoy' +
+        (e.hora ? " a las " + escapeHtml(horaDeMs(Date.parse(e.hora))) : "") + "</p>" +
+        '<p class="alist-detalle">Bus ' + escapeHtml(alist.bus) + " · placa " + escapeHtml(e.placa) +
+        (e.quien ? " · lo registró " + escapeHtml(capitalizarPalabras(e.quien)) : "") + "</p>";
+      return;
+    }
+    card.setAttribute("data-tono", "falta");
+    box.innerHTML = '<p class="alist-estado"><span class="alist-icono" aria-hidden="true">!</span>Falta el alistamiento del bus ' +
+      escapeHtml(alist.bus) + "</p>" +
+      '<p class="alist-detalle">Hágalo antes de salir: dos preguntas y la revisión del bus. Es uno por bus y por día.</p>' +
+      '<button class="btn btn-primary btn-block alist-btn" type="button" data-alist-ir>Hacer el alistamiento</button>';
+    box.querySelector("[data-alist-ir]").addEventListener("click", function () { irA("alistamiento"); });
   }
 
   // ---------------------------------------------------------------- PERFIL

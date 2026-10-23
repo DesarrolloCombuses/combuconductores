@@ -12,7 +12,7 @@ window.PORTAL_CONFIG = {
   // una nueva no se edita a mano, se corre (desde la carpeta portal):
   //   powershell -ExecutionPolicy Bypass -File .\nueva-version.ps1 1.6.1
   // que la cambia aquí, en sw.js y en index.html a la vez.
-  APP_VERSION: "v1.22.0",
+  APP_VERSION: "v1.23.0",
 
   // Cada cuánto se pregunta al servidor si hay una versión nueva, con el
   // portal a la vista. También se pregunta al abrirlo y al volver a él.
@@ -190,6 +190,17 @@ window.PORTAL_CONFIG = {
       icono: "fingerprint",
       src: "./modulos/asistencia/asistencia-web.html?embed=portal",
       permisos: "geolocation; camera; fullscreen",
+      precarga: false,
+    },
+    {
+      // La revisión diaria del bus que va a la Supertransporte por GESMOVIL (v1.23.0): el mismo formulario de la app
+      // de alistamiento (gesmovil-sicov), con la cédula y el bus del turno ya puestos (modo-portal.js del módulo).
+      id: "alistamiento",
+      nombre: "Alistamiento",
+      descripcion: "Revisión diaria del bus antes de salir",
+      icono: "clipboard-check",
+      src: "./modulos/alistamiento/alistamiento.html?embed=portal",
+      permisos: "",
       precarga: false,
     },
     {
