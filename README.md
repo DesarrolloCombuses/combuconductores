@@ -508,6 +508,24 @@ que $240.000 son en tiquetes y $140.000 en efectivo (7 pasajeros).
   de 19 dice *"Máximo 19 pasajeros: es el cupo del bus"* y el botón Guardar se apaga; igual si tiquetes y cívicas
   pasan de los pasajeros. La lectura que escribe dice cómo le queda el viaje anterior (si no cuadra, avisa).
 
+### Mi tarjeta por conductor (v1.22.0)
+
+Pedido del usuario el 22-oct-2026: *"separar por conductor la liquidación del carro"*. Un bus tiene dos conductores al
+día y la tarjeta es del bus: el del turno 2 veía también los viajes y la plata del turno 1.
+
+- **De quién es cada viaje:** lo dice la base (`tarjeta_viajes_conductor`, SQL v15 en
+  `almacentro/enturnes/sql/tarjeta_viajes_conductor.sql`): el último conductor del bus que marcó **entrada** en el
+  biométrico antes de que el bus saliera (30 min de gracia); si nadie había marcado, el del turno programado. Con los
+  viajes del 19 al 21-oct coincide en el 94 % con quien escribió la cívica (el nombre de Sonar, en el 75 %).
+- **Arriba, lo suyo:** *"Tus viajes · turno 2 · entraste a las 12:40"*, sus viajes, sus totales y **"Efectivo que
+  entregas"** (lo que no fue tiquete ni cívica). Lo que falta y el aviso del Inicio cuentan solo sus viajes.
+- **Abajo, cerrado:** *"Viajes del otro conductor · turno 1 · …"* con cuántos viajes, pasajeros y plata, y *"no van en
+  tu liquidación"*. Se puede abrir y llenar (por si la regla se equivoca); sigue abierto o cerrado aunque la tarjeta se
+  actualice.
+- **Sin la función en la base,** o si el conductor no es de ese bus ese día (ni programado en él ni con viajes), la
+  tarjeta sale entera, como antes: se puede publicar antes de correr el SQL.
+- En el celular no se guarda la cédula de nadie: solo si cada viaje es suyo, el turno y el nombre programado.
+
 ### El conductor corrige su tarjeta (v1.21.0)
 
 Pedido del usuario el 22-oct-2026: "poner corrección en la app del portal conductor en la tarjeta". Escogió que el
