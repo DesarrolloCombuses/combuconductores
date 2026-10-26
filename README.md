@@ -187,6 +187,24 @@ modificar el código original:
 Abiertos fuera del portal, ambos módulos funcionan exactamente como antes: las
 reglas cuelgan de un atributo que solo se pone con esos parámetros.
 
+**El Aeropuerto del conductor no escucha en vivo (v1.24.2).** El 26-oct-2026 el
+consumo de Realtime de Supabase iba en ~400.000 mensajes al día (3,4 millones de los
+5 del plan en 10 días). Cada cambio de la fila (`enturne_filas`) era un mensaje por
+cada celular con la pestaña Aeropuerto abierta, y la pestaña seguía escuchando hasta
+cerrar sesión aunque el conductor estuviera en Inicio: ~3.700 mensajes por hora por
+celular. Con `?modo=conductor` (`modulos/aeropuerto/js/main.js`, `MODO_CONDUCTOR`):
+
+- No se abre Realtime (ni la fila ni los despachos realizados).
+- La fila, las posiciones y lo del mapa se piden solo con la pestaña Aeropuerto en
+  pantalla y el celular desbloqueado: la fila cada minuto, las posiciones cada 15 s.
+  Al volver a la pestaña, todo de una vez. Escondida, no pide nada.
+- Los despachos realizados se piden una vez (solo dan el número de cada bus del mapa).
+- El letrero dice **Al día** (antes "En vivo").
+
+La app de los despachadores, abierta suelta, sigue en vivo como siempre. En la base,
+`fila_solo_cambios.sql` (v21) hace que la fila solo se reescriba cuando un bus cambia
+de turno de verdad (antes cada 30 s por los minutos de espera y el GPS).
+
 > **Esto recorta la interfaz, no los permisos.** Lo que un usuario puede leer o
 > escribir de verdad lo deciden las políticas Row Level Security de Supabase. Si
 > se quiere impedir que un conductor despache, hay que asegurarlo en la base de

@@ -136,6 +136,27 @@
     let markersFlotaByMid = {}; // resto de la flota
     let turnoStopEls = {}; // línea de turno: vehicle_id -> elemento DOM
     let realtimeChannel = null;
+    // PORTAL (26-oct-2026): dentro del Portal del Conductor (?modo=conductor) este módulo NO escucha en vivo (Realtime).
+    // Cada cambio de enturne_filas era 1 mensaje de Supabase por cada celular con la pestaña Aeropuerto abierta, y la
+    // pestaña quedaba escuchando hasta cerrar sesión aunque el conductor estuviera en Inicio: ~3.700 mensajes por hora
+    // por celular (medido el 26-oct), la mayor parte del consumo del plan. Ahora la fila se pide cada minuto, y solo
+    // mientras la pestaña Aeropuerto está en pantalla (y el celular desbloqueado); al volver a ella, de una vez. Los
+    // despachos realizados se piden una sola vez (solo dan el número de cada bus en el mapa: el conductor no ve esa
+    // pestaña). La app de los despachadores (abierta suelta) sigue en vivo como siempre.
+    const MODO_CONDUCTOR = new URLSearchParams(window.location.search).get("modo") === "conductor";
+    function aLaVista() {
+        if (document.hidden) return false;
+        try {
+            // El portal oculta la pestaña con hidden: el iframe queda sin cajas en la pantalla.
+            const marco = window.frameElement;
+            if (marco && marco.getClientRects().length === 0) return false;
+        } catch (_) { /* otro origen: se toma como a la vista */ }
+        return true;
+    }
+    // Lo de cada rato, solo si hace falta: el despachador siempre; el conductor, con la pestaña en pantalla.
+    function tocaRefrescar() {
+        return navigator.onLine && (!MODO_CONDUCTOR || aLaVista());
+    }
     let reconnectTimer = null;
     let reconnectDelay = 2000; // ms, sube con backoff hasta 30s
     let activeTab = "mapa";
@@ -1209,7 +1230,7 @@
         el.className = "badge";
         if (state === "ok") {
             el.classList.add("badge-ok");
-            el.textContent = "En vivo";
+            el.textContent = MODO_CONDUCTOR ? "Al día" : "En vivo";   // el conductor: se pone al día cada minuto
         } else if (state === "offline") {
             el.classList.add("badge-err");
             el.textContent = "Sin internet";
@@ -2178,6 +2199,7 @@
             renderMap();
             setLastUpdate();
             reconnectDelay = 2000;
+            if (MODO_CONDUCTOR) setConnection("ok");       // sin Realtime: "al día" es haber traído la fila
         } catch (err) {
             console.error("Error cargando datos:", err);
             const tablaBox = document.getElementById("tablaBox");
@@ -2234,7 +2256,7 @@
             reconnectTimer = null;
             cargarInicial();
             cargarPosiciones();
-            suscribirRealtime();
+            if (!MODO_CONDUCTOR) suscribirRealtime();
         }, wait);
     }
 
@@ -2249,7 +2271,7 @@
         }
         cargarInicial();
         cargarPosiciones();
-        suscribirRealtime();
+        if (!MODO_CONDUCTOR) suscribirRealtime();
     });
 
     window.addEventListener("offline", function () {
@@ -2259,9 +2281,10 @@
 
     document.addEventListener("visibilitychange", function () {
         if (document.visibilityState === "visible" && navigator.onLine) {
+            if (MODO_CONDUCTOR && !aLaVista()) return;     // en otra pestaña del portal: nada
             cargarInicial();
             cargarPosiciones();
-            if (!realtimeChannel || realtimeChannel.state !== "joined") {
+            if (!MODO_CONDUCTOR && (!realtimeChannel || realtimeChannel.state !== "joined")) {
                 suscribirRealtime();
             }
         }
@@ -2269,7 +2292,7 @@
 
     // Posición de toda la flota: no tiene canal Realtime propio, se refresca por polling.
     setInterval(function () {
-        if (navigator.onLine) cargarPosiciones();
+        if (tocaRefrescar()) cargarPosiciones();
     }, 15000);
 
     // Refresca "hace X min" cada minuto sin volver a pedir datos.
@@ -2292,22 +2315,39 @@
     // Auto-refresh de turnos cada minuto si estás en la pestaña (refleja
     // entrada_ts/salida_ts en vivo a medida que los conductores marcan)
     setInterval(function () {
-        if (activeTab === "turnos" && navigator.onLine) cargarTurnos();
+        if (activeTab === "turnos" && tocaRefrescar()) cargarTurnos();
     }, 60000);
 
     // Auto-refresh de ocultos cada minuto (para que si otro operador oculta un
-    // bus, también desaparezca de tu lista sin recargar la página)
+    // bus, también desaparezca de tu lista sin recargar la página). En el portal
+    // del conductor es además la única forma en que se pone al día la fila.
     setInterval(function () {
-        if (navigator.onLine) cargarOcultos().then(cargarInicial);
+        if (tocaRefrescar()) cargarOcultos().then(cargarInicial);
     }, 60000);
 
     // Auto-refresh del resumen de direcciones cada 30s si estás en Mapa o Subida
     // (el backend lo sincroniza cada 2 min, esto solo evita esperar hasta el
     // próximo cambio de pestaña para verlo).
     setInterval(function () {
-        if ((activeTab === "mapa" || activeTab === "subida") && navigator.onLine) cargarResumenDirecciones();
-        if (activeTab === "mapa" && navigator.onLine) cargarDireccionVehiculos();
+        if ((activeTab === "mapa" || activeTab === "subida") && tocaRefrescar()) cargarResumenDirecciones();
+        if (activeTab === "mapa" && tocaRefrescar()) cargarDireccionVehiculos();
     }, 30000);
+
+    // PORTAL: al volver a la pestaña Aeropuerto (después de Inicio, Mi tarjeta...), todo al día de una vez. Solo mira
+    // si el iframe está en pantalla: no pide nada a Supabase hasta que vuelve.
+    if (MODO_CONDUCTOR) {
+        let estabaALaVista = aLaVista();
+        setInterval(function () {
+            const ahora = aLaVista();
+            if (ahora && !estabaALaVista && appStarted && navigator.onLine) {
+                cargarOcultos().then(cargarInicial);
+                cargarPosiciones();
+                if (activeTab === "mapa") { cargarResumenDirecciones(); cargarDireccionVehiculos(); }
+                if (activeTab === "turnos") cargarTurnos();
+            }
+            estabaALaVista = ahora;
+        }, 2000);
+    }
 
     function initDespachosControles() {
         const btn = document.getElementById("btnRefreshDespachos");
@@ -2846,8 +2886,10 @@
         if (navigator.onLine) {
             cargarOcultos().then(cargarInicial); // ocultos primero, para no parpadear un bus ya oculto
             cargarPosiciones();
-            suscribirRealtime();
-            suscribirRealizadosRealtime();
+            if (!MODO_CONDUCTOR) {
+                suscribirRealtime();
+                suscribirRealizadosRealtime();
+            }
             cargarRealizados();
             cargarVehiculos();
             cargarConductores();
