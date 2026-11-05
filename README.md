@@ -205,6 +205,24 @@ La app de los despachadores, abierta suelta, sigue en vivo como siempre. En la b
 `fila_solo_cambios.sql` (v21) hace que la fila solo se reescriba cuando un bus cambia
 de turno de verdad (antes cada 30 s por los minutos de espera y el GPS).
 
+**En el aeropuerto el turno va por itinerario (portal v1.26.0, módulo v1.27.0).** El
+conductor cuenta solo entre los buses que llegaron por el mismo itinerario con que lo
+despacharon (Almacentro-Tunel-Aeropuerto, Nutibara-exposiciones-tunel-aeropuerto...),
+en orden de hora de llegada: si el 742 es el cuarto de Almacentro-Tunel-Aeropuerto, va
+**4 de 6** aunque haya diecisiete buses en el aeropuerto.
+
+- Pestaña Aeropuerto → Lista: arriba "4 de 6 · Faltan 3 buses antes que tú ·
+  despachado por …"; debajo, solo la fila de su itinerario con su bus marcado **Tú**; un
+  botón "Ver los otros itinerarios" muestra los demás, cada uno numerado aparte. Si su
+  bus no está en la fila, se ven todos los itinerarios. Lo hace `reorganizarListas()` /
+  `pintarLista()` en `modulos/aeropuerto/js/modo-conductor.js` sobre la tabla que ya
+  pintó `main.js`. El bus llega del portal con el mensaje `PORTAL_CONDUCTOR`
+  (`MODULOS_CON_CONDUCTOR` incluye `aeropuerto`) y, mientras tanto, de
+  `portal_seleccion` en el localStorage.
+- Inicio → "Mi fila": en el punto Aeropuerto filtra por el mismo itinerario y ordena
+  por hora de llegada (`cargarFila()`); en los demás puntos sigue igual.
+- La "Línea de turno" de arriba sigue mostrando todo el aeropuerto.
+
 > **Esto recorta la interfaz, no los permisos.** Lo que un usuario puede leer o
 > escribir de verdad lo deciden las políticas Row Level Security de Supabase. Si
 > se quiere impedir que un conductor despache, hay que asegurarlo en la base de
@@ -542,6 +560,55 @@ que $240.000 son en tiquetes y $140.000 en efectivo (7 pasajeros).
 - **La cuenta en vivo:** mientras escribe, el formulario dice *"19 pasajeros = 4 con tiquete ($80.000) + …"*; con más
   de 19 dice *"Máximo 19 pasajeros: es el cupo del bus"* y el botón Guardar se apaga; igual si tiquetes y cívicas
   pasan de los pasajeros. La lectura que escribe dice cómo le queda el viaje anterior (si no cuadra, avisa).
+
+### El turno y la tarjeta se cierran con la salida (v1.26.0)
+
+Pedido del usuario el 5-nov-2026: *"la aplicación está cerrando la tarjeta por el turno del conductor; que se cierre
+es cuando haga su facial de salida"*. Hasta la v1.25 el portal soltaba el turno de ayer a su **hora fin programada**
+(o a la medianoche), y la tarjeta cambiaba de día a las **2:30 a. m.**. Del 28-oct al 4-nov, 205 de 777 turnos
+(casi todos del turno 2, ~25 por noche) se quedaron sin tarjeta antes de marcar la salida; la mitad, casi una hora, y
+hasta 3 h.
+
+Ahora un turno está **abierto** mientras el conductor tenga la entrada marcada y le falte la salida, según
+`estado_turno_actual()` (la misma función del biométrico): `turnoAbierto()` en `js/portal.js`. Abierto:
+
+- `turnosVigentes()` lo sigue mostrando aunque pase su hora fin o la medianoche, y `turnoActual()` lo prefiere;
+- la elección guardada en el celular no caduca (`leerSeleccion()`), hasta 12 h después de la hora fin (es hasta donde
+  la base reconoce el turno; si nunca marca la salida, ahí se cierra solo);
+- la tarjeta es la del **día de ese turno** (`diaDeTarjeta()`), aunque ya sean más de las 2:30.
+
+Al marcar la salida (el módulo de asistencia avisa con `PORTAL_MARCA_REGISTRADA`) el portal recarga el turno y se
+cierra como antes. Sin marcas, todo sigue como antes. **Corregir** sigue siendo solo del día de operación de ahora
+(`diaDeOperacion()`): lo revisa la base (sql v14).
+
+Lo que no cambia: los viajes que salen después de las 2:30 son del día siguiente y la base
+(`tarjeta_viajes_conductor`) se los da a los turnos de ese día. Fueron 6 viajes en esos 8 días.
+
+### La práctica del conductor (v1.25.0)
+
+Pedido del usuario el 4-nov-2026: una página de práctica con todo el proceso del conductor, enfocada en su día de
+trabajo. Está en `practica/` (`index.html`, `practica.css`, `practica.js`). Se abre con **"¿Primera vez? Practica sin
+entrar"** debajo de Entrar y con **Perfil → Practicar cómo se usa el portal**.
+
+- **No toca la base:** no usa Supabase ni la sesión, ni la cámara, el GPS o la red (solo la letra de Google). Lo único
+  que guarda es el avance en ese celular (`localStorage` `portal_practica_v1`). El service worker la guarda para que
+  abra sin señal.
+- **El día en 8 pasos:**
+  1. Alistar el celular y entrar.
+  2. Marcar la ENTRADA (aeropuerto y sin GPS no dejan).
+  3. Alistar el bus.
+  4. Personal de la empresa y tiquetes.
+  5. Llenar la tarjeta, con la misma cuenta del portal (cupo 19, cívica = lectura − la anterior, efectivo).
+  6. Novedad y corregir.
+  7. La fila del aeropuerto.
+  8. Marcar la SALIDA (antes de 60 minutos no deja).
+
+  Cada paso trae *Qué haces*, un celular de práctica con el botón que toca encendido, y *Ojo*. Además están *Si algo
+  sale mal* (los mensajes, con buscador) y una prueba de 10 preguntas.
+- **Datos de práctica, no son de nadie:** el conductor 20020002, el bus 799 y la persona 10000001.
+- **Si cambian los textos o las reglas del portal** (`js/portal.js`), hay que cambiarlos también en `practica.js`.
+  `nueva-version.ps1` no toca el `?v=` de `practica/index.html` ni el de `sw.js` para la práctica: súbalos a mano si
+  cambia la práctica.
 
 ### El conductor registra al personal sin internet (v1.24.0, app del personal g2.7.0, SQL v17)
 

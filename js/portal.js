@@ -412,6 +412,10 @@
   // biométrico midió que cerrar la jornada hasta 4 h tarde es habitual.
   var MARGEN_CIERRE_MS = 4 * HORA_MS;
 
+  // v1.26.0: un turno abierto (entrada marcada, sin salida) se sostiene hasta 12 h después de su hora fin: es hasta
+  // donde estado_turno_actual() lo sigue reconociendo. Si nunca marca la salida, ahí se cierra solo.
+  var MAXIMO_ABIERTO_MS = 12 * HORA_MS;
+
   // Paso de confirmación en pantalla: cédula consultada y lo que se encontró.
   var identificacion = null;
 
@@ -423,7 +427,9 @@
       // de gestor que guardó la v1.10.0 ya no vale y se vuelve a pedir la cédula.
       if (sel.rol === "gestor") { borrarSeleccion(); return null; }
       var vigente = sel.fecha === hoyColombia() ||
-        (sel.finMs != null && Date.now() < sel.finMs + MARGEN_CIERRE_MS);
+        (sel.finMs != null && Date.now() < sel.finMs + MARGEN_CIERRE_MS) ||
+        // v1.26.0: con la entrada marcada y sin la salida, el turno sigue abierto (ver turnoAbierto).
+        (sel.finMs != null && Date.now() < sel.finMs + MAXIMO_ABIERTO_MS && turnoAbierto(sel.turnoData, sel.estadoTurno));
       return vigente ? sel : null;
     } catch (_) { return null; }
   }
@@ -453,6 +459,11 @@
   // Turnos que importan ahora: los de hoy y, de ayer, solo el que todavía no
   // termina. Ordenados por hora de inicio y sin repetidos.
   //
+  // "Todavía no termina" (v1.26.0, pedido del usuario el 5-nov-2026: "que se cierre es cuando haga su facial de
+  // salida"): o no ha llegado su hora fin, o el conductor marcó la entrada y todavía no la salida (turnoAbierto).
+  // Antes se soltaba a la hora fin programada: del 28-oct al 4-nov, 205 turnos (casi todos del turno 2, ~25 por
+  // noche) se quedaban sin tarjeta en el portal antes de marcar la salida; la mitad, casi una hora.
+  //
   // Repetidos: programacion_turnos no tiene restricción de unicidad y se
   // reconstruye fila a fila desde programacion_filas, así que si la
   // programación trae dos veces el mismo renglón (cargada dos veces, o la fila
@@ -460,7 +471,7 @@
   // porque de varios turnos elige uno solo; aquí se le mostraban los dos al
   // conductor. Se descartan los que coinciden en todo lo que él ve: si difieren
   // en algo (otro vehículo, otro puesto) son turnos distintos y se quedan.
-  function turnosVigentes(filas) {
+  function turnosVigentes(filas, estado) {
     var hoy = hoyColombia();
     var ayer = ayerColombia();
     var ahora = Date.now();
@@ -480,7 +491,7 @@
         if (t.fecha === hoy) return true;
         if (t.fecha !== ayer) return false;
         var r = rangoTurno(t);
-        return r.fin != null && ahora < r.fin;
+        return (r.fin != null && ahora < r.fin) || turnoAbierto(t, estado);
       })
       .sort(function (a, b) {
         return (rangoTurno(a).inicio || 0) - (rangoTurno(b).inicio || 0);
@@ -494,14 +505,17 @@
       n.indexOf("SIN CONDUCTOR") < 0 && n.indexOf("SIN PROGRAMAR") < 0;
   }
 
-  // El turno que importa ahora: el que está en curso o el próximo; si todos
-  // terminaron, el último.
-  function turnoActual(turnos) {
+  // El turno que importa ahora: el que tiene abierto (marcó entrada y no salida),
+  // si no el que está en curso o el próximo; si todos terminaron, el último.
+  function turnoActual(turnos, estado) {
     if (!turnos.length) return null;
-    return turnos.find(function (t) { return estadoTurno(t) !== "terminado"; }) ||
+    return turnos.find(function (t) { return turnoAbierto(t, estado); }) ||
+      turnos.find(function (t) { return estadoTurno(t) !== "terminado"; }) ||
       turnos[turnos.length - 1];
   }
 
+  // Las filas de programación de ayer y hoy de esa cédula, sin filtrar por la hora: el filtro (turnosVigentes)
+  // necesita también las marcas, que llegan en otra consulta.
   async function consultarTurnosPorDni(dni) {
     var res = await conTiempoLimite(
       client.from(cfg.TABLA_PROGRAMACION_TURNOS)
@@ -510,7 +524,7 @@
         .eq("dni", dni)
     );
     if (res.error) throw res.error;
-    return turnosVigentes(res.data);
+    return res.data || [];
   }
 
   // Programación completa de un vehículo: sirve para saber con quién releva
@@ -604,6 +618,15 @@
       Number(estado.turno) === Number(turno.turno));
   }
 
+  // v1.26.0: el turno sigue ABIERTO mientras el conductor no marque su salida (pedido del usuario, 5-nov-2026: "que se
+  // cierre es cuando haga su facial de salida"). Abierto = estado_turno_actual lo reconoce como este turno, tiene la
+  // entrada marcada y todavía no la salida. Mientras esté abierto el portal no le suelta el turno ni el bus, aunque
+  // pase la hora fin programada o la medianoche, y la tarjeta sigue siendo la del día de ese turno (diaDeTarjeta).
+  // Ej. bus 709, turno 2 de 13:20 a 21:20: marca la salida a la 01:01; hasta esa hora ve y llena su tarjeta.
+  function turnoAbierto(turno, estado) {
+    return esDeEsteTurno(turno, estado) && !!estado.entrada_real && !estado.salida_real;
+  }
+
   function estadoConMarcas(turno, estado) {
     if (esDeEsteTurno(turno, estado)) {
       if (estado.completa) return "cumplido";
@@ -644,21 +667,22 @@
     var resultados = await Promise.all([
       buscarConductor(dni),
       consultarTurnosPorDni(dni)
-        .then(function (turnos) {
-          guardarCache("turnos_" + dni, turnos);
-          return { turnos: turnos, guardadoEn: null, error: null };
+        .then(function (filas) {
+          guardarCache("turnos_" + dni, filas);
+          return { filas: filas, guardadoEn: null, error: null };
         })
         .catch(function (err) {
           var cache = leerCache("turnos_" + dni);
-          if (cache) return { turnos: turnosVigentes(cache.datos), guardadoEn: cache.guardadoEn, error: null };
-          return { turnos: [], guardadoEn: null, error: err };
+          if (cache) return { filas: cache.datos, guardadoEn: cache.guardadoEn, error: null };
+          return { filas: [], guardadoEn: null, error: err };
         }),
       consultarEstadoTurno(dni),
       consultarColaborador(dni),
     ]);
     return {
       conductor: resultados[0],
-      turnos: resultados[1].turnos,
+      // Con las marcas: el de ayer que sigue abierto (entrada sin salida) también sale.
+      turnos: turnosVigentes(resultados[1].filas, resultados[2]),
       guardadoEn: resultados[1].guardadoEn,
       error: resultados[1].error,
       estado: resultados[2],
@@ -1410,7 +1434,9 @@
   // Cédula del conductor elegido, para que el módulo de asistencia no se la
   // vuelva a pedir (ver modo-portal.js dentro del módulo). El de alistamiento
   // (v1.23.0) la recibe igual, con el bus del turno.
-  var MODULOS_CON_CONDUCTOR = ["asistencia", "alistamiento"];
+  // El Aeropuerto usa solo el bus: con él muestra la fila del itinerario con que lo despacharon y su posición
+  // (modulos/aeropuerto/js/modo-conductor.js).
+  var MODULOS_CON_CONDUCTOR = ["asistencia", "alistamiento", "aeropuerto"];
 
   function empujarConductor(idModulo) {
     if (MODULOS_CON_CONDUCTOR.indexOf(idModulo) < 0 || !state.dni) return;
@@ -1851,16 +1877,18 @@
         consultarTurnosPorDni(sel.dni),
         consultarEstadoTurno(sel.dni),
       ]);
-      var turnos = consultas[0];
       if (state.seleccion !== sel) return; // cambió de conductor mientras tanto
       if (consultas[1]) sel.estadoTurno = consultas[1];
-      guardarCache("turnos_" + sel.dni, turnos);
+      guardarCache("turnos_" + sel.dni, consultas[0]);
+      // v1.26.0: el de ayer se queda mientras siga abierto (entrada sin salida). Si esta vez no llegaron las marcas,
+      // vale la última que se supo: sin señal no se le suelta el turno.
+      var turnos = turnosVigentes(consultas[0], sel.estadoTurno);
 
-      // El mismo turno que confirmó; si ya no está (cambió la programación),
-      // el que le corresponda ahora.
+      // El mismo turno que confirmó; si ya no está (cambió la programación, o
+      // terminó y marcó la salida), el que le corresponda ahora.
       var turno = turnos.find(function (t) {
         return sel.turno != null && t.fecha === sel.fecha && Number(t.turno) === Number(sel.turno);
-      }) || turnoActual(turnos);
+      }) || turnoActual(turnos, sel.estadoTurno);
 
       sel.turnoData = turno;
       if (turno) {
@@ -1897,6 +1925,10 @@
         cargarDocumentos();
         cargarAlistamiento();
         pintarBusEnBarras();
+      } else if (tarj.clave && tarj.dia !== diaDeTarjeta()) {
+        // v1.26.0: mismo bus, pero el turno se abrió o se cerró con las marcas que acaban de llegar (por ejemplo,
+        // marcó la salida pasadas las 2:30): la tarjeta pasa al día que le toca.
+        cargarTarjeta();
       }
     } catch (err) {
       // Sin red se queda lo ya pintado, avisando de cuándo es el dato.
@@ -2267,10 +2299,19 @@
 
   var ICONO_ALERTA = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 9v4m0 4h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>';
 
-  // El día de la tarjeta es el de la empresa: de 2:30 a. m. a 2:30 a. m. del día
+  // El día de operación es el de la empresa: de 2:30 a. m. a 2:30 a. m. del día
   // siguiente. El viaje de la 1 de la mañana todavía es del día anterior, y el de
-  // las 2:43 ya es el primero del día nuevo.
-  function diaDeTarjeta() { return fechaColombiaDe(Date.now() - 2.5 * HORA_MS); }
+  // las 2:43 ya es el primero del día nuevo. Corregir solo se puede en el de ahora
+  // (lo revisa la base, sql v14).
+  function diaDeOperacion() { return fechaColombiaDe(Date.now() - 2.5 * HORA_MS); }
+
+  // El día de la tarjeta que ve el conductor (v1.26.0): mientras su turno siga abierto (marcó la entrada y todavía no
+  // la salida) es el día de ese turno, aunque ya sean más de las 2:30. Así el del turno 2 que entrega tarde sigue viendo
+  // y llenando sus viajes hasta su salida. Cerrado el turno, o sin marcas, el día de operación de ahora, como antes.
+  function diaDeTarjeta() {
+    if (state.turno && state.turno.fecha && turnoAbierto(state.turno, state.estadoTurno)) return state.turno.fecha;
+    return diaDeOperacion();
+  }
 
   function nombreConductor() {
     return (state.conductor && state.conductor.nombre) ||
@@ -3030,7 +3071,7 @@
 
   // El renglón que este conductor puede corregir (su id), o null: el original del celular, suyo, de hoy y sin corregir.
   function corregible(f, campo) {
-    if (!tarj.conCorreccion || !tarj.registros || tarj.dia !== diaDeTarjeta() || f[CORREGIR[campo].columna] == null) return null;
+    if (!tarj.conCorreccion || !tarj.registros || tarj.dia !== diaDeOperacion() || f[CORREGIR[campo].columna] == null) return null;
     var cadena = cadenaEscrita(f, campo);
     var o = cadena[0];
     return o && cadena.length === 1 && o.origen === "celular" && o.mio ? o.id : null;
@@ -3913,12 +3954,24 @@
 
       // El puesto se cuenta SOLO entre los del mismo punto: en el aeropuerto se
       // hace una fila y en Almacentro otra, no se mezclan.
+      //
+      // En el aeropuerto, además, solo entre los del MISMO ITINERARIO con que lo
+      // despacharon (desde el 5-nov-2026): el 742 que llegó por
+      // Almacentro-Tunel-Aeropuerto va "4 de 6" de ese itinerario, aunque haya 17
+      // buses en el aeropuerto. Es lo mismo que le muestra la pestaña Aeropuerto
+      // (modulos/aeropuerto/js/modo-conductor.js), en orden de hora de llegada.
+      var enAeropuerto = String(mio.punto || "").trim().toLowerCase() === "aeropuerto";
+      var miItinerario = String(mio.itinerario || "").trim();
       var fila = todas
-        .filter(function (r) { return r.punto === mio.punto; })
-        // Por orden de llegada. El turno ya viene numerado por el programa
-        // (1, 2, 3...); si faltara, se ordena por hora.
+        .filter(function (r) {
+          if (r.punto !== mio.punto) return false;
+          return !enAeropuerto || String(r.itinerario || "").trim() === miItinerario;
+        })
         .sort(function (a, b) {
-          if (a.turno && b.turno) return a.turno - b.turno;
+          // Aeropuerto: por hora de llegada, igual que la pestaña. En los demás
+          // puntos el turno ya viene numerado por el programa (1, 2, 3...); si
+          // faltara, se ordena por hora.
+          if (!enAeropuerto && a.turno && b.turno) return a.turno - b.turno;
           return String(a.llegada_aeropuerto || "").localeCompare(String(b.llegada_aeropuerto || ""));
         });
 
@@ -3933,7 +3986,8 @@
             "<strong>Bus " + escapeHtml(mio.interno || interno) + "</strong>" +
             (mio.punto ? '<span class="fila-punto">' + escapeHtml(mio.punto) + "</span>" : "") +
             "<span>Llegó " + escapeHtml(haceCuanto(mio.llegada_aeropuerto) || horaCorta(mio.llegada_aeropuerto)) +
-              (mio.itinerario ? " · " + escapeHtml(mio.itinerario) : "") + "</span>" +
+              (mio.itinerario ? " · " + (enAeropuerto ? "despachado por " : "") + escapeHtml(mio.itinerario) : "") +
+            "</span>" +
           "</div>" +
         "</div>";
     } catch (err) {

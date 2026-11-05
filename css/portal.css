@@ -1224,6 +1224,12 @@ body:has(.aviso-noticia:not([hidden])) [data-panel="inicio"] .home { padding-bot
 .login-card .version-note,
 .identify-card .version-note { margin-top: 18px; }
 
+/* v1.25.0: enlace a la práctica (portal/practica/), debajo de Entrar */
+.link-practica { display: block; margin-top: 14px; padding: 10px 8px; text-align: center; font-weight: 700;
+  font-size: 15px; color: var(--primary); text-decoration: none; border-radius: var(--radius-sm); }
+.link-practica:active { background: var(--soft); }
+.link-practica:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--primary-glow); }
+
 /* Aviso de versión nueva. Flota abajo sin bloquear nada, porque puede salir
    con el conductor dentro de un módulo; con la app abierta en el teléfono va
    por encima de la barra de navegación. */

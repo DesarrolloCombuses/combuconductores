@@ -40,9 +40,9 @@ html[data-modo="conductor"] .turno-stop {
   cursor: default !important;
 }
 
-/* --- Listas: una sola fila de espera, sin filtros por ruta ---
-   Los chips filtraban la tabla por itinerario. Con la lista unificada en
-   orden de llegada ya no aplican: la ruta pasó a ser una columna. */
+/* --- Listas: una fila de espera por itinerario, sin filtros por ruta ---
+   Los chips filtraban la tabla por itinerario. Ahora se ven todos los
+   itinerarios, cada uno con su fila numerada: los chips ya no aplican. */
 html[data-modo="conductor"] #chips {
   display: none !important;
 }
@@ -63,10 +63,201 @@ html[data-modo="conductor"] #paneListas .tabla-box {
 }
 
 /* El encabezado de la tabla iba pegado a 47px del borde para dejar hueco al
-   título del grupo de ruta. Como la lista unificada ya no tiene grupos, esos
-   47px dejaban la cabecera flotando en mitad de las filas. */
+   título del grupo de ruta; sin ese título, esos 47px lo dejaban flotando en
+   mitad de las filas. */
 html[data-modo="conductor"] table.arrivals th {
   top: 0;
+}
+
+/* --- Un grupo por itinerario ---
+   Ni el nombre del itinerario ni la cabecera de columnas se pegan arriba al
+   desplazar. Pegado, el nombre quedaba unos píxeles por debajo del borde (el
+   panel tiene relleno arriba): las filas se asomaban por encima y las de
+   abajo quedaban tapadas (visto el 5-nov-2026 con nueve buses). */
+html[data-modo="conductor"] .lista-espera th {
+  position: static;
+}
+html[data-modo="conductor"] .ruta-grupo + .ruta-grupo {
+  margin-top: 10px;
+}
+html[data-modo="conductor"] .ruta-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 750;
+  letter-spacing: .01em;
+  line-height: 1.25;
+}
+html[data-modo="conductor"] .ruta-grupo + .ruta-grupo .ruta-head {
+  border-top: 1px solid var(--border);
+}
+html[data-modo="conductor"] .ruta-nombre {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+html[data-modo="conductor"] .ruta-count {
+  margin-left: auto;
+  flex: none;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  background: var(--primary-50);
+  color: var(--primary-700);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Cada itinerario es una tabla aparte: con anchos fijos las columnas de
+   todos quedan una debajo de la otra. El puesto se lleva lo que sobre. */
+html[data-modo="conductor"] .lista-espera table.arrivals {
+  table-layout: fixed;
+}
+html[data-modo="conductor"] .lista-espera th:nth-child(1) { width: 56px; }
+html[data-modo="conductor"] .lista-espera th:nth-child(2) { width: 100px; }
+html[data-modo="conductor"] .lista-espera th:nth-child(3) { width: 150px; }
+html[data-modo="conductor"] .lista-espera th:nth-child(4) { width: 100px; }
+html[data-modo="conductor"] .lista-espera th:nth-child(6) { width: 120px; }
+
+/* En style.css el estado es una celda flex (para el botón de ocultar, que
+   aquí no va). Una celda flex no le dice a la tabla cuánto mide: en celular
+   la columna quedaba de 36 px y "Detenido" se salía por la derecha, y la
+   raya de abajo quedaba corrida. */
+html[data-modo="conductor"] .lista-espera td.col-estado {
+  display: table-cell;
+  white-space: nowrap;
+}
+
+/* El primero de cada itinerario lleva el número en naranja, como el "Próximo"
+   de la línea de turno. */
+html[data-modo="conductor"] .lista-espera .pos-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  border-radius: 999px;
+}
+html[data-modo="conductor"] .lista-espera .primero .pos-num {
+  background: var(--warning-500);
+  color: #fff;
+}
+
+/* --- Su posición, arriba de su fila ---
+   "4 de 6" grande, como la tarjeta "Mi fila" del Inicio del portal, y al
+   lado cuántos van antes y por qué itinerario lo despacharon. */
+html[data-modo="conductor"] .mi-turno {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 6px 6px 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--primary-100);
+  border-radius: var(--radius-lg);
+  background: var(--primary-50);
+  color: var(--text);
+}
+html[data-modo="conductor"] .mi-turno.sigue {
+  border-color: var(--warning-500);
+  background: var(--warning-50);
+}
+html[data-modo="conductor"] .mi-turno-pos {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+  min-width: 64px;
+  line-height: 1;
+}
+html[data-modo="conductor"] .mi-turno-pos strong {
+  font-size: 40px;
+  font-weight: 800;
+  color: var(--primary-700);
+  font-variant-numeric: tabular-nums;
+}
+html[data-modo="conductor"] .mi-turno.sigue .mi-turno-pos strong {
+  color: var(--warning-700);
+}
+html[data-modo="conductor"] .mi-turno-pos span {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+html[data-modo="conductor"] .mi-turno-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+html[data-modo="conductor"] .mi-turno-info strong {
+  font-size: 16px;
+  font-weight: 750;
+}
+html[data-modo="conductor"] .mi-turno-info span {
+  color: var(--text-muted);
+}
+html[data-modo="conductor"] .mi-turno-info b {
+  color: var(--text);
+  font-weight: 650;
+}
+
+/* Su bus dentro de la fila. El "Tú" va al lado del número, sin partir. */
+html[data-modo="conductor"] .lista-espera tr.mio td {
+  background: var(--primary-50);
+}
+html[data-modo="conductor"] .lista-espera td.interno {
+  white-space: nowrap;
+}
+html[data-modo="conductor"] .lista-espera .tu {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--primary-600);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  vertical-align: 2px;
+}
+
+/* Sin bus en la fila (o sin bus del portal): una línea que lo explica. */
+html[data-modo="conductor"] .mi-turno-aviso {
+  margin: 6px 6px 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Botón para ver (o esconder) los demás itinerarios. */
+html[data-modo="conductor"] .ver-otros {
+  display: block;
+  width: calc(100% - 12px);
+  margin: 12px 6px 6px;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--primary-700);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+html[data-modo="conductor"] .otros-itinerarios {
+  margin-top: 6px;
 }
 
 /* --- Filas más compactas ---
@@ -79,9 +270,10 @@ html[data-modo="conductor"] .lista-espera th {
   padding: 8px 14px;
 }
 
-/* La ruta puede ser larga ("Nutibara-exposiciones-tunel-aeropuerto"), así que
-   se le permite partir en vez de estirar la tabla a lo ancho. */
-html[data-modo="conductor"] .col-ruta {
+/* El nombre largo ("Nutibara-exposiciones-tunel-aeropuerto",
+   "NUTIBARA -EXPOSICIONES") puede partir en vez de estirar la tabla. */
+html[data-modo="conductor"] .col-ruta,
+html[data-modo="conductor"] .col-puesto {
   max-width: 260px;
   font-size: .92em;
   line-height: 1.3;
@@ -114,9 +306,48 @@ html[data-modo="conductor"] .turno-heading {
   html[data-modo="conductor"] .lista-espera thead th:nth-child(2) {
     display: none;
   }
-  html[data-modo="conductor"] .col-ruta { max-width: 150px; }
+  html[data-modo="conductor"] .col-ruta,
+  html[data-modo="conductor"] .col-puesto { max-width: 150px; }
   html[data-modo="conductor"] .lista-espera td,
   html[data-modo="conductor"] .lista-espera th { padding: 8px 10px; }
+}
+
+/* En teléfono pantalla-chica.css esconde el puesto (quinta columna): el
+   "hace" se queda con el espacio que sobra. */
+@media (max-width: 560px) {
+  html[data-modo="conductor"] .lista-espera th:nth-child(1) { width: 44px; }
+  html[data-modo="conductor"] .lista-espera th:nth-child(3) { width: auto; }
+  html[data-modo="conductor"] .lista-espera th:nth-child(4) { width: 80px; }
+  html[data-modo="conductor"] .lista-espera th:nth-child(6) { width: 100px; }
+}
+
+/* style.css, en teléfono, trata la última columna como la del botón Asignar:
+   le borra el título y le pone una flechita "›" de "toque aquí". Aquí la
+   última es el Estado y las filas no se tocan: título visible, sin flecha. */
+@media (max-width: 600px) {
+  html[data-modo="conductor"] .lista-espera th:last-child {
+    font-size: 11px;
+  }
+  html[data-modo="conductor"] .lista-espera th:last-child,
+  html[data-modo="conductor"] .lista-espera td:last-child {
+    text-align: left;
+    padding-right: 10px;
+  }
+  html[data-modo="conductor"] .lista-espera td:last-child::after {
+    content: none;
+  }
+}
+
+/* En pantalla muy chica style.css quita el "hace". Con el puesto ya
+   escondido sí cabe, y es lo que le dice al conductor cuánto lleva esperando. */
+@media (max-width: 380px) {
+  html[data-modo="conductor"] .lista-espera th:nth-child(3),
+  html[data-modo="conductor"] .lista-espera td:nth-child(3) {
+    display: table-cell;
+  }
+  html[data-modo="conductor"] .lista-espera th:nth-child(1) { width: 40px; }
+  html[data-modo="conductor"] .lista-espera th:nth-child(4) { width: 74px; }
+  html[data-modo="conductor"] .lista-espera th:nth-child(6) { width: 96px; }
 }
 
 /* --- Nombres del conductor ---

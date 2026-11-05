@@ -74,20 +74,81 @@
   }, true);
 
   /* ------------------------------------------------------------------
-     Listas: una sola fila de espera, en orden de llegada
+     Listas: la fila del itinerario con que el conductor fue despachado
 
-     El módulo original agrupa la tabla por itinerario y numera 1..N DENTRO
-     de cada grupo, que es lo que necesita un despachador. Al conductor eso
-     le miente: ve "1" cuando en realidad es el octavo de la fila.
+     El turno del conductor en el aeropuerto sale del itinerario con el que
+     fue despachado hasta allá (Almacentro-Tunel-Aeropuerto,
+     Nutibara-exposiciones-tunel-aeropuerto...), no de todo el aeropuerto.
+     Ejemplo: si el 742 llegó por Almacentro-Tunel-Aeropuerto y es el cuarto
+     de ese itinerario en llegar, ve "4 de 6", aunque en el aeropuerto haya
+     diecisiete buses esperando.
 
-     Aquí se rehace la tabla como una sola lista ordenada por hora de llegada
-     al aeropuerto -- el mismo criterio FIFO que usa el módulo -- numerada de
-     1 a N de corrido, y con la ruta como una columna más. Los chips de filtro
-     por ruta sobran y se ocultan por CSS.
+     Por eso la lista muestra:
+       - arriba, su posición: "4 de 6" y el itinerario;
+       - la fila de SU itinerario, en orden de hora de llegada, numerada de
+         1 a N y con su bus resaltado;
+       - un botón para ver los demás itinerarios, cada uno con su propia
+         numeración (por si quiere mirar).
+     Si su bus no está en la fila, o el portal no tiene bus para él, se ven
+     todos los itinerarios, cada uno con su numeración.
+
+     El bus lo dice el portal: lo manda con un mensaje PORTAL_CONDUCTOR al
+     cargar el módulo y cada vez que el conductor cambia de bus. Mientras
+     llega, se toma el que el portal dejó guardado (mismo origen, mismo
+     localStorage).
+
+     main.js ya pinta un grupo por itinerario, pero numera por el "turno"
+     global del programa. Aquí se toma lo que pintó y se rehace. Ojo: lo
+     rehecho NO puede llevar la clase .itin-group, que es la que dice "main.js
+     acaba de pintar" (ver reorganizarListas).
 
      Se trabaja sobre el DOM ya pintado en vez de tocar main.js: así el módulo
      sigue sirviendo igual a los despachadores cuando se abre suelto.
      ------------------------------------------------------------------ */
+
+  // main.js pone este nombre a los buses que llegan sin itinerario.
+  var SIN_ITINERARIO = "Sin itinerario";
+
+  // Lo último que pintó main.js, ya leído: { itinerario: [buses...] }.
+  // Se guarda para repintar cuando llega el bus del portal o se toca el botón
+  // de ver los demás, sin esperar al próximo minuto.
+  var ultimaFila = null;
+  var miBus = busGuardadoPorElPortal();
+  var verOtros = false;
+
+  function escaparHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  // Igual que normalizarInterno() del portal: "0742", "742 " y "742" son el mismo bus.
+  function normalizarInterno(v) {
+    return String(v == null ? "" : v)
+      .replace(/[^0-9A-Za-z]/g, "")
+      .toUpperCase()
+      .replace(/^0+(?=.)/, "");
+  }
+
+  function busGuardadoPorElPortal() {
+    try {
+      var sel = JSON.parse(localStorage.getItem("portal_seleccion") || "null");
+      return sel && sel.vehiculo ? String(sel.vehiculo).trim() : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  window.addEventListener("message", function (ev) {
+    if (ev.origin !== window.location.origin) return;
+    var d = ev.data;
+    if (!d || typeof d !== "object" || d.type !== "PORTAL_CONDUCTOR" || !d.payload) return;
+    var nuevo = d.payload.vehiculo ? String(d.payload.vehiculo).trim() : null;
+    if (normalizarInterno(nuevo) === normalizarInterno(miBus)) return;
+    miBus = nuevo;
+    verOtros = false;
+    pintarLista();
+  });
 
   // El timestamp real de llegada no está en ninguna celda, pero sí como
   // atributo del botón de ocultar que main.js pinta en cada fila.
@@ -111,60 +172,149 @@
     return pill ? pill.outerHTML : '<span class="estado-vacio">—</span>';
   }
 
-  function reorganizarListas() {
-    var box = document.getElementById("tablaBox");
-    if (!box) return;
-
-    // Si no hay grupos, o ya está rehecha, no hay nada que hacer. Esta salida
-    // es la que evita que el observador se dispare con sus propios cambios.
+  // Lee lo que pintó main.js. Devuelve null si no hay nada suyo que leer.
+  function leerFilaDeMain(box) {
     var grupos = box.querySelectorAll(".itin-group");
-    if (!grupos.length) return;
+    if (!grupos.length) return null;
 
-    var items = [];
+    var porRuta = {};
+    var hayFilas = false;
     Array.prototype.forEach.call(grupos, function (grupo) {
-      var ruta = textoRuta(grupo);
+      var ruta = textoRuta(grupo) || SIN_ITINERARIO;
       Array.prototype.forEach.call(grupo.querySelectorAll("tr.bus-row"), function (tr) {
         var celdas = tr.querySelectorAll("td");
         if (celdas.length < 5) return;
-        items.push({
+        hayFilas = true;
+        (porRuta[ruta] = porRuta[ruta] || []).push({
           llegada: llegadaDeFila(tr),
           hora: celdas[1].textContent.trim(),
           hace: celdas[2].textContent.trim(),
           bus: celdas[3].textContent.trim(),
           puesto: celdas[4].textContent.trim(),
           estado: celdaEstado(tr),
-          ruta: ruta,
         });
       });
     });
+    if (!hayFilas) return null;
 
-    if (!items.length) return;
+    // FIFO dentro de cada itinerario: primero el que lleva más rato esperando.
+    Object.keys(porRuta).forEach(function (ruta) {
+      porRuta[ruta].sort(function (a, b) { return String(a.llegada).localeCompare(String(b.llegada)); });
+    });
+    return porRuta;
+  }
 
-    // FIFO: primero el que lleva más rato esperando.
-    items.sort(function (a, b) { return String(a.llegada).localeCompare(String(b.llegada)); });
+  function reorganizarListas() {
+    var box = document.getElementById("tablaBox");
+    if (!box) return;
 
-    var filas = items.map(function (it, idx) {
-      return '<tr class="fila-espera">' +
-        '<td class="pos">' + (idx + 1) + "</td>" +
-        '<td class="hora">' + it.hora + "</td>" +
-        '<td class="hace">' + it.hace + "</td>" +
-        '<td class="interno">' + it.bus + "</td>" +
-        '<td class="col-ruta">' + it.ruta + "</td>" +
-        "<td>" + it.puesto + "</td>" +
+    // Si main.js no acaba de pintar (no hay .itin-group), no hay nada que
+    // hacer. Esta salida es la que evita que el observador se dispare con
+    // nuestros propios cambios.
+    var leida = leerFilaDeMain(box);
+    if (!leida) {
+      // main.js pintó otra cosa ("Sin buses en la geocerca", cargando...):
+      // lo guardado ya no vale y no hay que repintarlo encima.
+      if (!box.querySelector(".lista-espera")) ultimaFila = null;
+      return;
+    }
+    ultimaFila = leida;
+    pintarLista();
+  }
+
+  function tablaDeRuta(ruta, lista, claseExtra) {
+    var mio = normalizarInterno(miBus);
+    var filas = lista.map(function (it, idx) {
+      var esMio = mio && normalizarInterno(it.bus) === mio;
+      return '<tr class="fila-espera' + (idx === 0 ? " primero" : "") + (esMio ? " mio" : "") + '">' +
+        '<td class="pos"><span class="pos-num">' + (idx + 1) + "</span></td>" +
+        '<td class="hora">' + escaparHtml(it.hora) + "</td>" +
+        '<td class="hace">' + escaparHtml(it.hace) + "</td>" +
+        '<td class="interno">' + escaparHtml(it.bus) + (esMio ? ' <span class="tu">Tú</span>' : "") + "</td>" +
+        '<td class="col-puesto">' + escaparHtml(it.puesto) + "</td>" +
         '<td class="col-estado">' + it.estado + "</td>" +
       "</tr>";
     }).join("");
 
-    box.innerHTML =
-      '<div class="lista-espera">' +
-        '<table class="arrivals">' +
-          "<thead><tr>" +
-            "<th>#</th><th>Hora</th><th>Hace</th><th>Bus</th>" +
-            "<th>Ruta</th><th>Puesto</th><th>Estado</th>" +
-          "</tr></thead>" +
-          "<tbody>" + filas + "</tbody>" +
-        "</table>" +
-      "</div>";
+    return '<section class="ruta-grupo' + (claseExtra ? " " + claseExtra : "") + '">' +
+      '<h3 class="ruta-head">' +
+        '<span class="ruta-nombre">' + escaparHtml(ruta) + "</span>" +
+        '<span class="ruta-count">' + lista.length + (lista.length === 1 ? " bus" : " buses") + "</span>" +
+      "</h3>" +
+      '<table class="arrivals">' +
+        "<thead><tr>" +
+          "<th>#</th><th>Hora</th><th>Hace</th><th>Bus</th>" +
+          "<th>Puesto</th><th>Estado</th>" +
+        "</tr></thead>" +
+        "<tbody>" + filas + "</tbody>" +
+      "</table>" +
+    "</section>";
+  }
+
+  function pintarLista() {
+    var box = document.getElementById("tablaBox");
+    if (!box || !ultimaFila) return;
+
+    // Los itinerarios van por nombre (siempre en el mismo orden, para que
+    // nadie tenga que buscar el suyo) y los sin itinerario al final.
+    var rutas = Object.keys(ultimaFila).sort(function (a, b) {
+      if (a === SIN_ITINERARIO) return 1;
+      if (b === SIN_ITINERARIO) return -1;
+      return a.localeCompare(b, "es");
+    });
+
+    // ¿En qué itinerario y en qué posición está el bus del conductor?
+    var mio = normalizarInterno(miBus);
+    var miRuta = null;
+    var miIdx = -1;
+    if (mio) {
+      rutas.some(function (ruta) {
+        var i = ultimaFila[ruta].findIndex(function (it) { return normalizarInterno(it.bus) === mio; });
+        if (i < 0) return false;
+        miRuta = ruta;
+        miIdx = i;
+        return true;
+      });
+    }
+
+    var html;
+    if (miRuta) {
+      var lista = ultimaFila[miRuta];
+      var yo = lista[miIdx];
+      var antes = miIdx;
+      var otras = rutas.filter(function (r) { return r !== miRuta; });
+      var busesOtras = otras.reduce(function (n, r) { return n + ultimaFila[r].length; }, 0);
+
+      html =
+        '<div class="mi-turno' + (antes === 0 ? " sigue" : "") + '">' +
+          '<div class="mi-turno-pos"><strong>' + (miIdx + 1) + "</strong><span>de " + lista.length + "</span></div>" +
+          '<div class="mi-turno-info">' +
+            "<strong>" + (antes === 0
+              ? "¡Sigues tú!"
+              : (antes === 1 ? "Falta 1 bus antes que tú" : "Faltan " + antes + " buses antes que tú")) + "</strong>" +
+            "<span>Bus " + escaparHtml(yo.bus) + " · despachado por <b>" + escaparHtml(miRuta) + "</b></span>" +
+            "<span>Llegó " + escaparHtml(yo.hora) + (yo.hace ? " · " + escaparHtml(yo.hace) : "") + "</span>" +
+          "</div>" +
+        "</div>" +
+        tablaDeRuta(miRuta, lista, "ruta-mia") +
+        (otras.length
+          ? '<button type="button" class="ver-otros" aria-expanded="' + (verOtros ? "true" : "false") + '">' +
+              (verOtros ? "Ocultar los otros itinerarios" : "Ver los otros itinerarios (" + busesOtras +
+                (busesOtras === 1 ? " bus" : " buses") + ")") +
+            "</button>" +
+            (verOtros ? '<div class="otros-itinerarios">' +
+              otras.map(function (r) { return tablaDeRuta(r, ultimaFila[r]); }).join("") + "</div>" : "")
+          : "");
+    } else {
+      var aviso = miBus
+        ? "Tu bus " + escaparHtml(miBus) + " no está esperando turno en el aeropuerto en este momento. " +
+          "Abajo están los que esperan, cada itinerario con su fila."
+        : "Abajo están los buses que esperan turno, cada itinerario con su fila.";
+      html = '<p class="mi-turno-aviso">' + aviso + "</p>" +
+        rutas.map(function (r) { return tablaDeRuta(r, ultimaFila[r]); }).join("");
+    }
+
+    box.innerHTML = '<div class="lista-espera">' + html + "</div>";
   }
 
   function observarListas() {
@@ -172,6 +322,14 @@
     if (!box) return false;
 
     reorganizarListas();
+
+    // Botón de ver los otros itinerarios. Se escucha en la caja, que no se
+    // reemplaza, porque lo de adentro se repinta cada minuto.
+    box.addEventListener("click", function (ev) {
+      if (!ev.target.closest || !ev.target.closest(".ver-otros")) return;
+      verOtros = !verOtros;
+      pintarLista();
+    });
 
     if (typeof MutationObserver !== "undefined") {
       // main.js repinta esta caja en cada actualización de la fila (realtime,

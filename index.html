@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="./css/portal.css?v=1.24.2">
+  <link rel="stylesheet" href="./css/portal.css?v=1.26.0">
 </head>
 <body>
 
@@ -49,6 +49,9 @@
     <p id="loginError" class="form-error" hidden></p>
 
     <button id="loginSubmit" class="btn btn-primary btn-block" type="submit">Entrar</button>
+
+    <!-- v1.25.0: la práctica no pide usuario; es una página aparte, sin la base -->
+    <a class="link-practica" href="./practica/">¿Primera vez? Practica sin entrar ›</a>
 
     <p class="version-note">Portal del Conductor <span data-version></span></p>
   </form>
@@ -388,6 +391,7 @@
         <div><dt>Versión</dt><dd data-version>—</dd></div>
       </dl>
       <button id="btnInstalarPerfil" class="btn btn-primary btn-block" type="button" hidden>Instalar aplicación</button>
+      <a class="btn btn-ghost btn-block" href="./practica/">Practicar cómo se usa el portal</a>
       <button id="btnCambiarSeleccion" class="btn btn-ghost btn-block" type="button">Cambiar de conductor</button>
       <button id="btnBuscarActualizacion" class="btn btn-ghost btn-block" type="button">Buscar actualización</button>
       <p id="actualizacionEstado" class="actualizacion-estado" role="status" hidden></p>
@@ -794,7 +798,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./js/portal-config.js?v=1.24.2"></script>
-<script src="./js/portal.js?v=1.24.2"></script>
+<script src="./js/portal-config.js?v=1.26.0"></script>
+<script src="./js/portal.js?v=1.26.0"></script>
 </body>
 </html>
