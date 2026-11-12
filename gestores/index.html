@@ -15,7 +15,9 @@
          - Cómo se hace: la guía con dibujos y "Si algo falla".
          - Mi cuenta: quién es, para quién es la app y cambiar la cédula.
        g2.7.0: "Mostrar mi código" (sirve sin internet): si la persona no puede leer el código del bus, el conductor
-       lee este con su portal (o escribe la cédula) y le toma una foto. -->
+       lee este con su portal (o escribe la cédula) y le toma una foto.
+       g2.8.0: VUELOS, solo para los gestores: los vuelos que llegan hoy al aeropuerto y, de cada uno, en qué bus se
+       fueron los pasajeros y cuántos (sql v22, vuelos_gestores.sql). -->
 
   <link rel="manifest" href="./manifest.webmanifest">
   <meta name="theme-color" content="#0b6b3a">
@@ -29,8 +31,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="../css/portal.css?v=g2.7.0">
-  <link rel="stylesheet" href="./gestores.css?v=g2.7.0">
+  <link rel="stylesheet" href="../css/portal.css?v=g2.8.0">
+  <link rel="stylesheet" href="./gestores.css?v=g2.8.0">
 </head>
 <body class="app-gestores">
 
@@ -121,6 +123,11 @@
       <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>
       <span>Mostrar mi código <small>si no tengo internet</small></span>
     </button>
+    <!-- g2.8.0: solo los gestores -->
+    <button id="btnIrVuelos" class="btn btn-block btn-ir-vuelos" type="button" data-ir="vuelos" hidden>
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M2.5 19h19"/><path d="M3.8 12.2 6 11l3 2.2 3.6-1.9-5-4.9 2-1 7 3.9 3.6-1.9a2 2 0 0 1 2 3.4L9.6 16.4a3 3 0 0 1-2.9 0L3.4 14.6a1.4 1.4 0 0 1 .4-2.4Z"/></svg>
+      <span>Vuelos: anotar pasajeros <small id="btnIrVuelosNota">De cada vuelo, cuántos y en qué bus</small></span>
+    </button>
 
     <article class="card">
       <header class="card-head">
@@ -142,6 +149,31 @@
       </button>
     </div>
 
+    <p class="version-note">Personal Combuses <span data-version></span></p>
+  </div>
+
+  <!-- ---- Vuelos (g2.8.0, solo gestores): de cada vuelo que llega, en qué bus se fueron y cuántos ---- -->
+  <div class="home pestana" data-pestana="vuelos" hidden>
+    <div class="pestana-cabeza">
+      <h2>Vuelos</h2>
+      <p>Cada vuelo con sus pasajeros y <b>los buses que se los llevaron</b>. En <b>Buses que salen</b>, los carros que va lanzando el aeropuerto.</p>
+    </div>
+    <div id="vuelosFallas" class="vuelos-fallas" hidden></div>
+    <div id="vuelosResumen" class="vuelos-resumen" aria-live="polite"></div>
+    <div class="vuelos-filtros">
+      <div class="segmentado segmentado-3" role="group" aria-label="Qué ver">
+        <button type="button" class="seg activo" data-vista-vuelos="ahora" aria-pressed="true">Vuelos ahora</button>
+        <button type="button" class="seg" data-vista-vuelos="dia" aria-pressed="false">Todo el día</button>
+        <button type="button" class="seg" data-vista-vuelos="buses" aria-pressed="false">Buses que salen</button>
+      </div>
+      <label class="vuelos-buscar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="vuelosBuscar" type="search" placeholder="Buscar vuelo, aerolínea, ciudad o bus" autocomplete="off" aria-label="Buscar vuelo, aerolínea, ciudad o bus">
+      </label>
+    </div>
+    <p id="vuelosEstado" class="vuelos-estado" role="status" hidden></p>
+    <ul id="vuelosLista" class="vuelos-lista"></ul>
+    <button id="vuelosOtraVez" class="btn btn-ghost btn-block" type="button" hidden>Volver a cargar</button>
     <p class="version-note">Personal Combuses <span data-version></span></p>
   </div>
 
@@ -204,6 +236,9 @@
       <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><circle cx="42" cy="36" r="30" class="g-fondo"/><circle cx="42" cy="29" r="9"/><path d="M26 55c3-9 9-13 16-13s13 4 16 13"/><circle cx="74" cy="52" r="13" class="g-ok"/><path d="M68 52l4 4 8-8" class="g-ok-trazo"/></svg>
         <div><b>Su foto y listo</b>
           <p>Tómese una foto y toque <strong>Registrarme</strong>. Queda en el viaje de ese bus: cuenta como pasajero, pero no se le cobra.</p></div></li>
+      <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><path d="M6 26 13 23l8 6 10-5-14-13 6-3 19 10 10-5a5 5 0 0 1 5 9L27 39a8 8 0 0 1-8 0l-9-5a4 4 0 0 1-4-8Z" class="g-blanco"/><rect x="50" y="36" width="42" height="26" rx="5" class="g-fondo"/><rect x="55" y="41" width="32" height="9" rx="2" class="g-blanco"/><circle cx="59" cy="63" r="4" class="g-blanco"/><circle cx="83" cy="63" r="4" class="g-blanco"/><path d="M30 52h14M38 46l6 6-6 6" class="g-acento"/></svg>
+        <div><b>En el aeropuerto (gestores): los vuelos</b>
+          <p>En <strong>Vuelos</strong>, toque el vuelo, escoja <strong>el bus</strong> en que se fueron y diga <strong>cuántos pasajeros</strong>. Si se fueron en dos buses, guarde uno y después el otro. En <strong>Buses que salen</strong> ve los carros que va lanzando el aeropuerto y cuáles salieron sin anotar.</p></div></li>
       <li class="guia-paso"><svg viewBox="0 0 96 72" class="guia-dibujo" aria-hidden="true"><path d="M20 30a40 40 0 0 1 56 0M29 39a27 27 0 0 1 38 0M38 48a14 14 0 0 1 20 0"/><circle cx="48" cy="57" r="3.5" class="g-relleno"/><path d="M22 66L74 10" class="g-acento"/></svg>
         <div><b>Si no tiene internet</b>
           <p>Toque <strong>Mostrar mi código</strong> y muéstreselo al conductor: él lo lee con su celular (o escribe su cédula) y le toma una foto. Así queda registrado. La entrada y la salida sí necesitan internet.</p></div></li>
@@ -233,6 +268,16 @@
         <summary>No tengo señal o no tengo datos</summary>
         <p>Toque <strong>Mostrar mi código</strong> y muéstreselo al conductor: él lo registra desde su celular y le toma
           una foto. Si no tiene la app a mano, dígale su cédula. La entrada y la salida sí necesitan internet.</p>
+      </details>
+      <details>
+        <summary>Me equivoqué al anotar un vuelo</summary>
+        <p>Abra el vuelo y toque <strong>Quitar</strong> al lado del bus que quedó mal; después anótelo bien. Solo se puede
+          quitar lo que usted anotó, el mismo día.</p>
+      </details>
+      <details>
+        <summary>El vuelo no aparece o el bus no sale en la lista</summary>
+        <p>Toque <strong>Todo el día</strong> o busque el vuelo por su número. Si el bus no sale entre los botones,
+          escriba su número en <strong>Otro bus</strong>.</p>
       </details>
       <details>
         <summary>Mi cédula no aparece</summary>
@@ -271,6 +316,7 @@
           <li>Marca su entrada y su salida en los puntos autorizados, con una foto. Va a la asistencia y a Buk.</li>
           <li>Se registra al subir a un bus leyendo el código del conductor. Cuenta como pasajero, pero no se cobra.</li>
           <li>Si no tiene internet, muestra su código y el conductor lo registra con una foto.</li>
+          <li>Los gestores anotan, de cada vuelo que llega, cuántos pasajeros se fueron y en qué bus.</li>
           <li>Ve las noticias de la empresa en la campana.</li>
         </ul>
       </div>
@@ -284,6 +330,10 @@
     <button class="menu-item activo" type="button" data-ir="inicio" aria-current="page">
       <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M9 22V12h6v10"/></svg>
       <span>Inicio</span>
+    </button>
+    <button id="menuVuelos" class="menu-item" type="button" data-ir="vuelos" hidden>
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M2.5 19h19"/><path d="M3.8 12.2 6 11l3 2.2 3.6-1.9-5-4.9 2-1 7 3.9 3.6-1.9a2 2 0 0 1 2 3.4L9.6 16.4a3 3 0 0 1-2.9 0L3.4 14.6a1.4 1.4 0 0 1 .4-2.4Z"/></svg>
+      <span>Vuelos</span>
     </button>
     <button class="menu-item" type="button" data-ir="puntos">
       <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
@@ -342,6 +392,64 @@
       <div class="qr-tiempo" aria-hidden="true"><div id="miCodigoBarra" class="qr-barra"></div></div>
       <p id="miCodigoQueda" class="qr-queda" role="status"></p>
       <button id="miCodigoListo" class="btn btn-ghost btn-block" type="button">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Un vuelo (g2.8.0): lo anotado y anotar otro bus ============ -->
+<div id="vueloSheet" class="sheet-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="vueloTitulo">
+    <header class="sheet-head">
+      <div class="vuelo-cabeza">
+        <h3 id="vueloTitulo">Vuelo</h3>
+        <p id="vueloSub" class="vuelo-sub"></p>
+      </div>
+      <button id="vueloCerrar" class="icon-btn" type="button" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <div id="vueloAnotado" class="vuelo-anotado"></div>
+      <p id="vueloListo" class="vuelo-listo" role="status" hidden></p>
+      <form id="vueloForm" class="vuelo-form" novalidate>
+        <p class="vuelo-paso"><b>1</b> ¿En qué bus se fueron?</p>
+        <div id="vueloBuses" class="vuelo-buses"></div>
+        <label class="field field-bus">
+          <span>Otro bus</span>
+          <input id="vueloBus" type="text" inputmode="numeric" maxlength="6" placeholder="Escriba el número del bus" autocomplete="off">
+        </label>
+        <p class="vuelo-paso"><b>2</b> ¿Cuántos pasajeros de este vuelo?</p>
+        <div class="contador">
+          <button id="pasMenos" class="contador-btn" type="button" aria-label="Uno menos">&minus;</button>
+          <input id="vueloPasajeros" class="contador-num" type="text" inputmode="numeric" maxlength="2" placeholder="0" autocomplete="off" aria-label="Pasajeros">
+          <button id="pasMas" class="contador-btn" type="button" aria-label="Uno más">+</button>
+        </div>
+        <p id="vueloCupo" class="vuelo-cupo" hidden></p>
+        <p id="vueloError" class="form-error" role="alert" hidden></p>
+        <button id="vueloGuardar" class="btn btn-primary btn-block" type="submit">Guardar</button>
+        <p class="vuelo-nota">¿Se fueron en varios buses? Guarde un bus, y después el otro.</p>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Un bus que salió (o en la fila): ¿de qué vuelo eran los pasajeros? ============ -->
+<div id="busSheet" class="sheet-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="busTitulo">
+    <header class="sheet-head">
+      <div class="vuelo-cabeza">
+        <h3 id="busTitulo">Bus</h3>
+        <p id="busSub" class="vuelo-sub"></p>
+      </div>
+      <button id="busCerrar" class="icon-btn" type="button" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <div id="busLleva" class="vuelo-anotado"></div>
+      <p class="vuelo-paso"><b>1</b> ¿De qué vuelo eran los pasajeros?</p>
+      <ul id="busVuelos" class="bus-vuelos"></ul>
+      <p class="vuelo-nota">¿No está el vuelo? Ciérrelo y búsquelo en <b>Todo el día</b>.</p>
     </div>
   </div>
 </div>
@@ -446,16 +554,16 @@
 </div>
 
 <!-- Solo la dirección de Supabase y la llave pública (la misma del portal); no inicia sesión. -->
-<script src="../js/portal-config.js?v=g2.7.0"></script>
-<script src="../js/vendor/jsQR.min.js?v=g2.7.0"></script>
-<script src="../js/vendor/qrcode.min.js?v=g2.7.0"></script>
-<script src="./gestores-app.js?v=g2.7.0"></script>
+<script src="../js/portal-config.js?v=g2.8.0"></script>
+<script src="../js/vendor/jsQR.min.js?v=g2.8.0"></script>
+<script src="../js/vendor/qrcode.min.js?v=g2.8.0"></script>
+<script src="./gestores-app.js?v=g2.8.0"></script>
 <script>
   // La primera vez que se abre después de una actualización, el service worker viejo todavía entrega el
   // programa que tenía guardado (con la g2.0.0 la tarjeta se quedaba en "Consultando…"). Si el programa
   // que corrió no es de esta página, se espera al service worker nuevo y se recarga (máximo 2 veces).
   (function () {
-    var esta = "g2.7.0";
+    var esta = "g2.8.0";
     var corrio = (document.querySelector("[data-version]") || {}).textContent;
     if (!corrio || corrio === esta || !("serviceWorker" in navigator)) return;
     var marca = "personal_app_recarga_" + esta;

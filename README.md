@@ -435,7 +435,7 @@ coincide con el ícono, que ya decía PERSONAL) y dice que es para los gestores 
 administrativos. Sigue abierta a cualquier persona vinculada: un mecánico que se sube al bus se sigue
 registrando.
 
-La versión de la app del personal va aparte (`g2.6.1`): está en
+La versión de la app del personal va aparte (hoy `g2.8.0`): está en
 `gestores/gestores-app.js`, en `gestores/sw.js` y en los `?v=` y el `esta` del
 final de `gestores/index.html`. Si cambia `css/portal.css` o `js/vendor/jsQR.min.js`, hay
 que subirla también, o los celulares siguen con los guardados.
@@ -609,6 +609,25 @@ entrar"** debajo de Entrar y con **Perfil → Practicar cómo se usa el portal**
 - **Si cambian los textos o las reglas del portal** (`js/portal.js`), hay que cambiarlos también en `practica.js`.
   `nueva-version.ps1` no toca el `?v=` de `practica/index.html` ni el de `sw.js` para la práctica: súbalos a mano si
   cambia la práctica.
+
+### Vuelos: los gestores anotan los pasajeros de cada vuelo (app del personal g2.8.0, SQL v22)
+
+Pedido del usuario el 11-nov-2026: que los vuelos queden en una tabla y que los gestores les pongan los pasajeros y los
+buses en que se fueron, bien organizado por vuelo, y que les diga qué carros va lanzando el aeropuerto.
+
+- **Solo para los gestores** (cargo con "GESTOR" en colaboradores): botón *Vuelos: anotar pasajeros* en el Inicio y en
+  el menú. A los demás no les sale.
+- **Tres vistas:** *Vuelos ahora* (los que llegan cerca de esta hora), *Todo el día* y *Buses que salen* (las salidas
+  del aeropuerto de hoy, 4501, 4503 y 4507, con lo que lleva cada bus, y la fila del aeropuerto).
+- **Cada vuelo es una tarjeta** con sus buses: pasajeros, una barra de cuánto lleva el bus de 19 y si ya *salió*, está
+  *en la fila (turno N)* o *todavía sin despacho*. Desde un bus que salió se puede preguntar *¿de qué vuelo eran?*.
+- **Anotar:** se escoge el bus (los que salieron hace poco, los primeros de la fila o escrito a mano) y los pasajeros
+  (1 a 19). Cupo de 19 por bus contando lo anotado 1 h 30 antes o después. Se puede **quitar** lo que uno mismo anotó
+  en las 12 horas siguientes. Sin señal queda en el celular y se manda solo.
+- **Base:** `vuelos_gestor_tablero`, `vuelos_gestor_anotar` y `vuelos_gestor_quitar` (sin sesión, con la cédula), la
+  hoja `vuelos_gestor_registros` (nadie la lee sin sesión) y `vuelos_gestor_por_vuelo` (solo con sesión: la usa la
+  pestaña Vuelos de la app de los despachadores del aeropuerto, sin cédula ni nombre). El tablero se refresca cada
+  minuto; los vuelos los trae la función del aeropuerto cada 5 minutos.
 
 ### El conductor registra al personal sin internet (v1.24.0, app del personal g2.7.0, SQL v17)
 

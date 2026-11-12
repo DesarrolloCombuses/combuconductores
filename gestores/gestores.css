@@ -438,3 +438,362 @@
 .menu-item .ico { width: 23px; height: 23px; }
 .menu-item.activo { color: var(--primary); }
 .menu-item.activo span { font-weight: 800; }
+
+/* =========================================================================
+   g2.8.0: VUELOS (solo gestores). Pedido del usuario el 11-nov-2026: "que los vuelos queden en una tabla y que los
+   gestores les pongan los pasajeros y los vehículos en los cuales son despachados".
+   ========================================================================= */
+/* Con Vuelos el menú tiene 5 partes: letra un poco más chica para que quepa "Dónde marcar" */
+.menu-gestores.con-vuelos .menu-item { font-size: 10.5px; }
+
+/* El botón del inicio */
+.btn-ir-vuelos {
+  min-height: 60px;
+  gap: 10px;
+  justify-content: flex-start;
+  padding-inline: 16px;
+  border: 1px solid #c9dcf5;
+  border-radius: var(--radius-lg);
+  background: #eef5fd;
+  color: #1e4f8a;
+}
+.btn-ir-vuelos:hover:not(:disabled) { background: #e3eefb; }
+.btn-ir-vuelos .ico { width: 26px; height: 26px; flex: none; }
+.btn-ir-vuelos span { text-align: left; line-height: 1.2; font-weight: 750; }
+.btn-ir-vuelos small { display: block; font-size: 12.5px; font-weight: 500; color: #4a6a8f; }
+
+/* El resumen de hoy */
+.vuelos-resumen:empty { display: none; }
+.vuelos-resumen {
+  padding: 13px 14px;
+  border-radius: var(--radius);
+  background: linear-gradient(160deg, #1f5fa8 0%, #174a85 100%);
+  color: #fff;
+  box-shadow: 0 10px 22px -14px rgba(23, 74, 133, .7);
+}
+.vr-dia { margin: 0; font-size: 13px; font-weight: 600; opacity: .85; }
+.vr-dia::first-letter { text-transform: uppercase; }
+.vr-cifras { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+.vr-cifras div { display: flex; flex-direction: column; min-width: 0; }
+.vr-cifras b { font-size: 26px; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.vr-cifras span { font-size: 12.5px; opacity: .85; }
+.vr-mio { margin: 10px 0 0; padding-top: 9px; border-top: 1px solid rgba(255, 255, 255, .2); font-size: 13.5px; }
+.vr-pend { padding: 1px 8px; border-radius: var(--radius-pill); background: #fde68a; color: #713f12; font-weight: 700; }
+
+/* Ahora / Todo el día y el buscador */
+.vuelos-filtros { display: flex; flex-direction: column; gap: 9px; }
+.segmentado { display: grid; grid-template-columns: 1fr 1fr; padding: 4px; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--panel); }
+.seg {
+  min-height: 38px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.seg.activo { background: var(--primary); color: #fff; }
+.vuelos-buscar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.vuelos-buscar .ico { width: 19px; height: 19px; flex: none; color: var(--muted); }
+.vuelos-buscar input { flex: 1; min-width: 0; min-height: 44px; border: 0; background: none; font: inherit; font-size: 15.5px; color: var(--ink); outline: none; }
+.vuelos-buscar:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-glow); }
+
+.vuelos-estado { margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--panel-2); color: var(--ink-2); font-size: 14px; font-weight: 600; }
+.vuelos-estado[data-estado="aviso"] { background: var(--warn-soft); color: var(--warn-ink); }
+.vuelos-estado[data-estado="error"] { background: var(--danger-soft); color: var(--danger); }
+.vuelos-fallas { display: flex; flex-direction: column; gap: 8px; padding: 11px 13px; border-radius: var(--radius); background: var(--danger-soft); color: var(--danger); }
+.vuelos-fallas-titulo { margin: 0; font-size: 14.5px; font-weight: 800; }
+.vuelos-fallas ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.vuelos-fallas li { display: flex; flex-direction: column; font-size: 13.5px; }
+.vuelos-fallas li span { color: var(--ink-2); }
+.vuelos-fallas .btn { align-self: flex-start; }
+
+/* La lista de vuelos: hora | vuelo | lo anotado */
+.vuelos-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.vuelos-nada { padding: 16px 4px; text-align: center; font-size: 14.5px; color: var(--muted); }
+.vuelo-item {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+}
+.vuelo-item:active { transform: translateY(1px); }
+.vuelo-item[data-anotado="true"] { border-left-color: var(--primary); }
+.vuelo-hora { display: flex; flex-direction: column; min-width: 0; }
+.vuelo-hora b { font-size: 15.5px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vuelo-hora small { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.vuelo-item[data-paso="true"] .vuelo-hora small { color: var(--primary-strong); font-weight: 650; }
+.vuelo-datos { display: flex; flex-direction: column; min-width: 0; }
+.vuelo-linea { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 7px; }
+.vuelo-cod { font-size: 16.5px; font-weight: 800; letter-spacing: .2px; }
+.vuelo-datos small { overflow: hidden; font-size: 12.5px; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.vuelo-estado { padding: 1px 8px; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--panel-2); color: var(--ink-2); font-size: 11.5px; font-weight: 700; }
+.vuelo-estado[data-tipo="ok"] { border-color: #bfe3cb; background: #e3f4e8; color: #0b6b3a; }
+.vuelo-estado[data-tipo="info"] { border-color: #c9dcf5; background: #eef5fd; color: #1e4f8a; }
+.vuelo-estado[data-tipo="espera"] { border-color: #f3dca6; background: var(--warn-soft); color: var(--warn-ink); }
+.vuelo-estado[data-tipo="mal"] { border-color: #f5c6c0; background: var(--danger-soft); color: var(--danger); }
+.vuelo-cuenta { display: flex; flex-direction: column; align-items: flex-end; min-width: 64px; text-align: right; }
+.vuelo-cuenta b { font-size: 22px; font-weight: 800; line-height: 1; color: var(--primary); font-variant-numeric: tabular-nums; }
+.vuelo-cuenta small { font-size: 11.5px; color: var(--muted); }
+.vuelo-cuenta .vuelo-buses-txt { max-width: 92px; font-weight: 650; color: var(--ink-2); }
+.vuelo-cuenta .vuelo-sin { font-size: 12px; }
+.vuelo-cuenta .vuelo-pend { margin-top: 3px; padding: 0 7px; border-radius: var(--radius-pill); background: #fde68a; color: #713f12; font-weight: 700; }
+.vuelo-mas {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-top: 3px;
+  border-radius: 50%;
+  background: var(--soft);
+  color: var(--primary);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* La hoja de un vuelo */
+.vuelo-cabeza { min-width: 0; }
+.vuelo-sub { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
+.vuelo-anotado { display: flex; flex-direction: column; gap: 8px; }
+.va-titulo, .va-nada { margin: 0; font-size: 14.5px; color: var(--ink-2); }
+.va-nada { color: var(--muted); }
+.va-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.va-lista li {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+  font-size: 14px;
+}
+.va-bus b, .va-pas b { font-size: 16px; font-weight: 800; }
+.va-quien { min-width: 0; font-size: 12.5px; color: var(--muted); }
+.va-quien em { font-style: normal; font-weight: 700; color: var(--warn-ink); }
+.va-quitar { min-height: 32px; padding: 4px 10px; font-size: 13px; }
+.vuelo-listo { margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); background: #e3f4e8; color: #0b6b3a; font-size: 14.5px; font-weight: 700; }
+.vuelo-listo[data-estado="pendiente"] { background: var(--warn-soft); color: var(--warn-ink); }
+.vuelo-form { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.vuelo-paso { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15.5px; font-weight: 750; color: var(--ink); }
+.vuelo-paso b {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 13px;
+}
+.vuelo-buses { display: flex; flex-direction: column; gap: 6px; }
+.buses-titulo { margin: 2px 0 0; font-size: 12.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); }
+.bus-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.bus-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 66px;
+  padding: 6px 9px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+.bus-chip b { font-size: 17px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.bus-chip small { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.bus-chip[aria-pressed="true"] { border-color: var(--primary); background: var(--primary); color: #fff; }
+.bus-chip[aria-pressed="true"] small { color: var(--primary-ink); }
+.bus-chip[data-lleno="true"] { opacity: .55; }
+.field-bus { margin-bottom: 0; }
+.contador { display: grid; grid-template-columns: 56px minmax(0, 1fr) 56px; gap: 10px; align-items: center; }
+.contador-btn {
+  height: 56px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--primary);
+  font: inherit;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+.contador-btn:active { background: var(--soft); }
+.contador-num {
+  min-width: 0;
+  height: 56px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+  font: inherit;
+  font-size: 30px;
+  font-weight: 800;
+  text-align: center;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.contador-num:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-glow); }
+.vuelo-cupo { margin: 0; font-size: 13.5px; color: var(--ink-2); }
+.vuelo-cupo[data-lleno="true"] { font-weight: 700; color: var(--danger); }
+.vuelo-nota { margin: 0; font-size: 12.5px; text-align: center; color: var(--muted); }
+
+/* ---- Organizado por vuelo: cada vuelo con sus buses debajo (cuántos, si salió y para dónde) ---- */
+.segmentado-3 { grid-template-columns: 1fr 1fr 1.25fr; }
+.segmentado-3 .seg { min-height: 40px; padding: 0 4px; font-size: 13.5px; line-height: 1.1; }
+.vcard {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+}
+.vcard[data-anotado="true"] { border-left-color: var(--primary); }
+.vcard .vuelo-item { border: 0; border-radius: 0; background: none; box-shadow: none; }
+.vb-lista { list-style: none; margin: 0; padding: 0 12px; display: flex; flex-direction: column; gap: 6px; }
+.vb {
+  display: grid;
+  grid-template-columns: 72px 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+}
+.vb-bus { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.vb-bus .ico { width: 19px; height: 19px; flex: none; color: var(--ink-2); }
+.vb-bus b { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.vb-pas { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+.vb-pas b { font-size: 21px; font-weight: 800; color: var(--primary); font-variant-numeric: tabular-nums; }
+.vb-pas small { font-size: 11px; color: var(--muted); }
+.vb-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.vb-estado { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 750; }
+.vb-estado::before { content: ""; width: 8px; height: 8px; flex: none; border-radius: 50%; background: currentColor; }
+.vb[data-estado="salio"] .vb-estado { color: #0b6b3a; }
+.vb[data-estado="fila"] .vb-estado { color: #1e4f8a; }
+.vb[data-estado="espera"] .vb-estado { color: var(--warn-ink); }
+.vb-quien { font-size: 11.5px; color: var(--muted); }
+.vb .vuelo-pend, .sc-vuelo .vuelo-pend { align-self: flex-start; padding: 0 7px; border-radius: var(--radius-pill); background: #fde68a; color: #713f12; font-size: 11.5px; font-weight: 700; }
+.barra-bus { display: block; height: 6px; overflow: hidden; border-radius: var(--radius-pill); background: var(--line); }
+.barra-bus i { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
+.barra-bus.llena i { background: #b45309; }
+.vcard-anotar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  margin: 8px 12px 12px;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.vcard-anotar span { font-size: 19px; line-height: 1; }
+.vcard-anotar:active { background: var(--soft); }
+
+/* ---- Buses que salen: los carros que va lanzando el aeropuerto ---- */
+.salidas-resumen { padding: 10px 12px; border-radius: var(--radius-sm); background: var(--panel-2); color: var(--ink-2); font-size: 14px; }
+.salidas-fila { display: flex; flex-direction: column; gap: 6px; }
+.salidas-titulo { list-style: none; margin-top: 6px; }
+.bus-chip[data-con="true"] { border-color: var(--primary); background: var(--soft); }
+.scard { list-style: none; }
+.scard-btn {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 10px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-left: 4px solid #e0a43a;
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+}
+.scard[data-anotado="true"] .scard-btn { border-left-color: var(--primary); }
+.scard-btn:active { transform: translateY(1px); }
+.sc-hora { display: flex; flex-direction: column; min-width: 0; }
+.sc-hora b { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sc-hora small { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.sc-bus { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.sc-bus .ico { width: 24px; height: 24px; flex: none; color: var(--ink-2); }
+.sc-bus span { display: flex; flex-direction: column; min-width: 0; }
+.sc-bus b { font-size: 17px; font-weight: 800; }
+.sc-bus small { overflow: hidden; font-size: 12.5px; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.sc-cupo { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
+.sc-cupo b { font-size: 22px; font-weight: 800; line-height: 1; color: var(--primary); font-variant-numeric: tabular-nums; }
+.sc-cupo small { font-size: 11.5px; color: var(--muted); }
+.sc-cupo .vuelo-sin { font-weight: 700; color: var(--warn-ink); }
+.scard-btn .barra-bus { grid-column: 1 / -1; }
+.sc-vuelos { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; }
+.sc-vuelo {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 8px;
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+  font-size: 13.5px;
+}
+.sc-vuelo b { font-weight: 800; }
+.sc-vuelo small { overflow: hidden; font-size: 12px; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.sc-vuelo em { font-style: normal; font-size: 15px; font-weight: 800; color: var(--primary); font-variant-numeric: tabular-nums; }
+.sc-vuelo .vuelo-pend { grid-column: 1 / -1; }
+.sc-sin { grid-column: 1 / -1; font-size: 13px; font-weight: 650; color: var(--warn-ink); }
+
+/* La hoja del bus: escoger el vuelo */
+#busLleva .barra-bus { margin-bottom: 2px; }
+.bus-vuelos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bv-item {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+}
+.bv-item:active { border-color: var(--primary); background: var(--soft); }

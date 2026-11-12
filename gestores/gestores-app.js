@@ -33,6 +33,10 @@
      7. Mi código (g2.7.0): si la persona no tiene internet, muestra su código
         (sale sin internet) y el conductor la registra desde su portal con una
         foto (sql v17, personal_por_conductor.sql).
+     8. Vuelos (g2.8.0, SOLO GESTORES): los vuelos que llegan hoy y, de cada
+        uno, en qué bus se fueron los pasajeros y cuántos (sql v22,
+        vuelos_gestores.sql: vuelos_gestor_tablero / _anotar / _quitar, sin
+        sesión). Sin señal, lo anotado queda en el celular y se manda después.
 
    Sin sesión, la app solo usa dos funciones de Supabase
    (almacentro/enturnes/sql/personal_empresa.sql, la v10):
@@ -45,7 +49,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "g2.7.0";
+  var VERSION = "g2.8.0";
   var cfg = window.PORTAL_CONFIG || {};
   var RPC_QUIEN_SOY = "personal_quien_soy";
   var RPC_REGISTRAR = "personal_registrar_subida";
@@ -257,6 +261,13 @@
     var yo = estado.yo;
     $("inicioSaludo").textContent = yo.nombre ? "Hola, " + yo.nombre : "Hola";
     $("inicioCargo").textContent = capitalizar(yo.cargo || "");
+    // g2.8.0: Vuelos (el menú y el botón del inicio) solo para los gestores
+    var gestor = esGestor(yo);
+    show($("menuVuelos"), gestor);
+    show($("btnIrVuelos"), gestor);
+    document.querySelector(".menu-gestores").classList.toggle("con-vuelos", gestor);
+    vu.datos = null;
+    vu.recien = [];
     pintarCuenta();
     mostrarVista("inicio");
     irA("inicio");
@@ -265,6 +276,7 @@
     pintarRegistros();
     pintarRed();
     enviarPendientes();
+    if (gestor) enviarColaVuelos();
     consultarAsistencia();
     if (!leerJson(LS_GUIA, false)) abrirGuia();   // la primera vez, la guía sale sola
   }
@@ -277,6 +289,7 @@
 
   function irA(cual) {
     if (!document.querySelector('.pestana[data-pestana="' + cual + '"]')) cual = "inicio";
+    if (cual === "vuelos" && !esGestor()) cual = "inicio";   // g2.8.0: Vuelos es solo para los gestores
     pestana = cual;
     Array.prototype.forEach.call(document.querySelectorAll(".pestana"), function (p) {
       p.hidden = p.getAttribute("data-pestana") !== cual;
@@ -290,6 +303,7 @@
     window.scrollTo(0, 0);
     if (cual === "puntos") abrirPuntos();
     if (cual === "inicio") presentarNoticia();
+    if (cual === "vuelos") { pintarVuelos(); cargarVuelos(); }
   }
 
   // Mi cuenta: quién usa este celular (la cédula, solo los 4 últimos números).
@@ -1549,6 +1563,762 @@
     setInterval(function () { if (estado.yo) pintarNoticias(); }, 10 * 60 * 1000);
   }
 
+  // ------------------------------------------- 8. VUELOS (g2.8.0, solo gestores)
+  // Pedido del usuario (11-nov-2026): "que los vuelos queden en una tabla y que los gestores les pongan los pasajeros
+  // y los vehículos en los cuales son despachados". De cada vuelo que llega: en qué bus se fueron y cuántos (1 a 19
+  // por bus; si se fueron en dos buses, son dos anotaciones). Sin sesión, con 3 funciones (sql v22):
+  //   vuelos_gestor_tablero  los vuelos de hoy, lo anotado y los buses del aeropuerto (la fila y los que bajaron)
+  //   vuelos_gestor_anotar   vuelo + bus + pasajeros (el cupo de 19 por bus lo revisa también el servidor)
+  //   vuelos_gestor_quitar   lo que la misma persona anotó, en las 12 horas siguientes
+  // Sin señal, lo anotado queda en el celular (LS_VUELOS_COLA) y se manda solo cuando vuelva.
+  var RPC_VUELOS = "vuelos_gestor_tablero";
+  var RPC_ANOTAR = "vuelos_gestor_anotar";
+  var RPC_QUITAR_VUELO = "vuelos_gestor_quitar";
+  var LS_VUELOS_COLA = "personal_app_vuelos_cola";     // anotaciones sin enviar (de cualquier cédula)
+  var LS_VUELOS_ULTIMO = "personal_app_vuelos_ultimo"; // la última lista que llegó, para verla sin señal
+  var LS_VUELOS_FALLAS = "personal_app_vuelos_fallas"; // lo que el servidor no aceptó al mandarlo después
+  var CUPO_BUS = 19;
+  var VENTANA_CUPO_MS = 90 * 60 * 1000;                // cuenta lo anotado en el bus hora y media antes o después
+  var AHORA_ANTES_MS = 90 * 60 * 1000;                 // "Ahora": los que llegaron hace hora y media...
+  var AHORA_DESPUES_MS = 60 * 60 * 1000;               // ...y los que llegan en la próxima hora
+  var SALIERON_MS = 60 * 60 * 1000;                    // en la hoja: los buses que bajaron en la última hora...
+  var MAX_SALIERON = 6, MAX_FILA = 8;                  // ...y los primeros de la fila (los demás, escritos)
+  var DESTINOS = { "4501": "Terminal Norte", "4503": "Nutibara", "4507": "Almacentro" };
+  var ESTADOS_VUELO = {
+    LD: { tipo: "ok", texto: "Aterrizó" }, OT: { tipo: "", texto: "A tiempo" }, ER: { tipo: "info", texto: "En camino" },
+    DL: { tipo: "espera", texto: "Demorado" }, CN: { tipo: "mal", texto: "Cancelado" }, PR: { tipo: "", texto: "Programado" },
+  };
+  // Cada anotación se junta con la salida (el despacho del aeropuerto) de ese bus más cercana: de una hora antes de
+  // anotar (lo anotó después de que salió) a hora y media después (lo anotó mientras se llenaba en la fila).
+  var SALIO_ANTES_MS = 60 * 60 * 1000;
+  var SALE_DESPUES_MS = 90 * 60 * 1000;
+  var MOSTRAR_SALIDAS = 15;                            // "Buses que salen": las últimas 15 (las demás, con un botón)
+  var ICONO_BUS = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><rect x="4" y="3" width="16" height="15" rx="2.5"/>' +
+    '<path d="M4 11h16M7.5 21v-3M16.5 21v-3"/><circle cx="8" cy="14.5" r=".6"/><circle cx="16" cy="14.5" r=".6"/></svg>';
+  var vu = { datos: null, cargadoEn: 0, cargando: false, error: null, vista: "ahora", buscar: "", abierto: null,
+    bus: "", busT: null, recien: [], guardando: false, enviando: false, todasSalidas: false, busAbierto: null };
+
+  function esGestor(yo) { return /GESTOR/i.test(String(((yo || estado.yo) || {}).cargo || "")); }
+  function claveVuelo(v) { return String(v.fecha) + "|" + String(v.vuelo || "").toUpperCase(); }
+  function msDe(iso) { var t = Date.parse(iso || ""); return isNaN(t) ? null : t; }
+  function sinTildes(s) { return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase(); }
+  function normalizarBus(s) { return String(s || "").toUpperCase().replace(/\s+/g, ""); }
+  function unicos(lista) { return lista.filter(function (x, i) { return lista.indexOf(x) === i; }); }
+
+  // "en 40 min", "hace 1 h 10 min"
+  function cuandoLlega(t) {
+    var min = Math.round((t - Date.now()) / 60000);
+    var a = Math.abs(min);
+    var txt = a < 60 ? a + " min" : Math.floor(a / 60) + " h" + (a % 60 ? " " + (a % 60) + " min" : "");
+    if (a <= 1) return "ahora";
+    return min > 0 ? "en " + txt : "hace " + txt;
+  }
+
+  function estadoVuelo(v) {
+    var e = ESTADOS_VUELO[String(v.estado_code || "").toUpperCase()];
+    return { tipo: e ? e.tipo : "", texto: v.estado || (e ? e.texto : "") };
+  }
+
+  function textoErrorVuelos(err) {
+    if (err && (err.code === "PGRST202" || err.status === 404)) {
+      return "Vuelos todavía no está habilitado en el servidor. Avísele a control.";
+    }
+    return textoError(err);
+  }
+
+  // Lo anotado: lo que dijo el servidor + lo recién guardado + lo que está en el celular sin enviar.
+  function anotaciones() {
+    var yo = estado.yo || {};
+    var lista = ((vu.datos && vu.datos.registros) || []).map(function (r) {
+      return { id_local: r.id_local || null, fecha: String(r.fecha), vuelo: String(r.vuelo || ""), interno: String(r.interno),
+        pasajeros: Number(r.pasajeros) || 0, nombre: r.nombre || "", mio: !!r.mio, en: msDe(r.anotado_en),
+        quitar: !!r.se_puede_quitar, pendiente: false };
+    });
+    var ya = {};
+    lista.forEach(function (r) { if (r.id_local) ya[r.id_local] = true; });
+    function sumar(c, pendiente) {
+      if (ya[c.id_local] || c.dni !== yo.dni) return;
+      ya[c.id_local] = true;
+      lista.push({ id_local: c.id_local, fecha: c.fecha, vuelo: c.vuelo, interno: c.interno, pasajeros: c.pasajeros,
+        nombre: yo.nombre || "", mio: true, en: c.anotado_ms, quitar: true, pendiente: pendiente });
+    }
+    vu.recien.forEach(function (c) { sumar(c, false); });
+    leerJson(LS_VUELOS_COLA, []).forEach(function (c) { sumar(c, true); });
+    return lista;
+  }
+
+  function anotadoDelVuelo(v, lista) {
+    var k = claveVuelo(v);
+    return (lista || anotaciones()).filter(function (r) { return r.fecha + "|" + r.vuelo.toUpperCase() === k; })
+      .sort(function (a, b) { return (a.en || 0) - (b.en || 0); });
+  }
+
+  // Lo anotado en ese bus una hora y media antes o después de la hora del viaje (la de su salida, o ahora): cupo 19
+  function anotadoEnBus(interno, lista, tViaje) {
+    var ref = tViaje != null ? tViaje : Date.now();
+    return (lista || anotaciones()).reduce(function (s, r) {
+      return s + (r.interno === interno && r.en != null && Math.abs(r.en - ref) <= VENTANA_CUPO_MS ? r.pasajeros : 0);
+    }, 0);
+  }
+
+  // Las salidas del aeropuerto de hoy (la última primero), cada una con lo anotado en ella, y el turno de la fila.
+  function contexto(lista) {
+    var d = vu.datos || {};
+    var ss = (d.bajaron || []).map(function (b) {
+      return { interno: String(b.interno), t: msDe(b.despacho_en), destino: DESTINOS[String(b.itinerario_id)] || "", regs: [] };
+    }).filter(function (s) { return s.t != null; }).sort(function (a, b) { return b.t - a.t; });
+    var turno = {};
+    (d.fila || []).forEach(function (f, i) { var k = String(f.interno); if (!turno[k]) turno[k] = i + 1; });
+    var vuelos = {};
+    (d.vuelos || []).forEach(function (v) { vuelos[claveVuelo(v)] = v; });
+    lista.forEach(function (r) {
+      r.salida = null;
+      if (r.en == null) return;
+      var mejor = null, dif = Infinity;
+      ss.forEach(function (s) {
+        if (s.interno !== r.interno) return;
+        var dd = s.t - r.en;
+        if (dd < -SALIO_ANTES_MS || dd > SALE_DESPUES_MS || Math.abs(dd) >= dif) return;
+        mejor = s;
+        dif = Math.abs(dd);
+      });
+      if (mejor) { r.salida = mejor; mejor.regs.push(r); }
+    });
+    return { ss: ss, turno: turno, vuelos: vuelos, lista: lista };
+  }
+
+  // Dónde va el bus de una anotación: salió (a qué hora y para dónde), en la fila, o todavía sin despacho.
+  function estadoBus(r, cx) {
+    if (r.salida) return { tipo: "salio", texto: "Salió " + horaDe(r.salida.t) + (r.salida.destino ? " a " + r.salida.destino : "") };
+    if (cx.turno[r.interno]) return { tipo: "fila", texto: "En la fila · turno " + cx.turno[r.interno] };
+    return { tipo: "espera", texto: "Todavía sin despacho" };
+  }
+
+  // Cuántos lleva ese bus en ese viaje (de todos los vuelos)
+  function totalViaje(r, cx) {
+    return cx.lista.reduce(function (s, x) {
+      if (x.interno !== r.interno) return s;
+      var mismo = r.salida ? x.salida === r.salida
+        : !x.salida && x.en != null && r.en != null && Math.abs(x.en - r.en) <= VENTANA_CUPO_MS;
+      return s + (mismo ? x.pasajeros : 0);
+    }, 0);
+  }
+
+  function barra(n) {
+    var pct = Math.max(0, Math.min(100, Math.round(n / CUPO_BUS * 100)));
+    return '<span class="barra-bus' + (n >= CUPO_BUS ? " llena" : "") + '" aria-hidden="true"><i style="width:' + pct + '%"></i></span>';
+  }
+
+  async function cargarVuelos(callado) {
+    if (!estado.yo || !esGestor() || vu.cargando) return;
+    if (!vu.datos) {   // sin señal se ve la última lista que llegó a este celular
+      var guardado = leerJson(LS_VUELOS_ULTIMO, null);
+      if (guardado && guardado.dni === estado.yo.dni && guardado.datos) { vu.datos = guardado.datos; vu.cargadoEn = guardado.en || 0; }
+    }
+    vu.cargando = true;
+    if (!callado) pintarVuelos();
+    try {
+      var r = await rpc(RPC_VUELOS, { p_dni: estado.yo.dni }, 20000);
+      if (r && r.no_gestor) {
+        vu.error = { texto: "Vuelos es solo para los gestores." };
+      } else if (!r || r.no_es) {
+        vu.error = { texto: "Su cédula no aparece como personal vinculado. Avísele a control." };
+      } else {
+        vu.datos = r;
+        vu.cargadoEn = Date.now();
+        vu.error = null;
+        // lo recién guardado ya viene del servidor: se deja de pintar aparte
+        var del = {};
+        (r.registros || []).forEach(function (x) { if (x.id_local) del[x.id_local] = true; });
+        vu.recien = vu.recien.filter(function (c) { return !del[c.id_local] && Date.now() - (c.enviado_ms || c.anotado_ms) < 10 * 60 * 1000; });
+        guardarJson(LS_VUELOS_ULTIMO, { dni: estado.yo.dni, en: vu.cargadoEn, datos: r });
+      }
+    } catch (err) {
+      vu.error = { texto: err && err.sinRed ? "Sin internet." : textoErrorVuelos(err), sinRed: !!(err && err.sinRed) };
+    } finally {
+      vu.cargando = false;
+      pintarVuelos();
+      if (vu.abierto) pintarHojaVuelo();
+      if (vu.busAbierto) pintarHojaBus();
+    }
+  }
+
+  function pintarFallasVuelos() {
+    var fallas = leerJson(LS_VUELOS_FALLAS, []);
+    var caja = $("vuelosFallas");
+    if (!fallas.length) { show(caja, false); caja.innerHTML = ""; return; }
+    caja.innerHTML = '<p class="vuelos-fallas-titulo">' + (fallas.length === 1 ? "Esto no quedó anotado" : "Esto no quedó anotado (" + fallas.length + ")") +
+      ":</p><ul>" + fallas.map(function (f) {
+        return "<li><b>" + escapeHtml(f.vuelo) + " · bus " + escapeHtml(f.interno) + " · " + escapeHtml(String(f.pasajeros)) +
+          "</b><span>" + escapeHtml(f.texto) + "</span></li>";
+      }).join("") + '</ul><button type="button" class="btn btn-ghost btn-sm" data-fallas-ok>Entendido</button>';
+    show(caja, true);
+  }
+
+  function pintarVuelos() {
+    if (!$("vuelosLista")) return;
+    pintarFallasVuelos();
+    var est = $("vuelosEstado");
+    var d = vu.datos;
+    show($("vuelosOtraVez"), false);
+    if (!d) {
+      $("vuelosLista").innerHTML = "";
+      $("vuelosResumen").innerHTML = "";
+      est.textContent = vu.cargando ? "Cargando los vuelos…" : (vu.error ? vu.error.texto : "");
+      est.setAttribute("data-estado", vu.error && !vu.cargando ? "error" : "");
+      show(est, !!est.textContent);
+      show($("vuelosOtraVez"), !vu.cargando && !!vu.error);
+      return;
+    }
+    var lista = anotaciones();
+    var deHoy = {};
+    (d.vuelos || []).forEach(function (v) { deHoy[claveVuelo(v)] = true; });
+    var hoy = lista.filter(function (r) { return deHoy[r.fecha + "|" + r.vuelo.toUpperCase()]; });
+    var pas = hoy.reduce(function (s, r) { return s + r.pasajeros; }, 0);
+    var mios = hoy.filter(function (r) { return r.mio; }).reduce(function (s, r) { return s + r.pasajeros; }, 0);
+    var porEnviar = hoy.filter(function (r) { return r.pendiente; }).length;
+    var vuelosAnotados = unicos(hoy.map(function (r) { return r.fecha + "|" + r.vuelo.toUpperCase(); })).length;
+    var buses = unicos(hoy.map(function (r) { return r.interno; })).length;
+    var fechaTxt = "";
+    try {
+      fechaTxt = new Date(d.dia + "T12:00:00-05:00").toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Bogota" });
+    } catch (_) { fechaTxt = d.dia || ""; }
+    $("vuelosResumen").innerHTML =
+      '<p class="vr-dia">Hoy, ' + escapeHtml(fechaTxt) + "</p>" +
+      '<div class="vr-cifras">' +
+        "<div><b>" + pas + "</b><span>pasajeros</span></div>" +
+        "<div><b>" + buses + "</b><span>" + (buses === 1 ? "bus" : "buses") + "</span></div>" +
+        "<div><b>" + vuelosAnotados + "</b><span>de " + (d.vuelos || []).length + " vuelos</span></div>" +
+      "</div>" +
+      '<p class="vr-mio">Usted anotó <b>' + mios + "</b> " + (mios === 1 ? "pasajero" : "pasajeros") +
+        (porEnviar ? ' · <span class="vr-pend">' + porEnviar + " por enviar</span>" : "") + "</p>";
+
+    var aviso = "";
+    if (vu.cargando && !vu.cargadoEn) aviso = "Cargando los vuelos…";
+    else if (vu.error) {
+      aviso = (vu.error.sinRed ? "Sin internet" : vu.error.texto) + (vu.cargadoEn ? ": la lista es la de las " + horaDe(vu.cargadoEn) + "." : "") +
+        " Lo que anote se guarda en el celular y se envía cuando vuelva la señal.";
+    }
+    est.textContent = aviso;
+    est.setAttribute("data-estado", vu.error ? "aviso" : "");
+    show(est, !!aviso);
+
+    var ahora = Date.now();
+    var q = sinTildes(vu.buscar.trim());
+    var cx = contexto(lista);
+    if (vu.vista === "buses") {
+      $("vuelosLista").innerHTML = htmlSalidas(cx, q);
+      return;
+    }
+    var busesDe = {};
+    lista.forEach(function (r) { var k = r.fecha + "|" + r.vuelo.toUpperCase(); busesDe[k] = (busesDe[k] || "") + " " + r.interno; });
+    var visibles = (d.vuelos || []).filter(function (v) {
+      if (q) {   // al buscar, todo el día; también por el bus que se los llevó
+        return sinTildes(v.vuelo + " " + (v.aerolinea || "") + " " + (v.ciudad || "") + (busesDe[claveVuelo(v)] || "")).indexOf(q) >= 0;
+      }
+      if (vu.vista === "dia") return true;
+      var t = msDe(v.llega);
+      return t != null && t >= ahora - AHORA_ANTES_MS && t <= ahora + AHORA_DESPUES_MS;
+    });
+    if (!visibles.length) {
+      var desde = horaDe(ahora - AHORA_ANTES_MS), hasta = horaDe(ahora + AHORA_DESPUES_MS);
+      $("vuelosLista").innerHTML = '<li class="vuelos-nada">' + (q ? "Ningún vuelo de hoy con «" + escapeHtml(vu.buscar.trim()) + "»."
+        : vu.vista === "dia" ? "Hoy no hay vuelos de llegada en la lista del aeropuerto."
+        : "No hay vuelos entre las " + escapeHtml(desde) + " y las " + escapeHtml(hasta) + '. Toque <b>Todo el día</b> para verlos todos.') + "</li>";
+      return;
+    }
+    $("vuelosLista").innerHTML = visibles.map(function (v) { return itemVuelo(v, cx); }).join("");
+  }
+
+  // Un vuelo: la hora, el vuelo y, debajo, cada bus que se llevó pasajeros (cuántos, si ya salió y para dónde)
+  function itemVuelo(v, cx) {
+    var t = msDe(v.llega);
+    var a = anotadoDelVuelo(v, cx.lista);
+    var pas = a.reduce(function (s, r) { return s + r.pasajeros; }, 0);
+    var nb = unicos(a.map(function (r) { return r.interno; })).length;
+    var e = estadoVuelo(v);
+    var clave = escapeHtml(claveVuelo(v));
+    return '<li class="vcard"' + (a.length ? ' data-anotado="true"' : "") + ">" +
+      '<button type="button" class="vuelo-item" data-vuelo="' + clave + '"' +
+        (a.length ? ' data-anotado="true"' : "") + (t && t < Date.now() ? ' data-paso="true"' : "") + ">" +
+        '<span class="vuelo-hora"><b>' + escapeHtml(t ? horaDe(t) : (v.hora || "")) + "</b><small>" + escapeHtml(t ? cuandoLlega(t) : "") + "</small></span>" +
+        '<span class="vuelo-datos"><span class="vuelo-linea"><b class="vuelo-cod">' + escapeHtml(v.vuelo) + "</b>" +
+          (e.texto ? '<span class="vuelo-estado" data-tipo="' + e.tipo + '">' + escapeHtml(e.texto) + "</span>" : "") + "</span>" +
+          "<small>" + escapeHtml(v.aerolinea || "") + "</small><small>Desde " + escapeHtml(v.ciudad || "—") + "</small></span>" +
+        '<span class="vuelo-cuenta">' + (a.length
+          ? "<b>" + pas + "</b><small>" + (pas === 1 ? "pasajero" : "pasajeros") + "</small><small>en " + nb + (nb === 1 ? " bus" : " buses") + "</small>"
+          : '<small class="vuelo-sin">Sin anotar</small>') + "</span>" +
+      "</button>" +
+      (a.length ? '<ul class="vb-lista">' + a.map(function (r) { return lineaBus(r, cx); }).join("") + "</ul>" : "") +
+      '<button type="button" class="vcard-anotar" data-vuelo="' + clave + '"><span aria-hidden="true">+</span> ' +
+        (a.length ? "Anotar otro bus" : "Anotar en qué bus se fueron") + "</button>" +
+      "</li>";
+  }
+
+  function lineaBus(r, cx) {
+    var eb = estadoBus(r, cx);
+    var tot = totalViaje(r, cx);
+    return '<li class="vb" data-estado="' + eb.tipo + '">' +
+      '<span class="vb-bus">' + ICONO_BUS + "<b>" + escapeHtml(r.interno) + "</b></span>" +
+      '<span class="vb-pas"><b>' + r.pasajeros + "</b><small>pas.</small></span>" +
+      '<span class="vb-info"><span class="vb-estado">' + escapeHtml(eb.texto) + "</span>" + barra(tot) +
+        '<small class="vb-quien">El bus lleva ' + tot + " de 19 · anotó " + escapeHtml(r.mio ? "usted" : (r.nombre || "otro gestor")) + "</small>" +
+        (r.pendiente ? '<small class="vuelo-pend">Por enviar</small>' : "") +
+      "</span></li>";
+  }
+
+  // ---- Buses que salen: los carros que va lanzando el aeropuerto, con lo que lleva cada uno
+  function htmlSalidas(cx, q) {
+    var ss = cx.ss;
+    var con = ss.filter(function (s) { return s.regs.length; }).length;
+    var html = '<li class="salidas-resumen">Hoy salieron <b>' + ss.length + "</b> " + (ss.length === 1 ? "bus" : "buses") +
+      " del aeropuerto: <b>" + con + "</b> con pasajeros anotados y <b>" + (ss.length - con) + "</b> sin anotar.</li>";
+    var ahora = Date.now();
+    var fila = ((vu.datos && vu.datos.fila) || []).slice(0, MAX_FILA);
+    if (fila.length && !q) {
+      html += '<li class="salidas-fila"><p class="buses-titulo">En la fila: los próximos en salir</p><div class="bus-chips">' +
+        fila.map(function (f, i) {
+          var interno = String(f.interno);
+          var ya = cx.lista.reduce(function (s, x) {
+            return s + (x.interno === interno && !x.salida && x.en != null && Math.abs(x.en - ahora) <= VENTANA_CUPO_MS ? x.pasajeros : 0);
+          }, 0);
+          return '<button type="button" class="bus-chip" data-bus-abrir="' + escapeHtml(interno) + '"' + (ya ? ' data-con="true"' : "") +
+            "><b>" + escapeHtml(interno) + "</b><small>" + (ya ? ya + " de 19" : "turno " + (i + 1)) + "</small></button>";
+        }).join("") + "</div></li>";
+    }
+    var visibles = ss.filter(function (s) {
+      if (!q) return true;
+      return sinTildes(s.interno + " " + s.destino + " " + s.regs.map(function (r) { return r.vuelo; }).join(" ")).indexOf(q) >= 0;
+    });
+    html += '<li class="buses-titulo salidas-titulo">Salieron del aeropuerto (el último arriba)</li>';
+    if (!visibles.length) {
+      return html + '<li class="vuelos-nada">' + (q ? "Ninguna salida de hoy con «" + escapeHtml(vu.buscar.trim()) + "»."
+        : "Hoy todavía no ha salido ningún bus del aeropuerto.") + "</li>";
+    }
+    var mostrar = q || vu.todasSalidas ? visibles : visibles.slice(0, MOSTRAR_SALIDAS);
+    html += mostrar.map(function (s) { return itemSalida(s, cx); }).join("");
+    if (mostrar.length < visibles.length) {
+      html += '<li><button type="button" class="btn btn-ghost btn-block" data-salidas-todas>Ver las ' + (visibles.length - mostrar.length) +
+        " salidas anteriores</button></li>";
+    }
+    return html;
+  }
+
+  function itemSalida(s, cx) {
+    var tot = s.regs.reduce(function (n, r) { return n + r.pasajeros; }, 0);
+    var grupos = [];
+    s.regs.forEach(function (r) {
+      var k = r.fecha + "|" + r.vuelo.toUpperCase();
+      var g = grupos.find(function (x) { return x.k === k; });
+      if (!g) { g = { k: k, vuelo: r.vuelo, v: cx.vuelos[k] || {}, pas: 0, pend: false }; grupos.push(g); }
+      g.pas += r.pasajeros;
+      g.pend = g.pend || r.pendiente;
+    });
+    return '<li class="scard" data-anotado="' + (s.regs.length ? "true" : "false") + '">' +
+      '<button type="button" class="scard-btn" data-bus-abrir="' + escapeHtml(s.interno) + '" data-bus-t="' + s.t + '">' +
+        '<span class="sc-hora"><b>' + escapeHtml(horaDe(s.t)) + "</b><small>" + escapeHtml(cuandoLlega(s.t)) + "</small></span>" +
+        '<span class="sc-bus">' + ICONO_BUS + "<span><b>Bus " + escapeHtml(s.interno) + "</b><small>" +
+          escapeHtml(s.destino ? "a " + s.destino : "bajada") + "</small></span></span>" +
+        '<span class="sc-cupo">' + (s.regs.length ? "<b>" + tot + "</b><small>de 19</small>" : '<small class="vuelo-sin">Sin anotar</small>') + "</span>" +
+        (s.regs.length
+          ? barra(tot) + '<span class="sc-vuelos">' + grupos.map(function (g) {
+              return '<span class="sc-vuelo"><b>' + escapeHtml(g.vuelo) + "</b><small>" + escapeHtml([g.v.aerolinea, g.v.ciudad].filter(Boolean).join(" · ")) +
+                "</small><em>" + g.pas + "</em>" + (g.pend ? '<small class="vuelo-pend">Por enviar</small>' : "") + "</span>";
+            }).join("") + "</span>"
+          : '<span class="sc-sin">¿De qué vuelo eran? Toque para anotar.</span>') +
+      "</button></li>";
+  }
+
+  // ---- la hoja de un bus: lo que lleva y escoger el vuelo (después se abre la hoja del vuelo con ese bus)
+  function abrirBus(interno, t) {
+    vu.busAbierto = { interno: normalizarBus(interno), t: t != null && !isNaN(t) ? Number(t) : null };
+    pintarHojaBus();
+    show($("busSheet"), true);
+  }
+
+  function cerrarBus() {
+    vu.busAbierto = null;
+    show($("busSheet"), false);
+  }
+
+  function pintarHojaBus() {
+    var b = vu.busAbierto;
+    if (!b) return;
+    var cx = contexto(anotaciones());
+    var s = b.t != null ? cx.ss.find(function (x) { return x.interno === b.interno && x.t === b.t; }) : null;
+    $("busTitulo").textContent = "Bus " + b.interno;
+    $("busSub").textContent = s ? "Salió " + horaDe(s.t) + " (" + cuandoLlega(s.t) + ")" + (s.destino ? " a " + s.destino : "")
+      : cx.turno[b.interno] ? "En la fila del aeropuerto · turno " + cx.turno[b.interno] : "";
+    var ahora = Date.now();
+    var lleva = s ? s.regs : cx.lista.filter(function (x) {
+      return x.interno === b.interno && !x.salida && x.en != null && Math.abs(x.en - ahora) <= VENTANA_CUPO_MS;
+    });
+    var tot = lleva.reduce(function (n, r) { return n + r.pasajeros; }, 0);
+    $("busLleva").innerHTML = lleva.length
+      ? '<p class="va-titulo">Lleva <b>' + tot + " de 19</b></p>" + barra(tot) + '<ul class="va-lista">' + lleva.map(function (r) {
+          return '<li><span class="va-bus"><b>' + escapeHtml(r.vuelo) + '</b></span><span class="va-pas"><b>' + r.pasajeros + "</b> pas.</span>" +
+            '<span class="va-quien">' + escapeHtml(r.mio ? "Usted" : (r.nombre || "Otro gestor")) + (r.pendiente ? " · <em>por enviar</em>" : "") + "</span><span></span></li>";
+        }).join("") + "</ul>"
+      : '<p class="va-nada">Este bus todavía no tiene pasajeros anotados.</p>';
+    // los vuelos que llegaron hasta 2 horas y media antes de la salida (o de ahora), el último primero
+    var ref = s ? s.t : ahora;
+    var cand = ((vu.datos && vu.datos.vuelos) || []).filter(function (v) {
+      var t = msDe(v.llega);
+      return t != null && t >= ref - 150 * 60 * 1000 && t <= ref + 10 * 60 * 1000;
+    }).sort(function (x, y) { return msDe(y.llega) - msDe(x.llega); }).slice(0, 12);
+    $("busVuelos").innerHTML = cand.length ? cand.map(function (v) {
+      var t = msDe(v.llega);
+      var a = anotadoDelVuelo(v, cx.lista);
+      var pas = a.reduce(function (n, r) { return n + r.pasajeros; }, 0);
+      var e = estadoVuelo(v);
+      return '<li><button type="button" class="bv-item" data-elegir-vuelo="' + escapeHtml(claveVuelo(v)) + '">' +
+        '<span class="vuelo-hora"><b>' + escapeHtml(horaDe(t)) + "</b><small>" + escapeHtml(cuandoLlega(t)) + "</small></span>" +
+        '<span class="vuelo-datos"><span class="vuelo-linea"><b class="vuelo-cod">' + escapeHtml(v.vuelo) + "</b>" +
+          (e.texto ? '<span class="vuelo-estado" data-tipo="' + e.tipo + '">' + escapeHtml(e.texto) + "</span>" : "") + "</span>" +
+          "<small>" + escapeHtml([v.aerolinea, v.ciudad].filter(Boolean).join(" · ")) + "</small></span>" +
+        '<span class="vuelo-cuenta">' + (pas ? "<b>" + pas + "</b><small>anotados</small>" : "") + "</span>" +
+        "</button></li>";
+    }).join("") : '<li class="vuelos-nada">No hay vuelos que hayan llegado en las 2 horas y media antes.</li>';
+  }
+
+  // ---- la hoja de un vuelo: lo anotado y anotar otro bus
+  function vueloAbierto() {
+    return ((vu.datos && vu.datos.vuelos) || []).find(function (v) { return claveVuelo(v) === vu.abierto; }) || null;
+  }
+
+  function errorVuelo(texto) {
+    $("vueloError").textContent = texto || "";
+    show($("vueloError"), !!texto);
+  }
+
+  // bus y tViaje: cuando se llega desde "Buses que salen" (ese bus, en esa salida)
+  function abrirVuelo(clave, bus, tViaje) {
+    vu.abierto = clave;
+    vu.bus = bus ? normalizarBus(bus) : "";
+    vu.busT = bus && tViaje != null ? tViaje : null;
+    $("vueloBus").value = "";
+    $("vueloPasajeros").value = "";
+    errorVuelo("");
+    show($("vueloListo"), false);
+    pintarHojaVuelo();
+    show($("vueloSheet"), true);
+  }
+
+  function cerrarVuelo() {
+    vu.abierto = null;
+    show($("vueloSheet"), false);
+  }
+
+  function pintarHojaVuelo() {
+    var v = vueloAbierto();
+    if (!v) { cerrarVuelo(); return; }
+    var t = msDe(v.llega);
+    var e = estadoVuelo(v);
+    $("vueloTitulo").textContent = v.vuelo + (v.aerolinea ? " · " + v.aerolinea : "");
+    $("vueloSub").textContent = "Desde " + (v.ciudad || "—") + (t ? " · llega " + horaDe(t) + " (" + cuandoLlega(t) + ")" : "") +
+      (e.texto ? " · " + e.texto : "");
+    var lista = anotaciones();
+    var a = anotadoDelVuelo(v, lista);
+    var total = a.reduce(function (s, r) { return s + r.pasajeros; }, 0);
+    var nb = unicos(a.map(function (r) { return r.interno; })).length;
+    $("vueloAnotado").innerHTML = a.length
+      ? '<p class="va-titulo">Ya anotado: <b>' + total + (total === 1 ? " pasajero" : " pasajeros") + "</b> en " + nb + (nb === 1 ? " bus" : " buses") + "</p>" +
+        '<ul class="va-lista">' + a.map(function (r) {
+          return '<li><span class="va-bus">Bus <b>' + escapeHtml(r.interno) + '</b></span><span class="va-pas"><b>' + r.pasajeros + "</b> pas.</span>" +
+            '<span class="va-quien">' + escapeHtml(r.mio ? "Usted" : (r.nombre || "Otro gestor")) + (r.en ? " · " + escapeHtml(horaDe(r.en)) : "") +
+            (r.pendiente ? ' · <em>por enviar</em>' : "") + "</span>" +
+            (r.mio && r.quitar && r.id_local ? '<button type="button" class="btn btn-ghost btn-sm va-quitar" data-quitar="' + escapeHtml(r.id_local) + '">Quitar</button>' : "") +
+            "</li>";
+        }).join("") + "</ul>"
+      : '<p class="va-nada">Todavía no hay nada anotado en este vuelo.</p>';
+    pintarBusesVuelo(lista);
+    pintarCupo(lista);
+  }
+
+  function chipBus(interno, nota, lista, tViaje) {
+    var ya = anotadoEnBus(interno, lista, tViaje);
+    var esc = vu.bus === interno && (vu.busT == null ? tViaje == null : vu.busT === tViaje);
+    return '<button type="button" class="bus-chip" data-bus="' + escapeHtml(interno) + '"' + (tViaje != null ? ' data-bus-t="' + tViaje + '"' : "") +
+      ' aria-pressed="' + (esc ? "true" : "false") + '"' +
+      (ya >= CUPO_BUS ? ' data-lleno="true"' : "") + "><b>" + escapeHtml(interno) + "</b><small>" +
+      escapeHtml(ya >= CUPO_BUS ? "lleno" : ya ? ya + " de 19" : nota) + "</small></button>";
+  }
+
+  function notaSalida(t, destino) {
+    return (t ? horaDe(t).replace(/\s*[ap]\.\s*m\.$/i, "") : "") + (destino ? " a " + destino : "");
+  }
+
+  function pintarBusesVuelo(lista) {
+    var d = vu.datos || {};
+    var ya = {};
+    var desde = Date.now() - SALIERON_MS;
+    var bajaron = (d.bajaron || []).filter(function (b) {
+      var i = String(b.interno), t = msDe(b.despacho_en);
+      if (ya[i] || (t != null && t < desde)) return false;
+      ya[i] = true;
+      return true;
+    }).slice(0, MAX_SALIERON);
+    var fila = (d.fila || []).map(function (b) { return String(b.interno); }).filter(function (i) { return !ya[i]; }).slice(0, MAX_FILA);
+    var html = "";
+    // el bus que viene de "Buses que salen" (una salida de antes): arriba, ya escogido
+    var vieneDeSalida = vu.bus && vu.busT != null && !bajaron.some(function (b) { return String(b.interno) === vu.bus && msDe(b.despacho_en) === vu.busT; });
+    if (vieneDeSalida) {
+      var s = (d.bajaron || []).find(function (b) { return String(b.interno) === vu.bus && msDe(b.despacho_en) === vu.busT; });
+      html += '<p class="buses-titulo">El bus que escogió</p><div class="bus-chips">' +
+        chipBus(vu.bus, notaSalida(vu.busT, s ? DESTINOS[String(s.itinerario_id)] : ""), lista, vu.busT) + "</div>";
+    }
+    // el bus escogido de la fila siempre se ve, aunque no esté entre los primeros
+    if (vu.bus && vu.busT == null && !ya[vu.bus] && fila.indexOf(vu.bus) < 0 && (d.fila || []).some(function (b) { return String(b.interno) === vu.bus; })) fila.push(vu.bus);
+    if (bajaron.length) {
+      html += '<p class="buses-titulo">Salieron hace poco</p><div class="bus-chips">' + bajaron.map(function (b) {
+        var t = msDe(b.despacho_en);
+        return chipBus(String(b.interno), notaSalida(t, DESTINOS[String(b.itinerario_id)]), lista, t);
+      }).join("") + "</div>";
+    }
+    if (fila.length) {
+      html += '<p class="buses-titulo">En la fila del aeropuerto</p><div class="bus-chips">' + fila.map(function (i, k) {
+        return chipBus(i, "turno " + (k + 1), lista);
+      }).join("") + "</div>";
+    }
+    if (!html) html = '<p class="buses-titulo">No hay buses en la lista: escriba el número abajo.</p>';
+    $("vueloBuses").innerHTML = html;
+  }
+
+  function maxPasajeros(lista) {
+    return vu.bus ? Math.max(0, CUPO_BUS - anotadoEnBus(vu.bus, lista, vu.busT)) : CUPO_BUS;
+  }
+
+  function pintarCupo(lista) {
+    var p = $("vueloCupo");
+    if (!vu.bus) { show(p, false); $("vueloGuardar").disabled = vu.guardando; return; }
+    var ya = anotadoEnBus(vu.bus, lista || anotaciones(), vu.busT);
+    var queda = CUPO_BUS - ya;
+    p.setAttribute("data-lleno", queda <= 0 ? "true" : "false");
+    p.innerHTML = ya
+      ? (queda <= 0 ? "Al bus <b>" + escapeHtml(vu.bus) + "</b> ya le anotaron 19: está lleno."
+        : "Al bus <b>" + escapeHtml(vu.bus) + "</b> ya le anotaron " + ya + ": le " + (queda === 1 ? "cabe 1 más" : "caben " + queda + " más") + ".")
+      : "Bus <b>" + escapeHtml(vu.bus) + "</b>: le caben 19.";
+    show(p, true);
+    $("vueloGuardar").disabled = vu.guardando || queda <= 0;
+    var n = parseInt($("vueloPasajeros").value, 10);
+    if (n > queda && queda > 0) $("vueloPasajeros").value = String(queda);
+  }
+
+  // tViaje: la hora de la salida, cuando el bus ya salió (lo anotado cuenta para ese viaje)
+  function escogerBus(interno, tViaje) {
+    vu.bus = normalizarBus(interno);
+    vu.busT = tViaje != null && !isNaN(tViaje) ? Number(tViaje) : null;
+    errorVuelo("");
+    show($("vueloListo"), false);
+    var lista = anotaciones();
+    pintarBusesVuelo(lista);
+    pintarCupo(lista);
+  }
+
+  function cambiarPasajeros(delta) {
+    var max = maxPasajeros();
+    var n = parseInt($("vueloPasajeros").value, 10) || 0;
+    n = Math.min(Math.max(n + delta, 1), Math.max(max, 1));
+    $("vueloPasajeros").value = String(n);
+    errorVuelo("");
+    show($("vueloListo"), false);
+  }
+
+  function quitarDeColaVuelos(id) {
+    guardarJson(LS_VUELOS_COLA, leerJson(LS_VUELOS_COLA, []).filter(function (r) { return r.id_local !== id; }));
+  }
+
+  // Devuelve "ok", "pendiente" (sin señal: queda en el celular) o "error" (el servidor no lo aceptó: sale de la cola).
+  async function enviarAnotacion(reg) {
+    try {
+      await rpc(RPC_ANOTAR, {
+        p_id_local: reg.id_local, p_dni: reg.dni, p_fecha: reg.fecha, p_vuelo: reg.vuelo, p_interno: reg.interno,
+        p_pasajeros: reg.pasajeros, p_anotado_en: new Date(reg.anotado_ms).toISOString(), p_dispositivo: reg.dispositivo,
+      }, 20000);
+      quitarDeColaVuelos(reg.id_local);
+      reg.enviado_ms = Date.now();
+      vu.recien.push(reg);
+      return { estado: "ok" };
+    } catch (err) {
+      if (err && err.sinRed) return { estado: "pendiente" };
+      quitarDeColaVuelos(reg.id_local);
+      return { estado: "error", texto: textoErrorVuelos(err) };
+    }
+  }
+
+  async function guardarVuelo(ev) {
+    if (ev) ev.preventDefault();
+    if (vu.guardando || !estado.yo) return;
+    var v = vueloAbierto();
+    if (!v) return;
+    var bus = normalizarBus(vu.bus || $("vueloBus").value);
+    var pas = parseInt($("vueloPasajeros").value, 10);
+    show($("vueloListo"), false);
+    if (!bus) { errorVuelo("Toque el bus en que se fueron o escriba su número."); return; }
+    if (!/^[0-9A-Z-]{1,10}$/.test(bus)) { errorVuelo("El número del bus solo lleva números."); return; }
+    if (!(pas >= 1 && pas <= CUPO_BUS)) { errorVuelo("Diga cuántos pasajeros de este vuelo se fueron en el bus " + bus + ": de 1 a 19."); return; }
+    // Si el bus ya salió (se escogió su salida), lo anotado va con la hora de esa salida: así cuenta para ese viaje.
+    var tViaje = vu.bus === bus && vu.busT != null ? vu.busT : null;
+    var ya = anotadoEnBus(bus, undefined, tViaje);
+    if (ya + pas > CUPO_BUS) {
+      errorVuelo("Al bus " + bus + " ya le anotaron " + ya + ": con estos " + pas + " serían " + (ya + pas) + " y el cupo es 19.");
+      return;
+    }
+    var reg = { id_local: "v" + Date.now().toString(36) + "-" + alAzar(5), dni: estado.yo.dni, fecha: v.fecha, vuelo: v.vuelo,
+      interno: bus, pasajeros: pas, anotado_ms: tViaje != null ? Math.min(tViaje, Date.now()) : Date.now(),
+      dispositivo: String(navigator.userAgent || "").slice(0, 200) };
+    var cola = leerJson(LS_VUELOS_COLA, []);
+    cola.push(reg);
+    guardarJson(LS_VUELOS_COLA, cola.slice(-200));
+    vu.guardando = true;
+    $("vueloGuardar").disabled = true;
+    $("vueloGuardar").textContent = "Guardando…";
+    var r = await enviarAnotacion(reg);
+    vu.guardando = false;
+    $("vueloGuardar").textContent = "Guardar";
+    if (r.estado === "error") {
+      errorVuelo(r.texto);
+      pintarHojaVuelo();
+      pintarVuelos();
+      return;
+    }
+    vu.bus = "";
+    vu.busT = null;
+    $("vueloBus").value = "";
+    $("vueloPasajeros").value = "";
+    errorVuelo("");
+    var listo = $("vueloListo");
+    listo.setAttribute("data-estado", r.estado);
+    listo.textContent = r.estado === "ok"
+      ? "Listo: " + pas + (pas === 1 ? " pasajero" : " pasajeros") + " del " + v.vuelo + " en el bus " + bus + "."
+      : "Sin internet: quedó guardado en el celular (" + pas + " en el bus " + bus + ") y se envía solo cuando vuelva la señal.";
+    show(listo, true);
+    pintarHojaVuelo();
+    pintarVuelos();
+    if (r.estado === "ok") cargarVuelos(true);
+  }
+
+  async function quitarAnotacion(idLocal) {
+    var r = anotaciones().find(function (x) { return x.id_local === idLocal; });
+    if (!r) return;
+    if (!window.confirm("¿Quitar el bus " + r.interno + " con " + r.pasajeros + (r.pasajeros === 1 ? " pasajero" : " pasajeros") + " del " + r.vuelo + "?")) return;
+    errorVuelo("");
+    show($("vueloListo"), false);
+    if (r.pendiente) {   // todavía no había salido del celular
+      quitarDeColaVuelos(idLocal);
+      pintarHojaVuelo();
+      pintarVuelos();
+      return;
+    }
+    try {
+      await rpc(RPC_QUITAR_VUELO, { p_dni: estado.yo.dni, p_id_local: idLocal }, 15000);
+      vu.recien = vu.recien.filter(function (c) { return c.id_local !== idLocal; });
+      if (vu.datos && vu.datos.registros) vu.datos.registros = vu.datos.registros.filter(function (x) { return x.id_local !== idLocal; });
+      var listo = $("vueloListo");
+      listo.setAttribute("data-estado", "ok");
+      listo.textContent = "Quitado: el bus " + r.interno + " ya no está en el " + r.vuelo + ".";
+      show(listo, true);
+      pintarHojaVuelo();
+      pintarVuelos();
+      cargarVuelos(true);
+    } catch (err) {
+      errorVuelo(err && err.sinRed ? "Sin internet: para quitar hace falta señal." : textoErrorVuelos(err));
+    }
+  }
+
+  // Lo que quedó sin señal (de esta o de otra cédula de este celular) se manda solo.
+  async function enviarColaVuelos() {
+    if (vu.enviando || !conRed()) return;
+    var cola = leerJson(LS_VUELOS_COLA, []);
+    if (!cola.length) return;
+    vu.enviando = true;
+    var mandados = 0;
+    try {
+      for (var i = 0; i < cola.length; i++) {
+        var r = await enviarAnotacion(cola[i]);
+        if (r.estado === "pendiente") break;
+        mandados++;
+        if (r.estado === "error") {
+          var fallas = leerJson(LS_VUELOS_FALLAS, []);
+          fallas.push({ vuelo: cola[i].vuelo, interno: cola[i].interno, pasajeros: cola[i].pasajeros, texto: r.texto });
+          guardarJson(LS_VUELOS_FALLAS, fallas.slice(-20));
+        }
+      }
+    } finally {
+      vu.enviando = false;
+      if (mandados) { pintarVuelos(); if (vu.abierto) pintarHojaVuelo(); if (pestana === "vuelos") cargarVuelos(true); }
+    }
+  }
+
+  function initVuelos() {
+    $("vuelosLista").addEventListener("click", function (ev) {
+      if (!ev.target.closest) return;
+      var b = ev.target.closest("[data-vuelo]");
+      if (b) { abrirVuelo(b.getAttribute("data-vuelo")); return; }
+      var s = ev.target.closest("[data-bus-abrir]");
+      if (s) { abrirBus(s.getAttribute("data-bus-abrir"), s.hasAttribute("data-bus-t") ? Number(s.getAttribute("data-bus-t")) : null); return; }
+      if (ev.target.closest("[data-salidas-todas]")) { vu.todasSalidas = true; pintarVuelos(); }
+    });
+    $("busCerrar").addEventListener("click", cerrarBus);
+    $("busSheet").addEventListener("click", function (ev) { if (ev.target === $("busSheet")) cerrarBus(); });
+    $("busVuelos").addEventListener("click", function (ev) {
+      var b = ev.target.closest ? ev.target.closest("[data-elegir-vuelo]") : null;
+      if (!b || !vu.busAbierto) return;
+      var bus = vu.busAbierto;
+      cerrarBus();
+      abrirVuelo(b.getAttribute("data-elegir-vuelo"), bus.interno, bus.t);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-vista-vuelos]"), function (b) {
+      b.addEventListener("click", function () {
+        vu.vista = b.getAttribute("data-vista-vuelos");
+        Array.prototype.forEach.call(document.querySelectorAll("[data-vista-vuelos]"), function (o) {
+          var si = o === b;
+          o.classList.toggle("activo", si);
+          o.setAttribute("aria-pressed", si ? "true" : "false");
+        });
+        pintarVuelos();
+      });
+    });
+    $("vuelosBuscar").addEventListener("input", function () { vu.buscar = this.value || ""; pintarVuelos(); });
+    $("vuelosOtraVez").addEventListener("click", function () { cargarVuelos(); });
+    $("vuelosFallas").addEventListener("click", function (ev) {
+      if (ev.target.closest && ev.target.closest("[data-fallas-ok]")) { guardarJson(LS_VUELOS_FALLAS, []); pintarFallasVuelos(); }
+    });
+    $("vueloCerrar").addEventListener("click", cerrarVuelo);
+    $("vueloSheet").addEventListener("click", function (ev) { if (ev.target === $("vueloSheet")) cerrarVuelo(); });
+    $("vueloBuses").addEventListener("click", function (ev) {
+      var b = ev.target.closest ? ev.target.closest("[data-bus]") : null;
+      if (!b) return;
+      $("vueloBus").value = "";
+      escogerBus(b.getAttribute("data-bus"), b.hasAttribute("data-bus-t") ? Number(b.getAttribute("data-bus-t")) : null);
+    });
+    $("vueloBus").addEventListener("input", function () {
+      var limpio = this.value.replace(/[^0-9A-Za-z-]/g, "").slice(0, 6);
+      if (limpio !== this.value) this.value = limpio;
+      escogerBus(limpio);
+    });
+    $("vueloPasajeros").addEventListener("input", function () {
+      var n = this.value.replace(/\D/g, "").slice(0, 2);
+      if (n && Number(n) > CUPO_BUS) n = String(CUPO_BUS);
+      if (n !== this.value) this.value = n;
+      errorVuelo("");
+      show($("vueloListo"), false);
+    });
+    $("pasMenos").addEventListener("click", function () { cambiarPasajeros(-1); });
+    $("pasMas").addEventListener("click", function () { cambiarPasajeros(1); });
+    $("vueloForm").addEventListener("submit", guardarVuelo);
+    $("vueloAnotado").addEventListener("click", function (ev) {
+      var b = ev.target.closest ? ev.target.closest("[data-quitar]") : null;
+      if (b) quitarAnotacion(b.getAttribute("data-quitar"));
+    });
+    // Cada minuto: lo de "hace 25 min" se mueve, y en la pestaña Vuelos se trae lo nuevo (lo que anotan los demás).
+    setInterval(function () {
+      if (document.hidden || !estado.yo || !esGestor()) return;
+      if (leerJson(LS_VUELOS_COLA, []).length) enviarColaVuelos();
+      if (pestana === "vuelos") cargarVuelos(true);
+    }, 60 * 1000);
+  }
+
   // ------------------------------------------------------------- arranque
   function iniciar() {
     Array.prototype.forEach.call(document.querySelectorAll("[data-version]"), function (el) {
@@ -1589,6 +2359,7 @@
     });
     $("guiaListo").addEventListener("click", cerrarGuia);
     initNoticias();
+    initVuelos();
     // El menú de abajo, los atajos del inicio y los enlaces de la guía (data-ir)
     document.addEventListener("click", function (ev) {
       var b = ev.target.closest ? ev.target.closest("[data-ir]") : null;
@@ -1605,6 +2376,7 @@
     window.addEventListener("online", function () {
       pintarRed();
       enviarPendientes();
+      if (estado.yo && esGestor()) { enviarColaVuelos(); if (pestana === "vuelos") cargarVuelos(true); }
       if (estado.yo && (!asis.toca || asis.error)) consultarAsistencia();
     });
     window.addEventListener("offline", pintarRed);
@@ -1618,6 +2390,7 @@
         pintarNoticias();
         presentarNoticia();
         enviarPendientes();
+        if (esGestor()) { enviarColaVuelos(); if (pestana === "vuelos") cargarVuelos(true); }
         if (Date.now() - asis.consultadoEn > 60 * 1000) consultarAsistencia();   // marcó en otro lado, o pasó la hora
       }
     });
