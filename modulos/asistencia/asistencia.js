@@ -4377,12 +4377,12 @@ async function confirmarVehiculoProgramado() {
 // operador termina ignorando el aviso. Con estos, la alerta cae en ~2-3,5% de los
 // casos en cada escenario, que es donde de verdad hay algo raro que mirar.
 //
-// REGLA DE LA EMPRESA (17-nov-2026): solo se permite entrar a laborar hasta 30 min antes
+// REGLA DE LA EMPRESA (17-nov-2026, bajada a 15 min el 18-nov): solo se permite entrar a laborar hasta 15 min antes
 // del inicio del turno. Si entra mas temprano, el motivo es OBLIGATORIO y hay que
 // escribirlo (no hay botones): sin motivo no se guarda la marca. Ya no es un umbral
-// estadistico sino una regla; con los datos del 16 y 17 de noviembre la pide ~28% de
+// estadistico sino una regla; con 30 min, los datos del 16 y 17 de noviembre la pedian en ~28% de
 // las entradas de conductores. Ver ENTRADA_ANTES_MAX_MIN y confirmarHorarioProgramado().
-const ENTRADA_ANTES_MAX_MIN = 30;
+const ENTRADA_ANTES_MAX_MIN = 15;
 const ALERTA_HORARIO = {
   entrada: { tarde: 60,  antes: ENTRADA_ANTES_MAX_MIN },
   salida:  { tarde: 240, antes: 180 }   // alerta 3,0% / 2,5%
@@ -4475,7 +4475,7 @@ async function confirmarHorarioProgramado(sentido) {
     return true;
   }
 
-  // Regla de los 30 minutos: entrar antes exige escribir el motivo. Sin botones a
+  // Regla de los 15 minutos: entrar antes exige escribir el motivo. Sin botones a
   // proposito, para que la razon sea la de esa persona y no un toque al primero de
   // la lista.
   if (sentido === "entrada" && dif < 0) {
@@ -6327,7 +6327,7 @@ async function submitAttendance(event) {
   }
 
   // Si la hora no concuerda con el horario programado del turno se pide el motivo, y
-  // entrar mas de 30 min antes del turno lo exige (regla del 17-nov-2026).
+  // entrar mas de ENTRADA_ANTES_MAX_MIN (15) min antes del turno lo exige (regla del 17-nov-2026).
   const seguirConHorario = await confirmarHorarioProgramado(sentidoConfirmado);
   if (!seguirConHorario) {
     setMessage(elements.formMessage,

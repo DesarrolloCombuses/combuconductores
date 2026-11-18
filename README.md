@@ -575,6 +575,13 @@ todos los disponibles y que cuente en todo.
   *"Hoy estás DISPONIBLE: tu turno es de 02:00 a 09:00. Escribe el vehículo que vas a manejar."*
   (`disponibleDeHoy()`).
 
+### El margen para entrar antes baja a 15 min (v1.26.3)
+
+El 18-nov-2026 la empresa bajó la regla de abajo de 30 a 15 minutos: `ENTRADA_ANTES_MAX_MIN = 15` en
+`modulos/asistencia/asistencia.js` (y en `biometricoconductores`). Entrar hasta 15 min antes del turno no pide nada; más
+temprano exige escribir el motivo. Con lo que marcaron los conductores del 11 al 17 de noviembre, el motivo se pediría
+en ~51% de las entradas (con 30 min era ~25%). La puntualidad de la base ya llamaba «temprano» a más de 15 min antes.
+
 ### Entrar más de 30 min antes exige escribir el motivo (v1.26.1)
 
 Regla de la empresa del 17-nov-2026: *"solo es permitido entrar a laborar 30 minutos antes de que comience su turno;

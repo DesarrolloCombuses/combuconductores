@@ -1,4 +1,4 @@
-const APP_VERSION = "20261117b-hora-oficial";
+const APP_VERSION = "20261118a-entrada-15min";
 const CACHE_NAME = `combuses-asistencia-${APP_VERSION}`;
 const APP_SHELL = [
   "./asistencia-web.html",
