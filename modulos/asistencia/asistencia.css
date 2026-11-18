@@ -4236,3 +4236,33 @@ video,
   color: #b91c1c;
   font-weight: 700;
 }
+
+/* Guia para dar el permiso de la ubicacion (v1.26.4): pasos numerados segun el celular */
+.gps-guia {
+  display: flex; flex-direction: column; gap: 8px; margin-top: 2px;
+  background: #fff; color: var(--ink); border: 1px solid #f1b8b2; border-radius: var(--radius-sm); padding: 10px 12px;
+}
+.punto-aviso p.gps-guia-titulo { font-weight: 800; font-size: 0.95rem; color: var(--ink); }
+.gps-pasos { margin: 0; padding: 0; list-style: none; counter-reset: gpspaso; display: flex; flex-direction: column; gap: 8px; }
+.gps-pasos li {
+  counter-increment: gpspaso; position: relative; padding-left: 32px; min-height: 24px;
+  font-size: 0.93rem; line-height: 1.45;
+}
+.gps-pasos li::before {
+  content: counter(gpspaso); position: absolute; left: 0; top: 0; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--primary); color: #fff; font-weight: 800; font-size: 0.8rem; display: grid; place-items: center;
+}
+.gps-switch {
+  display: inline-block; vertical-align: -4px; width: 34px; height: 20px; border-radius: 999px;
+  background: var(--primary); position: relative; margin-left: 2px;
+}
+.gps-switch::after {
+  content: ""; position: absolute; top: 3px; right: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff;
+}
+.punto-aviso p.gps-nota { font-size: 0.86rem; color: var(--muted); }
+.gps-mas summary { cursor: pointer; font-weight: 700; color: var(--primary); font-size: 0.92rem; }
+.gps-mas[open] summary { margin-bottom: 8px; }
+.punto-aviso p.gps-primer {
+  margin-top: 4px; background: #fff6e3; border: 1px solid #f0d28a; color: #7a5200; border-radius: var(--radius-sm); padding: 8px 10px;
+}
+.location-help .gps-guia { margin-top: 8px; }

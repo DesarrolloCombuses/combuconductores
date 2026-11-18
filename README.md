@@ -575,6 +575,23 @@ todos los disponibles y que cuente en todo.
   *"Hoy estás DISPONIBLE: tu turno es de 02:00 a 09:00. Escribe el vehículo que vas a manejar."*
   (`disponibleDeHoy()`).
 
+### El celular guía al conductor para dar el permiso del GPS (v1.26.4)
+
+El 18-nov-2026 un conductor no pudo marcar: el portal le decía «Prende el GPS» y lo ubicaba con ± 2000 m. Con el GPS
+prendido eso pasa cuando el navegador tiene el permiso de ubicación **aproximada** (Android 12 en adelante deja
+escoger «Precisa» o «Aproximada»). El portal no puede cambiar ese permiso —solo la persona, en los ajustes del
+celular—, así que ahora reconoce qué pasa y muestra los pasos exactos para ese celular (Android o iPhone, Chrome u
+otro navegador, instalado o no), para que el conductor lo arregle una sola vez:
+
+- **Aproximada** (± 1 km o más): Chrome → ⓘ Información de la app → Permisos → Ubicación → «Usar ubicación precisa».
+- **El GPS no engancha** (± 100–999 m): salir a cielo abierto; si siempre sale igual, los pasos de la precisa.
+- **Bloqueada**: el celular ya no vuelve a preguntar solo; Chrome → Configuración de sitios → Ubicación → Permitir.
+  Antes decía «toca el candado de la dirección», que no existe con el portal instalado.
+- **Apagada**: bajar la barra de arriba y prender «Ubicación».
+- La primera vez, mientras revisa, avisa: «toca Permitir y escoge Precisa (no Aproximada)».
+
+La regla no cambia: para marcar desde el celular sigue haciendo falta el GPS (menos de 100 m).
+
 ### El margen para entrar antes baja a 15 min (v1.26.3)
 
 El 18-nov-2026 la empresa bajó la regla de abajo de 30 a 15 minutos: `ENTRADA_ANTES_MAX_MIN = 15` en

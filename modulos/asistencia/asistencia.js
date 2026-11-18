@@ -5779,6 +5779,159 @@ function conGps(precision) {
   return Number.isFinite(m) && m > 0 && m < PRECISION_GPS_MAX_M;
 }
 
+// Guia para dar el permiso de la ubicacion (18-nov-2026, pedido del usuario: "nosotros no podemos ir hasta esos
+// permisos y habilitarlos"). El portal NO puede cambiar los permisos del celular: en Android y en el iPhone solo los
+// cambia la persona. Lo que si hace es reconocer QUE pasa y mostrar los pasos exactos de ese celular, para que el
+// conductor lo arregle una sola vez:
+//  - "aproximada": el navegador tiene la ubicacion APROXIMADA (Android 12+ deja escoger): llega con ± 1-3 km.
+//  - "sin_senal":  el GPS todavia no engancha (bajo techo): ± 100-999 m.
+//  - "bloqueada":  el portal (o el navegador) tiene la ubicacion bloqueada: el celular ya no vuelve a preguntar solo.
+//  - "apagada":    la ubicacion del celular esta apagada (o no llego ninguna en 15 s).
+const PRECISION_APROXIMADA_M = 1000;
+
+function entornoCelular() {
+  const ua = navigator.userAgent || "";
+  const iphone = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const android = !iphone && /Android/i.test(ua);
+  let instalada = false;
+  try {
+    instalada = !!(window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+  } catch (_) { /* sin matchMedia */ }
+  const navegador = /SamsungBrowser/i.test(ua) ? "Internet de Samsung"
+    : /EdgA|EdgiOS/i.test(ua) ? "Edge"
+      : /Firefox|FxiOS/i.test(ua) ? "Firefox"
+        : /OPR\/|Opera/i.test(ua) ? "Opera"
+          : iphone && !/CriOS/i.test(ua) ? "Safari" : "Chrome";
+  return { android, iphone, instalada, navegador };
+}
+
+function metrosTexto(m) {
+  const n = Math.round(Number(m) || 0);
+  return n >= 1000 ? `${(n / 1000).toLocaleString("es-CO", { maximumFractionDigits: 1 })} km` : `${n} m`;
+}
+
+// Que paso con la ubicacion, a partir del error o de la precision que llego.
+function casoUbicacion(location) {
+  if (!location) return "apagada";
+  if (location.error === "denied") return "bloqueada";
+  if (location.error === "unavailable" || location.error === "timeout") return "apagada";
+  if (location.error) return null;
+  const m = Number(location.precision);
+  if (!Number.isFinite(m) || m <= 0) return "sin_senal";
+  return m >= PRECISION_APROXIMADA_M ? "aproximada" : "sin_senal";
+}
+
+const TEXTO_CASO_UBICACION = {
+  aproximada: { titulo: "Prende la ubicación precisa", boton: "Prende la ubicación precisa para seguir" },
+  sin_senal: { titulo: "El GPS todavía no engancha", boton: "Prende el GPS para seguir" },
+  bloqueada: { titulo: "La ubicación está bloqueada para el portal", boton: "Da permiso de ubicación para seguir" },
+  apagada: { titulo: "La ubicación del celular está apagada", boton: "Prende la ubicación para seguir" }
+};
+
+function mensajeCasoUbicacion(caso, location) {
+  const prec = Number(location?.precision);
+  const conPrec = Number.isFinite(prec) && prec > 0 ? ` (± ${metrosTexto(prec)})` : "";
+  if (caso === "aproximada") {
+    return `Tu celular le da al portal solo la ubicación APROXIMADA${conPrec}. Para marcar hay que prender la ubicación ` +
+      `PRECISA en el celular: se hace una sola vez y queda para siempre.`;
+  }
+  if (caso === "sin_senal") {
+    return `El GPS todavía no engancha${conPrec}. Sal a cielo abierto, lejos del techo, espera unos segundos y vuelve a revisar.`;
+  }
+  if (caso === "bloqueada") {
+    return "El portal no tiene permiso para ver la ubicación y el celular ya no lo vuelve a preguntar solo. " +
+      "Hay que darlo en los ajustes del celular: se hace una sola vez.";
+  }
+  if (location?.error === "timeout") {
+    return "No llegó la ubicación del celular. Revisa que la ubicación esté prendida y vuelve a revisar.";
+  }
+  return "La ubicación del celular está apagada. Préndela para poder marcar.";
+}
+
+// Los pasos, segun el celular (Android / iPhone) y el navegador. Es HTML: solo texto fijo y el nombre del sitio.
+function guiaUbicacionHtml(caso, entorno = entornoCelular()) {
+  if (!caso) return "";
+  const sw = `<span class="gps-switch" aria-hidden="true"></span>`;
+  const nav = entorno.navegador;
+  const sitio = escapeHtml(window.location.hostname || "el portal");
+  const volver = "Vuelve al portal y toca <b>Ya lo hice: revisar otra vez</b>.";
+  const lista = (pasos) => `<ol class="gps-pasos">${pasos.map((p) => `<li>${p}</li>`).join("")}</ol>`;
+
+  const precisaAndroid = [
+    `Sal del portal y busca en el celular el ícono de <b>${nav}</b>` +
+      (entorno.instalada ? " (el portal funciona con él aunque lo tengas instalado)." : "."),
+    "Deja el dedo sobre ese ícono hasta que salga un menú y toca <b>ⓘ Información de la app</b>.",
+    "Toca <b>Permisos</b> y luego <b>Ubicación</b>.",
+    `Escoge <b>Permitir solo mientras se usa la app</b> y prende <b>Usar ubicación precisa</b> ${sw}`,
+    volver
+  ];
+  const precisaIphone = [
+    "Abre <b>Ajustes</b> del iPhone → <b>Privacidad y seguridad</b> → <b>Localización</b> (debe estar prendida).",
+    `Toca <b>${nav === "Safari" ? "Sitios web de Safari" : nav}</b> y escoge <b>Al usar la app</b>.`,
+    `Prende <b>Ubicación exacta</b> ${sw}`,
+    volver
+  ];
+  const precisa = entorno.iphone ? precisaIphone : precisaAndroid;
+  const otroCamino = entorno.iphone ? "" : `<p class="gps-nota">¿No encuentras el ícono? En <b>Ajustes</b> del celular → ` +
+    `<b>Ubicación</b> → <b>Permisos de ubicación de las apps</b> → <b>${nav}</b> → <b>Usar ubicación precisa</b>.</p>`;
+  const siPregunta = entorno.iphone ? "" : `<p class="gps-nota">Si el celular pregunta <b>«¿Cambiar a ubicación precisa?»</b>, toca <b>Cambiar</b>.</p>`;
+
+  let cuerpo;
+  if (caso === "aproximada") {
+    cuerpo = lista(precisa) + otroCamino + siPregunta;
+  } else if (caso === "sin_senal") {
+    cuerpo = `<details class="gps-mas"><summary>Si siempre sale lo mismo: prende la ubicación precisa</summary>${lista(precisa)}${otroCamino}</details>`;
+  } else if (caso === "apagada") {
+    const prender = entorno.iphone
+      ? ["Abre <b>Ajustes</b> → <b>Privacidad y seguridad</b> → <b>Localización</b> y préndela.", volver]
+      : ["Baja con el dedo la barra de arriba de la pantalla.", "Toca <b>Ubicación</b> para prenderla.", volver];
+    cuerpo = lista(prender) +
+      `<details class="gps-mas"><summary>Si ya estaba prendida: revisa la ubicación precisa</summary>${lista(precisa)}${otroCamino}</details>`;
+  } else {
+    // bloqueada
+    let pasos;
+    if (entorno.iphone) {
+      pasos = [
+        "Abre <b>Ajustes</b> → <b>Privacidad y seguridad</b> → <b>Localización</b> y préndela.",
+        `Toca <b>${nav === "Safari" ? "Sitios web de Safari" : nav}</b> → <b>Al usar la app</b> y prende <b>Ubicación exacta</b> ${sw}`,
+        nav === "Safari"
+          ? "En Safari toca <b>aA</b> al lado de la dirección → <b>Configuración del sitio web</b> → <b>Ubicación</b> → <b>Permitir</b>."
+          : `En ${nav} abre los ajustes del sitio <b>${sitio}</b> y permite la <b>Ubicación</b>.`,
+        volver
+      ];
+    } else if (nav === "Chrome") {
+      pasos = [
+        entorno.instalada
+          ? "Abre <b>Chrome</b> y toca los <b>tres puntos ⋮</b> de arriba a la derecha → <b>Configuración</b>."
+          : "Toca los <b>tres puntos ⋮</b> de arriba a la derecha → <b>Configuración</b>.",
+        "Toca <b>Configuración de sitios</b> → <b>Ubicación</b>.",
+        `En <b>Bloqueados</b> toca <b>${sitio}</b> y escoge <b>Permitir</b>.`,
+        `Revisa también el permiso de Chrome: deja el dedo sobre su ícono → <b>ⓘ Información de la app</b> → <b>Permisos</b> → ` +
+          `<b>Ubicación</b> → <b>Permitir solo mientras se usa la app</b> y prende <b>Usar ubicación precisa</b> ${sw}`,
+        volver
+      ];
+    } else {
+      pasos = [
+        `Abre la <b>configuración</b> de <b>${nav}</b> y busca los <b>permisos de los sitios</b> → <b>Ubicación</b>.`,
+        `Toca <b>${sitio}</b> y escoge <b>Permitir</b>.`,
+        `Revisa también el permiso de ${nav}: deja el dedo sobre su ícono → <b>ⓘ Información de la app</b> → <b>Permisos</b> → ` +
+          `<b>Ubicación</b> → <b>Permitir solo mientras se usa la app</b> y prende <b>Usar ubicación precisa</b> ${sw}`,
+        volver
+      ];
+    }
+    cuerpo = lista(pasos);
+  }
+  const quien = entorno.iphone ? "iPhone" : "celular";
+  return `<div class="gps-guia gps-guia-${caso}"><p class="gps-guia-titulo">Cómo arreglarlo en tu ${quien} (una sola vez)</p>${cuerpo}</div>`;
+}
+
+// Antes de que el celular pregunte por primera vez: que escojan PERMITIR y PRECISA (si escogen "aproximada" o
+// "bloquear", el celular ya no vuelve a preguntar solo).
+function avisoAntesDelPermisoHtml(entorno = entornoCelular()) {
+  return `<p class="gps-primer">El celular te va a preguntar por la ubicación: toca <b>Permitir</b>` +
+    (entorno.iphone ? " y deja prendida la <b>Ubicación exacta</b>." : " y escoge <b>Precisa</b> (no «Aproximada»).") + "</p>";
+}
+
 function soltarGps() {
   if (vigiaGps != null) navigator.geolocation?.clearWatch(vigiaGps);
   vigiaGps = null;
@@ -5905,11 +6058,15 @@ async function estadoPermisoUbicacion() {
 
 function mostrarInstruccionesUbicacionDenegada() {
   elements.locationSection?.classList.remove("hidden");
+  if (elements.locationPermissionHelp) {
+    elements.locationPermissionHelp.innerHTML = `<strong>No podemos acceder a tu ubicación</strong>` +
+      `<p>${escapeHtml(mensajeCasoUbicacion("bloqueada"))}</p>${guiaUbicacionHtml("bloqueada")}`;
+  }
   showLocationPermissionHelp(true);
   elements.locationButton.textContent = "Reintentar ubicación";
   showAlertModal(
     "Debes habilitar la ubicación",
-    "La ubicación es OBLIGATORIA y está bloqueada en este navegador. Toca el candado (o la 'i') que está junto a la dirección web, entra en Ubicación y elige Permitir. En el celular revisa también que el GPS esté encendido. Luego toca 'Activar ubicación'. Sin ubicación no se puede registrar."
+    "La ubicación es OBLIGATORIA y está bloqueada para el portal. El celular ya no la vuelve a preguntar solo: en la pantalla te dejamos los pasos para permitirla en tu celular (se hace una sola vez). Sin ubicación no se puede registrar."
   );
 }
 
@@ -5929,8 +6086,12 @@ async function capturarUbicacion() {
 
   // Verifica el permiso antes de intentar: si esta bloqueado, guia para habilitarlo.
   const permiso = await estadoPermisoUbicacion();
+  state.permisoUbicacion = permiso;
   if (permiso === "denied") {
     state.currentLocation = null;
+    if (!state.isAdmin) {
+      state.fueraDePunto = { sinGps: true, caso: "bloqueada", posicion: null, mensaje: mensajeCasoUbicacion("bloqueada") };
+    }
     elements.locationStatus.textContent = "Ubicación BLOQUEADA en el navegador. Debes habilitarla para registrar.";
     elements.locationMap?.classList.remove("is-loading", "is-visible");
     if (elements.locationMap) elements.locationMap.textContent = "";
@@ -5961,11 +6122,16 @@ async function capturarUbicacion() {
     elements.locationMap?.classList.remove("is-visible");
     if (elements.locationMap && !state.locationMap) elements.locationMap.textContent = "";
 
+    const caso = casoUbicacion(location);
+    if (caso && exigirGps) {
+      state.fueraDePunto = { sinGps: true, caso, posicion: null, mensaje: mensajeCasoUbicacion(caso, location) };
+    }
     if (location.error === "denied" || location.error === "unsupported") {
       elements.locationStatus.textContent = `${location.message} Sigue los pasos para habilitarlo.`;
       mostrarInstruccionesUbicacionDenegada();
     } else {
-      elements.locationStatus.textContent = location.message || "No se pudo obtener la ubicacion. Toca 'Activar ubicacion' para reintentar.";
+      elements.locationStatus.textContent = state.fueraDePunto?.mensaje || location.message
+        || "No se pudo obtener la ubicacion. Toca 'Activar ubicacion' para reintentar.";
     }
     syncSubmitLockPorUbicacion();
     return null;
@@ -5976,13 +6142,13 @@ async function capturarUbicacion() {
   const nombres = [...new Set((config.PUNTOS_OPERATIVOS || []).map((p) => p.nombre || p.name).filter(Boolean))];
   const lista = nombres.length > 1 ? `${nombres.slice(0, -1).join(", ")} o ${nombres[nombres.length - 1]}` : nombres.join("");
   if (exigirGps && !conGps(location.precision)) {
-    const precision = Math.round(Number(location.precision) || 0);
+    const caso = casoUbicacion(location);
     state.currentLocation = null;
     state.fueraDePunto = {
       sinGps: true,
+      caso,
       posicion: null,
-      mensaje: `Tu celular no está usando el GPS${precision ? `: te ubica con ± ${precision} m` : ""}. Prende la ubicación precisa (GPS), ` +
-        `sal a cielo abierto y vuelve a intentar.` + (lista ? ` La asistencia solo se marca en ${lista}, con el GPS prendido.` : "")
+      mensaje: mensajeCasoUbicacion(caso, location) + (lista ? ` La asistencia solo se marca en ${lista}, con el GPS prendido.` : "")
     };
     elements.locationStatus.textContent = state.fueraDePunto.mensaje;
     elements.locationButton.textContent = "Reintentar ubicación";
@@ -7088,7 +7254,7 @@ function renderDriverGreetingCard() {
       ? `Sí, soy yo · registrar mi ${sentido.toUpperCase()}`
       : state.revisandoPunto
         ? "Revisando tu ubicación…"
-        : state.fueraDePunto?.sinGps ? "Prende el GPS para seguir"
+        : state.fueraDePunto?.sinGps ? (TEXTO_CASO_UBICACION[state.fueraDePunto.caso]?.boton || "Prende el GPS para seguir")
           : state.fueraDePunto ? "Acércate a un lugar autorizado para seguir" : "Activa la ubicación para seguir";
     cuerpo = `
       <p class="driver-greeting-question">
@@ -7162,6 +7328,7 @@ function lugaresAutorizados() {
 
 async function revisarPuntoDeMarca() {
   if (!hayPuntosDeMarca() || !elements.puntoAviso) return;
+  state.permisoUbicacion = await estadoPermisoUbicacion();
   state.revisandoPunto = true;
   pintarPuntoAviso();
   renderDriverGreetingCard();
@@ -7193,21 +7360,23 @@ function pintarPuntoAviso() {
     </ul>
     <button id="puntoReintentarButton" class="secondary wide" type="button">
       <i data-lucide="refresh-cw"></i>
-      Ya llegué: revisar otra vez
+      ${state.fueraDePunto?.caso ? "Ya lo hice: revisar otra vez" : "Ya llegué: revisar otra vez"}
     </button>`;
 
   if (state.revisandoPunto) {
     el.className = "punto-aviso revisando";
     el.innerHTML = `<strong><i data-lucide="map-pin"></i> Revisando dónde estás…</strong>
-      <p>Solo se puede marcar en ${escapeHtml(listaTexto)}.</p>`;
+      <p>Solo se puede marcar en ${escapeHtml(listaTexto)}.</p>${state.permisoUbicacion === "prompt" ? avisoAntesDelPermisoHtml() : ""}`;
   } else if (state.currentLocation) {
     el.className = "punto-aviso dentro";
     el.innerHTML = `<strong><i data-lucide="check-circle-2"></i> Estás en ${escapeHtml(state.currentLocation.punto_operativo || "un lugar autorizado")}</strong>
       <p>Puedes marcar aquí.</p>`;
   } else if (state.fueraDePunto) {
     el.className = "punto-aviso fuera";
-    el.innerHTML = `<strong><i data-lucide="map-pin-off"></i> ${state.fueraDePunto.sinGps ? "Prende el GPS del celular" : "Aquí no se puede marcar"}</strong>
-      <p>${escapeHtml(state.fueraDePunto.mensaje)}</p>${listaHtml}`;
+    const caso = state.fueraDePunto.caso;
+    const titulo = caso ? TEXTO_CASO_UBICACION[caso].titulo : state.fueraDePunto.sinGps ? "Prende el GPS del celular" : "Aquí no se puede marcar";
+    el.innerHTML = `<strong><i data-lucide="map-pin-off"></i> ${escapeHtml(titulo)}</strong>
+      <p>${escapeHtml(state.fueraDePunto.mensaje)}</p>${caso ? guiaUbicacionHtml(caso) : ""}${listaHtml}`;
   } else {
     el.className = "punto-aviso sin-ubicacion";
     el.innerHTML = `<strong><i data-lucide="map-pin-off"></i> No sabemos dónde estás</strong>
