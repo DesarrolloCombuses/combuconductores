@@ -561,6 +561,20 @@ que $240.000 son en tiquetes y $140.000 en efectivo (7 pasajeros).
   de 19 dice *"Máximo 19 pasajeros: es el cupo del bus"* y el botón Guardar se apaga; igual si tiquetes y cívicas
   pasan de los pasajeros. La lectura que escribe dice cómo le queda el viaje anterior (si no cuadra, avisa).
 
+### Los disponibles tienen turno de 02:00 a 09:00 (v1.26.2)
+
+Pedido del usuario el 17-nov-2026: *"en la programación el que está disponible tiene turno de 2:00 am a 9 am"*, para
+todos los disponibles y que cuente en todo.
+
+- En la base (migración `20261117200000_disponibles_turno_2_a_9.sql` de `biometricoconductores`):
+  `refrescar_programacion_turnos()` agrega a `programacion_turnos` un **turno 1 de 02:00 a 09:00, sin bus y con puesto
+  `DISPONIBLE`** por cada novedad DISPONIBLE. El biométrico le aplica así la regla de 30 min, la puntualidad, la
+  sugerencia de cierre y el Verificador. Si cambia una novedad DISPONIBLE, la programación de ese día se rehace sola.
+- En el portal, `turnosVigentes()` **no ofrece ese turno** para elegir bus: sin vehículo, el portal dejaría de pedirle
+  el bus que va a manejar. El disponible sigue por *"sin programación"* (escribe el bus) y el aviso le dice
+  *"Hoy estás DISPONIBLE: tu turno es de 02:00 a 09:00. Escribe el vehículo que vas a manejar."*
+  (`disponibleDeHoy()`).
+
 ### Entrar más de 30 min antes exige escribir el motivo (v1.26.1)
 
 Regla de la empresa del 17-nov-2026: *"solo es permitido entrar a laborar 30 minutos antes de que comience su turno;

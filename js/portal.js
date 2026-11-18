@@ -471,12 +471,19 @@
   // porque de varios turnos elige uno solo; aquí se le mostraban los dos al
   // conductor. Se descartan los que coinciden en todo lo que él ve: si difieren
   // en algo (otro vehículo, otro puesto) son turnos distintos y se quedan.
+  //
+  // Disponibles (v1.26.2, 17-nov-2026): el conductor con novedad DISPONIBLE entra a
+  // programacion_turnos con turno de 02:00 a 09:00 y SIN bus (puesto "DISPONIBLE"), para
+  // que el biométrico le aplique la regla de 30 min y la puntualidad. Aquí no se ofrece
+  // como turno: sin bus, el portal dejaría de pedirle el vehículo que va a manejar. Sigue
+  // el camino de "sin programación" y se le avisa que está disponible (disponibleDeHoy).
   function turnosVigentes(filas, estado) {
     var hoy = hoyColombia();
     var ayer = ayerColombia();
     var ahora = Date.now();
     var vistos = {};
     return (filas || [])
+      .filter(function (t) { return !esTurnoDisponible(t); })
       .filter(function (t) {
         var clave = [
           t.fecha, t.turno, normalizarInterno(t.vehiculo),
@@ -496,6 +503,16 @@
       .sort(function (a, b) {
         return (rangoTurno(a).inicio || 0) - (rangoTurno(b).inicio || 0);
       });
+  }
+
+  function esTurnoDisponible(t) {
+    return String((t && t.puesto) || "").trim().toUpperCase() === "DISPONIBLE";
+  }
+
+  // El turno de disponible de hoy (02:00 a 09:00), si lo tiene: solo para el aviso.
+  function disponibleDeHoy(filas) {
+    var hoy = hoyColombia();
+    return (filas || []).find(function (t) { return esTurnoDisponible(t) && t.fecha === hoy; }) || null;
   }
 
   // Los nombres que no son personas ("SIN CONDUCTOR PROGRAMADO") no cuentan.
@@ -683,6 +700,7 @@
       conductor: resultados[0],
       // Con las marcas: el de ayer que sigue abierto (entrada sin salida) también sale.
       turnos: turnosVigentes(resultados[1].filas, resultados[2]),
+      disponible: disponibleDeHoy(resultados[1].filas),
       guardadoEn: resultados[1].guardadoEn,
       error: resultados[1].error,
       estado: resultados[2],
@@ -861,7 +879,10 @@
     } else {
       $("confirmarPregunta").textContent = ident.error
         ? "No se pudo consultar tu programación. Puedes seguir indicando el vehículo."
-        : "No tienes vehículo programado para hoy.";
+        : ident.disponible
+          ? "Hoy estás DISPONIBLE: tu turno es de " + horaCorta(ident.disponible.hora_entrada) + " a " +
+            horaCorta(ident.disponible.hora_salida) + ". Escribe el vehículo que vas a manejar."
+          : "No tienes vehículo programado para hoy.";
       $("turnosLista").innerHTML = aviso;
     }
 
