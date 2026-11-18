@@ -561,6 +561,39 @@ que $240.000 son en tiquetes y $140.000 en efectivo (7 pasajeros).
   de 19 dice *"Máximo 19 pasajeros: es el cupo del bus"* y el botón Guardar se apaga; igual si tiquetes y cívicas
   pasan de los pasajeros. La lectura que escribe dice cómo le queda el viaje anterior (si no cuadra, avisa).
 
+### Entrar más de 30 min antes exige escribir el motivo (v1.26.1)
+
+Regla de la empresa del 17-nov-2026: *"solo es permitido entrar a laborar 30 minutos antes de que comience su turno;
+si va a entrar antes debe explicar el porqué, obligatorio, y no debe dejar guardar sin escribir la razón"*. El 16 y
+17 de noviembre, 57 de unas 200 entradas de conductores fueron 30 min o más antes de su hora programada (26 de más de
+1 h), la mayoría marcadas por el conductor solo desde el portal.
+
+En el módulo de asistencia (`modulos/asistencia/asistencia.js`, igual que en `biometricoconductores`):
+
+- `ENTRADA_ANTES_MAX_MIN = 30` reemplaza el umbral de 180 min de `ALERTA_HORARIO.entrada.antes`.
+- Si la ENTRADA es más de 30 min antes de su turno programado, `confirmarHorarioProgramado()` abre el modal
+  *"Está entrando N min antes de su turno"* **sin botones de motivo**: hay que escribirlo (mínimo 10 letras). Cancelar
+  no registra. La marca queda con *"ENTRADA ANTES DE TIEMPO: 13:13 vs programada 14:20 (67 min antes): …"* en la
+  observación.
+- Más de 3 h antes sigue siendo *cambio de turno* (con sus botones), y llegar tarde sigue igual.
+- Se cerró un hueco: si se cancelaba el modal y se volvía a tocar Registrar en el mismo minuto, la marca pasaba sin
+  motivo. Ahora la clave del aviso se guarda solo cuando ya hay motivo.
+
+**Hora cambiada = intento de suplantación (misma versión).** Pedido del usuario: *"tiene que ser inquebrantable: que si
+cambia la hora del celular no lo deje marcar, que guarde un intento de suplantación"*.
+
+- La marca siempre lleva la hora del servidor (`obtener_hora_servidor_colombia`). Antes, si esa consulta fallaba, la app
+  seguía con la hora del celular; ahora **sin hora oficial fresca no se marca**.
+- `verificarHoraOficial()` corre dos veces: antes de los avisos del turno (sentido, 30 min, jornada) y otra vez justo
+  antes de enviar a Buk, porque en Buk no se puede borrar. Si la hora del celular está a más de 5 min de la del servidor
+  (`RELOJ_TOLERANCIA_MIN`), o la hora de la marca fue editada (modo local), **no deja marcar**. Muestra *"La hora del
+  celular está cambiada…"* y guarda el intento con `registrar_intento_suplantacion()` en la tabla
+  `intentos_suplantacion` (cédula, cuenta, hora del celular, hora oficial, diferencia, ubicación, navegador).
+- Mientras el celular tenga la hora corrida, bajo la hora del reporte sale un aviso en rojo.
+- Segunda barrera en la base (migración `20261117180000_intentos_suplantacion_hora.sql` de `biometricoconductores`, ya
+  aplicada): el trigger `trg_01_bloquear_hora_falsa` no guarda una marca `movil` o `admin_form` con más de 15 min de
+  diferencia con la hora oficial, y deja el intento como `hora_marca_no_coincide`.
+
 ### El turno y la tarjeta se cierran con la salida (v1.26.0)
 
 Pedido del usuario el 5-nov-2026: *"la aplicación está cerrando la tarjeta por el turno del conductor; que se cierre

@@ -4230,3 +4230,9 @@ video,
   border-radius: 10px;
   border: 1px solid var(--line);
 }
+
+/* Aviso fijo cuando la hora del equipo esta corrida frente a la del servidor (17-nov-2026). */
+.reloj-corrido {
+  color: #b91c1c;
+  font-weight: 700;
+}

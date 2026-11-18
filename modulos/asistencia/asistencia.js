@@ -832,7 +832,9 @@ function requireOnline(messageTarget = elements.formMessage) {
 async function syncServerClock({ silent = false } = {}) {
   if (!requireOnline()) return null;
 
+  const pedidoMs = Date.now();
   const { data, error } = await supabaseClient.rpc("obtener_hora_servidor_colombia");
+  const respuestaMs = Date.now();
   if (error || !data) {
     if (!silent) {
       setMessage(elements.formMessage, "No se pudo sincronizar la hora del servidor.", "error");
@@ -840,14 +842,127 @@ async function syncServerClock({ silent = false } = {}) {
     return null;
   }
 
+  // Cuanto esta corrida la hora del equipo frente a la del servidor. Se compara en
+  // milisegundos absolutos (no depende de la zona horaria del equipo) contra el punto
+  // medio de la consulta, para no contar la demora de la red.
+  const equipoMs = (pedidoMs + respuestaMs) / 2;
+  const oficialMs = new Date(`${data.timestamp}-05:00`).getTime();
   state.serverClock = {
-    syncedAtMs: Date.now(),
+    syncedAtMs: equipoMs,
     timestamp: data.timestamp,
     fecha: data.fecha,
-    hora: data.hora
+    hora: data.hora,
+    equipoMs,
+    desfaseEquipoMs: equipoMs - oficialMs
   };
   renderServerClock();
+  avisarRelojEquipo();
   return state.serverClock;
+}
+
+/* --------------------------------------------------------------------------
+   Hora cambiada = intento de suplantacion (17-nov-2026)
+
+   Las marcas usan la hora del SERVIDOR, nunca la del equipo. Aun asi, si alguien
+   cambia la hora del celular (o edita la hora en modo local) para marcar a otra
+   hora, NO se le deja marcar y el intento queda en la bitacora
+   intentos_suplantacion (RPC registrar_intento_suplantacion). Se revisa antes de
+   enviar a Buk, porque en Buk no se puede borrar. La base tiene una segunda
+   barrera (trigger trg_01_bloquear_hora_falsa) por si alguien se salta la app.
+   -------------------------------------------------------------------------- */
+const RELOJ_TOLERANCIA_MIN = 5;   // un celular con hora automatica esta a segundos
+const APP_INTENTO = "portal";
+
+// Aviso fijo bajo la hora del reporte mientras el equipo tenga la hora corrida.
+function avisarRelojEquipo() {
+  const hint = elements.reportTimeHint;
+  if (!hint || !state.serverClock) return;
+  const min = Math.round(Math.abs(state.serverClock.desfaseEquipoMs) / 60000);
+  if (min > RELOJ_TOLERANCIA_MIN) {
+    hint.textContent = `⚠ La hora de este equipo está corrida ${min} min. Ponga la fecha y hora `
+      + "automáticas: con la hora cambiada no se puede marcar.";
+    hint.classList.add("reloj-corrido");
+  } else if (hint.classList.contains("reloj-corrido")) {
+    hint.classList.remove("reloj-corrido");
+    configureReportTimeControls();
+  }
+}
+
+// Hora Colombia de un instante; con la fecha si es otro dia que `refMs`.
+function horaColombiaTexto(ms, refMs) {
+  const p = getTodayPartsFromDate(new Date(ms));
+  const r = getTodayPartsFromDate(new Date(refMs));
+  return p.date === r.date ? p.time.slice(0, 5) : `${p.day}/${p.month} ${p.time.slice(0, 5)}`;
+}
+
+async function registrarIntentoSuplantacion(tipo, horaMs, detalle = {}) {
+  try {
+    const { error } = await supabaseClient.rpc("registrar_intento_suplantacion", {
+      p_tipo: tipo,
+      p_dni: state.colaborador?.dni || elements.dniInput?.value?.trim() || null,
+      p_hora_equipo: new Date(horaMs).toISOString(),
+      p_sentido: state.nextSentido || null,
+      p_lat: state.currentLocation?.latitud ?? null,
+      p_lon: state.currentLocation?.longitud ?? null,
+      p_app: APP_INTENTO,
+      p_user_agent: (navigator.userAgent || "").slice(0, 300),
+      p_detalle: { modo: state.deviceMode || null, admin: !!state.isAdmin, local: isLocalEnv(), ...detalle }
+    });
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.warn("No se pudo guardar el intento de suplantacion:", e?.message || e);
+    return false;
+  }
+}
+
+// Antes de marcar: hora oficial FRESCA del servidor (sin ella no se marca), y tanto la
+// hora del equipo como la de la marca tienen que coincidir con ella. { ok, mensaje }.
+async function verificarHoraOficial() {
+  const reloj = await syncServerClock({ silent: true });
+  if (!reloj) {
+    return {
+      ok: false,
+      mensaje: "No se pudo obtener la hora oficial del servidor y sin ella no se puede marcar. "
+        + "Revise la conexión e intente de nuevo."
+    };
+  }
+  const oficialMs = new Date(`${reloj.timestamp}-05:00`).getTime() + (Date.now() - reloj.syncedAtMs);
+  const toleranciaMs = RELOJ_TOLERANCIA_MIN * 60000;
+  let tipo = null;
+  let horaMs = null;
+  if (Math.abs(reloj.desfaseEquipoMs) > toleranciaMs) {
+    tipo = "hora_equipo_cambiada";
+    horaMs = reloj.equipoMs;
+  } else {
+    const marca = getReportParts();
+    const t = marca.time.length === 5 ? `${marca.time}:00` : marca.time;
+    const marcaMs = new Date(`${marca.date}T${t}-05:00`).getTime();
+    if (!isNaN(marcaMs) && Math.abs(marcaMs - oficialMs) > toleranciaMs) {
+      tipo = "hora_marca_editada";
+      horaMs = marcaMs;
+    }
+  }
+  if (!tipo) return { ok: true };
+
+  const minutos = Math.round(Math.abs(horaMs - oficialMs) / 60000);
+  const difTexto = minutos < 120 ? `${minutos} min`
+    : `${Math.floor(minutos / 60)} h${minutos % 60 ? ` ${minutos % 60} min` : ""}`;
+  await registrarIntentoSuplantacion(tipo, horaMs, { minutos });
+  const hEquipo = horaColombiaTexto(horaMs, oficialMs);
+  const hOficial = horaColombiaTexto(oficialMs, oficialMs);
+  const titulo = tipo === "hora_equipo_cambiada"
+    ? "La hora del celular está cambiada"
+    : "La hora de la marca no es la oficial";
+  const texto = (tipo === "hora_equipo_cambiada"
+    ? `Este equipo marca las ${hEquipo} y la hora oficial es ${hOficial}: está `
+      + `${horaMs > oficialMs ? "adelantado" : "atrasado"} ${difTexto}. No se puede marcar con la `
+      + "hora del celular cambiada. Ponga la fecha y hora automáticas y vuelva a intentarlo."
+    : `La marca tiene las ${hEquipo} y la hora oficial es ${hOficial} (${difTexto} de diferencia). `
+      + "Las marcas solo se registran con la hora del servidor.")
+    + " Este intento quedó registrado como posible suplantación.";
+  showAlertModal(titulo, texto);
+  return { ok: false, mensaje: `${titulo}: no se registró la marca y el intento quedó registrado.` };
 }
 
 function getTrustedNowParts() {
@@ -878,7 +993,7 @@ function configureReportTimeControls() {
   elements.reportDateInput.readOnly = !local;
   elements.reportTimeInput.readOnly = !local;
   elements.reportTimeHint.textContent = local
-    ? "MODO LOCAL: puedes modificar la fecha y hora para pruebas. En producción vienen del servidor."
+    ? "MODO LOCAL: puedes cambiar la fecha y hora para probar los avisos, pero una marca con una hora distinta a la oficial no se guarda (queda como intento de suplantación)."
     : "La fecha y hora vienen del servidor y no se pueden modificar.";
 }
 
@@ -4261,8 +4376,15 @@ async function confirmarVehiculoProgramado() {
 // Con un umbral unico de 60 min se alertaria el 36% de las salidas: puro ruido, y el
 // operador termina ignorando el aviso. Con estos, la alerta cae en ~2-3,5% de los
 // casos en cada escenario, que es donde de verdad hay algo raro que mirar.
+//
+// REGLA DE LA EMPRESA (17-nov-2026): solo se permite entrar a laborar hasta 30 min antes
+// del inicio del turno. Si entra mas temprano, el motivo es OBLIGATORIO y hay que
+// escribirlo (no hay botones): sin motivo no se guarda la marca. Ya no es un umbral
+// estadistico sino una regla; con los datos del 16 y 17 de noviembre la pide ~28% de
+// las entradas de conductores. Ver ENTRADA_ANTES_MAX_MIN y confirmarHorarioProgramado().
+const ENTRADA_ANTES_MAX_MIN = 30;
 const ALERTA_HORARIO = {
-  entrada: { tarde: 60,  antes: 180 },  // alerta 3,5% / 1,9%
+  entrada: { tarde: 60,  antes: ENTRADA_ANTES_MAX_MIN },
   salida:  { tarde: 240, antes: 180 }   // alerta 3,0% / 2,5%
 };
 
@@ -4322,10 +4444,14 @@ async function confirmarHorarioProgramado(sentido) {
   const etiqueta = sentido === "salida" ? "SALIDA" : "ENTRADA";
   const desfase = dif > 0 ? `${dif} min después` : `${Math.abs(dif)} min antes`;
 
-  // Solo se pregunta una vez por combinacion, para no repetir el modal.
+  // Solo se pregunta una vez por combinacion, para no repetir el modal. La clave se
+  // guarda DESPUES de tener el motivo: antes se guardaba al abrir el modal, y si la
+  // persona cancelaba y volvia a tocar Registrar en el mismo minuto, la marca pasaba
+  // sin motivo.
   const clave = `${sentido}|${horaRef}|${horaMarca}`;
-  if (state.programacionAvisoHorario === clave) return true;
-  state.programacionAvisoHorario = clave;
+  if (state.programacionAvisoHorario === clave && state.motivoDesfase) return true;
+  state.programacionAvisoHorario = "";
+  state.motivoDesfase = "";
 
   // Un desfase de 10 h no es "llegó tarde": es otro turno. Se pregunta como lo que
   // es, con los motivos del caso, para no forzar a escribirlo a mano cada vez.
@@ -4345,6 +4471,26 @@ async function confirmarHorarioProgramado(sentido) {
     state.motivoDesfase =
       `CAMBIO DE TURNO: ENTRADA ${horaMarca} vs su turno ${turno.turno} de las ${horaRef} `
       + `(${desfase}): ${motivo}`;
+    state.programacionAvisoHorario = clave;
+    return true;
+  }
+
+  // Regla de los 30 minutos: entrar antes exige escribir el motivo. Sin botones a
+  // proposito, para que la razon sea la de esa persona y no un toque al primero de
+  // la lista.
+  if (sentido === "entrada" && dif < 0) {
+    const motivo = await pedirMotivoDesfase(
+      `Está entrando ${Math.abs(dif)} min antes de su turno`,
+      `Su turno empieza a las ${horaRef} y está marcando ENTRADA a las ${horaMarca}. `
+      + `Solo se permite entrar hasta ${ENTRADA_ANTES_MAX_MIN} minutos antes del turno. `
+      + "Para registrar, escriba por qué entra antes. Sin el motivo no se guarda la marca.",
+      [],
+      { minimo: 10, placeholder: "Ej: me entregaron el bus a las 12:40" }
+    );
+    if (motivo === null) return false;   // canceló: no se registra
+    state.motivoDesfase =
+      `ENTRADA ANTES DE TIEMPO: ${horaMarca} vs programada ${horaRef} (${desfase}): ${motivo}`;
+    state.programacionAvisoHorario = clave;
     return true;
   }
 
@@ -4359,6 +4505,7 @@ async function confirmarHorarioProgramado(sentido) {
   if (motivo === null) return false;   // canceló: revisa la hora
 
   state.motivoDesfase = `${etiqueta} ${horaMarca} vs programada ${horaRef} (${desfase}): ${motivo}`;
+  state.programacionAvisoHorario = clave;
   return true;
 }
 
@@ -6161,6 +6308,14 @@ async function submitAttendance(event) {
     }
   }
 
+  // Hora oficial: si la hora del equipo o la de la marca no coinciden con la del
+  // servidor, no se marca y queda el intento de suplantacion.
+  const horaVerificada = await verificarHoraOficial();
+  if (!horaVerificada.ok) {
+    setMessage(elements.formMessage, horaVerificada.mensaje, "error");
+    return;
+  }
+
   const sentidoConfirmado = await confirmarCoherenciaTurno(state.nextSentido);
   if (!sentidoConfirmado) {
     // Con turno anterior sin cerrar el mensaje ya lo puso ofrecerCierreTurnoAnterior:
@@ -6171,10 +6326,13 @@ async function submitAttendance(event) {
     return;
   }
 
-  // Si la hora no concuerda con el horario programado del turno, se avisa (no bloquea).
+  // Si la hora no concuerda con el horario programado del turno se pide el motivo, y
+  // entrar mas de 30 min antes del turno lo exige (regla del 17-nov-2026).
   const seguirConHorario = await confirmarHorarioProgramado(sentidoConfirmado);
   if (!seguirConHorario) {
-    setMessage(elements.formMessage, "Registro cancelado. Revisa la hora frente al horario programado.", "");
+    setMessage(elements.formMessage,
+      "Registro cancelado: sin el motivo no se guarda la marca. Si entra más de "
+      + `${ENTRADA_ANTES_MAX_MIN} min antes de su turno, tiene que escribir por qué.`, "error");
     return;
   }
 
@@ -6196,7 +6354,10 @@ async function submitAttendance(event) {
   let marcaGuardadaLocal = false;
 
   try {
-    await syncServerClock();
+    // Otra vez justo antes de Buk: la hora pudo cambiarse mientras escribia un motivo.
+    // Sin hora oficial fresca no se marca (antes, si fallaba, seguia con la del equipo).
+    const horaAlMarcar = await verificarHoraOficial();
+    if (!horaAlMarcar.ok) throw new Error(horaAlMarcar.mensaje);
     const sentido = state.nextSentido;
     const now = getReportParts();
     if (!now.date || !now.time) {
@@ -6418,6 +6579,12 @@ async function submitAttendance(event) {
       .single();
 
     if (insertError) {
+      // PGRST116 = la base no devolvio la fila: el trigger trg_01_bloquear_hora_falsa no
+      // la dejo guardar porque su hora no es la oficial (y anoto el intento).
+      if (insertError.code === "PGRST116") {
+        throw new Error("La base no guardó la marca porque su hora no coincide con la hora oficial "
+          + "del servidor. Quedó registrado como intento de suplantación.");
+      }
       if (insertError.code === "23505") {
         // La marca ya existe en la base local: no hay inconsistencia con Buk.
         marcaGuardadaLocal = true;
@@ -7902,8 +8069,12 @@ const MOTIVOS_DESFASE = [
 
 // Pide el MOTIVO de un desfase y lo devuelve como texto, o null si se cancela.
 // Es obligatorio: sin motivo no se registra, para que la novedad quede explicada.
-// `motivos` permite cambiar la lista de sugerencias segun el tipo de novedad.
-function pedirMotivoDesfase(titulo, texto, motivos = MOTIVOS_DESFASE) {
+// `motivos` permite cambiar la lista de sugerencias segun el tipo de novedad; con una
+// lista vacia no hay botones y hay que escribirlo. `opciones.minimo` es el largo minimo
+// del texto y `opciones.placeholder` el ejemplo que se muestra en el campo.
+const MOTIVO_PLACEHOLDER = "Ej: estaba en el taller esperando el vehículo";
+function pedirMotivoDesfase(titulo, texto, motivos = MOTIVOS_DESFASE, opciones = {}) {
+  const minimo = opciones.minimo || 4;
   return new Promise((resolve) => {
     const ov = elements.motivoOverlay;
     if (!ov) { resolve(""); return; }   // sin modal en el DOM: no se bloquea el registro
@@ -7911,9 +8082,11 @@ function pedirMotivoDesfase(titulo, texto, motivos = MOTIVOS_DESFASE) {
     elements.motivoTitle.textContent = titulo;
     elements.motivoText.textContent = texto;
     elements.motivoInput.value = "";
+    elements.motivoInput.placeholder = opciones.placeholder || MOTIVO_PLACEHOLDER;
     setMessage(elements.motivoError, "");
     elements.motivoOpciones.innerHTML = motivos.map((m) =>
       `<button type="button" class="motivo-chip">${escapeHtml(m)}</button>`).join("");
+    elements.motivoOpciones.classList.toggle("hidden", !motivos.length);
     ov.classList.remove("hidden");
     setTimeout(() => elements.motivoInput.focus(), 50);
 
@@ -7934,8 +8107,10 @@ function pedirMotivoDesfase(titulo, texto, motivos = MOTIVOS_DESFASE) {
     };
     const onAccept = () => {
       const val = elements.motivoInput.value.trim();
-      if (val.length < 4) {
-        setMessage(elements.motivoError, "Escribe el motivo o elige uno de la lista.", "error");
+      if (val.length < minimo) {
+        setMessage(elements.motivoError, motivos.length
+          ? "Escribe el motivo o elige uno de la lista."
+          : `Escriba el motivo (mínimo ${minimo} letras) para poder registrar.`, "error");
         elements.motivoInput.focus();
         return;
       }
