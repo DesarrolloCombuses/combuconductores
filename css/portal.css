@@ -603,18 +603,21 @@ body:has(.aviso-noticia:not([hidden])) [data-panel="inicio"] .home { padding-bot
   color: #fff;
 }
 
-/* Ingreso y salida: la acción principal del conductor, grande y a la mano. */
-.btn-marcar {
-  margin-top: 14px;
-  min-height: 56px;
-  background: #fff;
-  color: var(--primary-strong);
-  font-size: 17px;
-  font-weight: 800;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .14);
+/* v1.27.0: ya no hay botón de marcar (los conductores marcan en el biométrico): queda el recordatorio. */
+.turno-biometrico {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 14px 0 0;
+  padding: 11px 13px;
+  border: 1px dashed rgba(255, 255, 255, .55);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
 }
-.btn-marcar:hover:not(:disabled) { background: var(--primary-ink); }
-.btn-marcar .ico { width: 23px; height: 23px; stroke-width: 2.2; }
+.turno-biometrico .ico { flex: none; width: 22px; height: 22px; stroke-width: 2.2; }
+.turno-biometrico strong { display: block; font-size: 15px; font-weight: 800; }
 
 .turno-hero {
   display: flex;
@@ -749,48 +752,8 @@ body:has(.aviso-noticia:not([hidden])) [data-panel="inicio"] .home { padding-bot
 .viajes-info .viajes-reparto { display: block; margin: 1px 0 2px; font-weight: 650; color: var(--primary-strong); }
 .viajes-info .viajes-reparto-nota { display: block; margin-bottom: 2px; font-size: 12.5px; color: var(--muted); }
 
-/* v1.22.0: la tarjeta partida por conductor: sus viajes, lo que entrega y, aparte, los del otro conductor del bus */
+/* La tarjeta del bus en todo el día (v1.27.0; la v1.22.0 la partía por conductor) */
 .tarj-dueno { margin: 0 0 10px; font-size: 12.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--primary-strong); }
-.tarj-entrega {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 10px;
-  margin: 12px 0 0;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--soft);
-  font-size: 14px;
-  color: var(--ink-2);
-}
-.tarj-entrega strong { font-size: 20px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
-.tarj-entrega span { flex-basis: 100%; font-size: 12.5px; color: var(--muted); }
-.tarj-otro { margin-top: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-2); }
-.tarj-otro > summary {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 11px 14px 11px 34px;
-  cursor: pointer;
-  list-style: none;
-  position: relative;
-  font-weight: 700;
-  color: var(--ink);
-}
-.tarj-otro > summary::-webkit-details-marker { display: none; }
-.tarj-otro > summary::before {
-  content: "";
-  position: absolute;
-  left: 14px;
-  top: 17px;
-  border: 5px solid transparent;
-  border-left-color: var(--muted);
-  transition: transform var(--transition);
-  transform-origin: 25% 50%;
-}
-.tarj-otro[open] > summary::before { transform: rotate(90deg); }
-.tarj-otro > summary small { font-size: 12.5px; font-weight: 500; color: var(--muted); }
-.tarj-otro > .tarj-lista { padding: 0 10px 10px; }
 
 .viajes-aviso {
   margin: 12px 0 0;
@@ -1194,7 +1157,7 @@ body:has(.aviso-noticia:not([hidden])) [data-panel="inicio"] .home { padding-bot
 @keyframes skeleton { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
 /* --- Accesos rápidos --- */
-.quick-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+.quick-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; }
 .quick-action {
   display: flex;
   flex-direction: column;
@@ -1479,6 +1442,19 @@ body:has(.aviso-noticia:not([hidden])) [data-panel="inicio"] .home { padding-bot
 .sin-ubicacion .sin-internet-icono { background: var(--soft); color: var(--primary); }
 .ubicacion-pasos { text-align: left; }
 .ubicacion-pasos li { align-items: flex-start; font-size: 14px; }
+
+/* v1.27.0: alerta "el biométrico del portal fue deshabilitado" (la misma tarjeta de Sin internet). Queda por
+   debajo de Sin internet (90) y de Ubicación (85), y encima de la pantalla de carga (80) y de las hojas. */
+.aviso-biometrico { z-index: 82; }
+.aviso-biometrico .sin-internet-card { max-height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.puntos-biometrico { list-style: none; margin: 2px 0 0; padding: 0; display: grid; gap: 8px; text-align: left; }
+.puntos-biometrico li { display: flex; align-items: center; gap: 12px; padding: 11px 13px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); background: var(--soft); }
+.puntos-biometrico .punto-ico { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%;
+  background: var(--primary); color: #fff; }
+.puntos-biometrico .punto-ico .ico { width: 20px; height: 20px; }
+.puntos-biometrico b { display: block; font-size: 16px; font-weight: 800; color: var(--ink); }
+.puntos-biometrico span { font-size: 13px; color: var(--muted); }
 
 .boot-overlay {
   position: fixed;

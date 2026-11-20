@@ -1,12 +1,13 @@
 # Portal del Conductor · Combuses
 
-Un solo sitio donde el conductor entra una vez y encuentra su turno, marca su
-asistencia y ve en qué puesto va la fila del aeropuerto. Une dos aplicaciones
-que hoy viven separadas:
+Un solo sitio donde el conductor entra una vez y encuentra su turno, su tarjeta
+y en qué puesto va la fila del aeropuerto. Une aplicaciones que hoy viven
+separadas. Desde la v1.27.0 la asistencia ya no se marca aquí: los conductores
+marcan en el biométrico.
 
 | Módulo | Repositorio de origen | Qué aporta |
 |---|---|---|
-| Asistencia | [`biometricoconductores`](https://github.com/DesarrolloCombuses/biometricoconductores) | Registro de entrada y salida con foto y ubicación |
+| Asistencia (hasta la v1.26.4) | [`biometricoconductores`](https://github.com/DesarrolloCombuses/biometricoconductores) | Registro de entrada y salida con foto y ubicación. Desde la v1.27.0 se marca en el biométrico |
 | Aeropuerto | [`despachosaeropuerto`](https://github.com/DesarrolloCombuses/despachosaeropuerto) | Fila de espera, mapa de la flota y turnos del día |
 | Tiquetes | Distribusion (sistema externo) | Validación de tiquetes en `portal.distribusion.com` |
 
@@ -561,6 +562,34 @@ que $240.000 son en tiquetes y $140.000 en efectivo (7 pasajeros).
   de 19 dice *"Máximo 19 pasajeros: es el cupo del bus"* y el botón Guardar se apaga; igual si tiquetes y cívicas
   pasan de los pasajeros. La lectura que escribe dice cómo le queda el viaje anterior (si no cuadra, avisa).
 
+### Sin Asistencia y la tarjeta del bus en todo el día (v1.27.0)
+
+Pedido del usuario el 19-nov-2026: *"deshabilitar el uso del biométrico por parte de los conductores"* en el portal
+(los conductores **marcan su ingreso y su salida en el biométrico**, no en el portal) y *"quitar que por conductor le
+salga la tarjeta, sino la tarjeta de todo el día del vehículo"*.
+
+- **Sin Asistencia:** se quitaron el botón *Asistencia* del menú, el acceso directo *Marcar asistencia*, el panel del
+  módulo y su entrada en `MODULOS` (`portal-config.js`). El módulo ya no se descarga con la app (`sw.js`: ~530 KB
+  menos). Un acceso directo viejo (`#/asistencia`) cae en el Inicio. Los archivos de `modulos/asistencia/` siguen en el
+  repositorio, pero el portal no los usa.
+- **El Inicio:** en vez del botón *Marcar ingreso / Marcar salida* queda el aviso *"Marcar en el portal está
+  deshabilitado · Registra tu ingreso (o tu salida) en el biométrico de Almacentro o Terminal del Norte."*
+  (`LUGARES_BIOMETRICO`), que desaparece con la salida marcada.
+- **La alerta que hay que confirmar** (`#avisoBiometrico`): *"El biométrico del portal fue deshabilitado"*, que hay
+  que presentarse en un punto autorizado y marcar allí, la lista de los puntos (`PUNTOS_BIOMETRICO`: Almacentro y
+  Terminal del Norte) y el recordatorio de los 15 minutos. Sale al entrar a la app hasta que el conductor toca
+  *"Entendido, marcaré en el biométrico"* (se recuerda por cédula en ese celular, `portal_aviso_biometrico_v127`) y
+  cada vez que un acceso viejo intente abrir `#/asistencia`. Mientras está abierta no salen la noticia, el pedido de
+  instalar ni la actualización automática. La marca que hizo en el biométrico se sigue
+  viendo (*"Entrada registrada a las 12:20 con reconocimiento facial"*, de `estado_turno_actual`), y el turno y la
+  tarjeta se siguen cerrando con la salida (v1.26.0). *Mis marcas de hoy* ya no tiene *Marcar ahora*.
+- **La tarjeta:** vuelve a ser la del bus entera, con los viajes de **todos los conductores** que lo manejaron ese día:
+  *"Tarjeta del bus 799 · Todo el día del bus · todos sus conductores"*, sus totales y lo que falta. Se quitó la
+  partición de la v1.22.0 (*Tus viajes*, *Efectivo que entregas*, *Viajes del otro conductor*) y el portal ya no
+  consulta `tarjeta_viajes_conductor`. La liquidación por conductor sigue en Control (*Por conductor*).
+- **Falta:** la práctica (`practica/`) todavía enseña a marcar en el portal (pasos 2 y 8).
+- Prueba: `probar_v127.py` (Edge con una base de mentira, conductor 20020002 y bus 799): 25/25.
+
 ### Los disponibles tienen turno de 02:00 a 09:00 (v1.26.2)
 
 Pedido del usuario el 17-nov-2026: *"en la programación el que está disponible tiene turno de 2:00 am a 9 am"*, para
@@ -737,6 +766,8 @@ del bus que va a la Supertransporte por GESMOVIL (repositorio `gesmovil-sicov`);
 - Con siete botones abajo, la letra baja a 9,5 px en teléfonos de 420 px o menos y a 9 px en los de 375 px o menos.
 
 ### Mi tarjeta por conductor (v1.22.0)
+
+> **Se quitó en la v1.27.0:** la tarjeta vuelve a ser la del bus en todo el día. Esto queda como historia.
 
 Pedido del usuario el 22-oct-2026: *"separar por conductor la liquidación del carro"*. Un bus tiene dos conductores al
 día y la tarjeta es del bus: el del turno 2 veía también los viajes y la plata del turno 1.

@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="./css/portal.css?v=1.26.4">
+  <link rel="stylesheet" href="./css/portal.css?v=1.27.0">
 </head>
 <body>
 
@@ -251,10 +251,6 @@
 
         <!-- Accesos directos -->
         <div class="quick-actions">
-          <button class="quick-action" type="button" data-goto="asistencia">
-            <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
-            <span>Marcar asistencia</span>
-          </button>
           <button class="quick-action" type="button" data-goto="aeropuerto">
             <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M17.8 19.8 16 14l-4 1-4-1-1.8 5.8"/><path d="M22 12c0-1.1-.9-2-2-2h-3l-4-7h-2l1.5 7H8L6 8H4l1 4-1 4h2l2-2h4.5L11 21h2l4-7h3c1.1 0 2-.9 2-2Z"/></svg>
             <span>Ver la fila</span>
@@ -286,7 +282,6 @@
     </div>
 
     <!-- ---- Módulos embebidos: los iframes los inserta portal.js ---- -->
-    <div class="module-panel" data-panel="asistencia" hidden></div>
     <!-- El formulario de alistamiento del SICOV (v1.23.0), con la cédula y el bus ya puestos -->
     <div class="module-panel" data-panel="alistamiento" hidden></div>
     <div class="module-panel" data-panel="aeropuerto" hidden></div>
@@ -307,13 +302,9 @@
       <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
       <span>Mi tarjeta</span>
     </button>
-    <button class="nav-item" type="button" data-nav="asistencia">
-      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
-      <span>Asistencia</span>
-    </button>
     <button class="nav-item nav-conductor" type="button" data-nav="alistamiento">
       <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="m9 13 2 2 4-4"/></svg>
-      <!-- "Alistar" y no "Alistamiento": con siete botones no cabe en un teléfono -->
+      <!-- "Alistar" y no "Alistamiento": con seis o siete botones no cabe en un teléfono -->
       <span>Alistar</span>
       <span class="nav-punto" id="navPuntoAlistamiento" hidden></span>
     </button>
@@ -790,6 +781,26 @@
   </div>
 </div>
 
+<!-- ============ v1.27.0: el biométrico del portal fue deshabilitado ============ -->
+<!-- Alerta que hay que confirmar: sale al entrar a la app hasta que el conductor toca "Entendido" (una vez por
+     conductor en este celular) y cada vez que algo intente abrir la vieja Asistencia (#/asistencia).
+     Los puntos los pinta portal.js desde PUNTOS_BIOMETRICO. -->
+<div id="avisoBiometrico" class="sin-internet aviso-biometrico" role="alertdialog" aria-modal="true"
+     aria-labelledby="avisoBiometricoTitulo" aria-describedby="avisoBiometricoTexto" hidden>
+  <div class="sin-internet-card">
+    <div class="sin-internet-icono" aria-hidden="true">
+      <svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>
+    </div>
+    <h2 id="avisoBiometricoTitulo">El biométrico del portal fue deshabilitado</h2>
+    <p id="avisoBiometricoTexto">Ya no puedes marcar tu ingreso ni tu salida desde el portal. Debes presentarte en uno
+      de los <strong>puntos autorizados</strong> y marcar allí en el biométrico:</p>
+    <ul id="avisoBiometricoPuntos" class="puntos-biometrico"></ul>
+    <p class="sin-internet-nota">Recuerda: la entrada se marca máximo 15 minutos antes de tu turno. Para entrar antes
+      necesitas el permiso del gestor y escribir el motivo.</p>
+    <button id="btnAvisoBiometrico" class="btn btn-primary btn-block" type="button">Entendido, marcaré en el biométrico</button>
+  </div>
+</div>
+
 <!-- ============ Cargando ============ -->
 <div id="bootOverlay" class="boot-overlay">
   <img class="boot-logo" src="./assets/logo-combuses.webp" alt="Combuses">
@@ -798,7 +809,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./js/portal-config.js?v=1.26.4"></script>
-<script src="./js/portal.js?v=1.26.4"></script>
+<script src="./js/portal-config.js?v=1.27.0"></script>
+<script src="./js/portal.js?v=1.27.0"></script>
 </body>
 </html>

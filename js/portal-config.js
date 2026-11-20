@@ -12,7 +12,7 @@ window.PORTAL_CONFIG = {
   // una nueva no se edita a mano, se corre (desde la carpeta portal):
   //   powershell -ExecutionPolicy Bypass -File .\nueva-version.ps1 1.6.1
   // que la cambia aquí, en sw.js y en index.html a la vez.
-  APP_VERSION: "v1.26.4",
+  APP_VERSION: "v1.27.0",
 
   // Cada cuánto se pregunta al servidor si hay una versión nueva, con el
   // portal a la vista. También se pregunta al abrirlo y al volver a él.
@@ -183,15 +183,7 @@ window.PORTAL_CONFIG = {
   // móviles que solo quería mirar su turno. Se cargan cuando se abren, y a
   // partir de la segunda vez ya salen del service worker.
   MODULOS: [
-    {
-      id: "asistencia",
-      nombre: "Asistencia",
-      descripcion: "Registra tu entrada y salida con foto",
-      icono: "fingerprint",
-      src: "./modulos/asistencia/asistencia-web.html?embed=portal",
-      permisos: "geolocation; camera; fullscreen",
-      precarga: false,
-    },
+    // v1.27.0: sin el módulo de asistencia: los conductores marcan en el biométrico.
     {
       // La revisión diaria del bus que va a la Supertransporte por GESMOVIL (v1.23.0): el mismo formulario de la app
       // de alistamiento (gesmovil-sicov), con la cédula y el bus del turno ya puestos (modo-portal.js del módulo).

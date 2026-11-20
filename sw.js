@@ -23,7 +23,7 @@
 // Igual a APP_VERSION de js/portal-config.js. No se cambia a mano: lo hace
 // nueva-version.ps1 en todos los sitios a la vez. Que este archivo cambie es
 // lo que avisa a los teléfonos de que hay una versión nueva.
-const VERSION = "v1.26.4";
+const VERSION = "v1.27.0";
 const CACHE_APP = "portal-app-" + VERSION;
 const CACHE_CDN = "portal-cdn-" + VERSION;
 const CACHE_TILES = "portal-tiles-" + VERSION;
@@ -55,14 +55,7 @@ const APP_SHELL = [
   "./practica/practica.css?v=1.26.0",
   "./practica/practica.js?v=1.26.0",
 
-  // Módulo: asistencia biométrica
-  "./modulos/asistencia/asistencia-web.html",
-  "./modulos/asistencia/asistencia.css",
-  "./modulos/asistencia/asistencia.js",
-  "./modulos/asistencia/supabase-config.js",
-  "./modulos/asistencia/modo-portal.css",
-  "./modulos/asistencia/modo-portal.js",
-  "./modulos/asistencia/assets/logo-combuses.webp",
+  // v1.27.0: el módulo de asistencia ya no se descarga: los conductores marcan en el biométrico (~530 KB menos).
 
   // Módulo: despachos aeropuerto
   "./modulos/aeropuerto/aplicacion-aeropuerto.html",

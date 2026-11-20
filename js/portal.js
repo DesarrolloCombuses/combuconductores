@@ -1020,11 +1020,14 @@
     // (puede venir del hash de un acceso directo del instalador PWA). Si es
     // "inicio", irA() ya se encarga de refrescar sus tarjetas.
     irA(state.vista);
+    abrirAvisoBiometrico(false);   // v1.27.0: hasta que lo confirme
     setTimeout(pedirInstalacion, 2000);
   }
 
   // ------------------------------------------------------- router de vistas
   function initNav() {
+    var btnAviso = $("btnAvisoBiometrico");
+    if (btnAviso) btnAviso.addEventListener("click", confirmarAvisoBiometrico);
     document.querySelectorAll("[data-nav]").forEach(function (btn) {
       btn.addEventListener("click", function () { irA(btn.dataset.nav); });
     });
@@ -1049,9 +1052,10 @@
     irA(destino, true);
   }
 
+  // v1.27.0 (pedido del usuario, 19-nov-2026): sin Asistencia. Los conductores marcan su ingreso y su salida en el
+  // biométrico, no en el portal. Un acceso directo viejo (#/asistencia) cae en el Inicio: irA() no conoce la vista.
   var TITULOS = {
     inicio: { titulo: "Inicio", sub: "" },
-    asistencia: { titulo: "Asistencia", sub: "Registra tu entrada y salida" },
     alistamiento: { titulo: "Alistamiento", sub: "Revisión diaria del bus" },
     aeropuerto: { titulo: "Aeropuerto", sub: "Enturnamiento y mapa en vivo" },
     tiquetes: { titulo: "Tiquetes", sub: "Validación en Distribusion" },
@@ -1065,6 +1069,8 @@
   function irA(vista, desdeHash, confirmado) {
     // El perfil es una hoja, no una vista: no cambia el panel de fondo.
     if (vista === "perfil") { abrirPerfil(); return; }
+    // v1.27.0: un acceso viejo a la Asistencia muestra la alerta de los puntos autorizados (y queda en el Inicio).
+    if (vista === "asistencia") abrirAvisoBiometrico(true);
     if (!TITULOS[vista]) vista = "inicio";
     // Una noticia que ya cerró o que el conductor quitó (o un #/noticia viejo) vuelve al Inicio.
     if (vista === "noticia" && !noticiaParaAbrir()) vista = "inicio";
@@ -1457,7 +1463,7 @@
   // (v1.23.0) la recibe igual, con el bus del turno.
   // El Aeropuerto usa solo el bus: con él muestra la fila del itinerario con que lo despacharon y su posición
   // (modulos/aeropuerto/js/modo-conductor.js).
-  var MODULOS_CON_CONDUCTOR = ["asistencia", "alistamiento", "aeropuerto"];
+  var MODULOS_CON_CONDUCTOR = ["alistamiento", "aeropuerto"];
 
   function empujarConductor(idModulo) {
     if (MODULOS_CON_CONDUCTOR.indexOf(idModulo) < 0 || !state.dni) return;
@@ -1487,7 +1493,6 @@
           // pidió por el evento, así que se la mandamos a todos: el que ya
           // esté logueado simplemente la reaplica.
           empujarSesionATodos();
-          empujarConductor("asistencia");
           break;
 
         case "PORTAL_PEDIR_CONDUCTOR":
@@ -1751,7 +1756,7 @@
       var ventana = $("noticiaVentana");
       if (!ventana || !ventana.hidden || state.vista !== "inicio" || $("appView").hidden) return;
       var ocupado = ["bootOverlay", "perfilSheet", "tiquetesSheet", "instalarSheet", "noticiasSheet", "danoSheet",
-        "corrSheet", "sinInternet", "sinUbicacion"].some(function (id) { return $(id) && !$(id).hidden; });
+        "corrSheet", "sinInternet", "sinUbicacion", "avisoBiometrico"].some(function (id) { return $(id) && !$(id).hidden; });
       if (ocupado) return;
       var hoy = hoyColombia();
       var vistas = noticiasPresentadas();
@@ -1962,24 +1967,57 @@
     }
   }
 
-  // Lo más importante del portal: que el conductor registre su ingreso y su
-  // salida. El botón dice cuál le toca según las marcas del turno y lo lleva a
-  // Asistencia, que es donde se registra. Con la jornada cumplida desaparece.
+  // v1.27.0: el conductor marca su ingreso y su salida en el biométrico, no en el portal (antes aquí estaba el botón
+  // "Marcar ingreso" que llevaba a Asistencia). Queda el recordatorio de cuál le toca; con la salida ya marcada
+  // desaparece. La marca que hizo en el biométrico sí se ve aquí: la trae estado_turno_actual().
   var ICONO_INGRESO = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5M15 12H3"/></svg>';
   var ICONO_SALIDA = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg>';
 
-  function botonMarcar(turno) {
+  // Pedido del usuario (19-nov-2026): que diga que en el portal está deshabilitado y dónde registrarse.
+  // Puntos autorizados para marcar en el biométrico; de aquí salen el aviso del Inicio y la alerta.
+  var PUNTOS_BIOMETRICO = ["Almacentro", "Terminal del Norte"];
+  var LUGARES_BIOMETRICO = PUNTOS_BIOMETRICO.join(" o ");
+  var ICONO_DESHABILITADO = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>';
+
+  function avisoMarcar(turno) {
     var marca = turno ? marcaDeEntrada(turno, state.estadoTurno) : null;
     if (marca && marca.salida) return "";
-    var salida = !!marca;
-    var texto = !turno ? "Marcar ingreso o salida" : salida ? "Marcar salida" : "Marcar ingreso";
-    return '<button class="btn btn-block btn-marcar" type="button" data-marcar>' +
-      (salida ? ICONO_SALIDA : ICONO_INGRESO) + escapeHtml(texto) + "</button>";
+    var que = !turno ? "tu ingreso y tu salida" : marca ? "tu salida" : "tu ingreso";
+    return '<p class="turno-biometrico">' + ICONO_DESHABILITADO +
+      "<span><strong>Marcar en el portal está deshabilitado</strong>" +
+      "Registra " + escapeHtml(que) + " en el biométrico de " + LUGARES_BIOMETRICO + ".</span></p>";
   }
 
-  function enlazarBotonMarcar(box) {
-    var btn = box.querySelector("[data-marcar]");
-    if (btn) btn.addEventListener("click", function () { irA("asistencia"); });
+  // Alerta que hay que confirmar (pedido del usuario 19-nov-2026): que quede claro que el biométrico del portal fue
+  // deshabilitado y en qué puntos autorizados se marca. Sale al entrar a la app hasta que el conductor toca
+  // "Entendido" (se recuerda por cédula en este celular) y cada vez que algo intente abrir la vieja Asistencia.
+  var LS_AVISO_BIOMETRICO = "portal_aviso_biometrico_v127";
+  var ICONO_PUNTO = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 22s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z"/><circle cx="12" cy="10" r="2.5"/></svg>';
+
+  function avisosBiometricoConfirmados() {
+    try { return JSON.parse(localStorage.getItem(LS_AVISO_BIOMETRICO) || "[]") || []; } catch (_) { return []; }
+  }
+
+  function abrirAvisoBiometrico(siempre) {
+    var ventana = $("avisoBiometrico");
+    if (!ventana || !ventana.hidden || $("appView").hidden) return;
+    if (!siempre && state.dni && avisosBiometricoConfirmados().indexOf(state.dni) >= 0) return;
+    $("avisoBiometricoPuntos").innerHTML = PUNTOS_BIOMETRICO.map(function (p) {
+      return '<li><span class="punto-ico">' + ICONO_PUNTO + "</span><div><b>" + escapeHtml(p) + "</b>" +
+        "<span>Punto autorizado · biométrico</span></div></li>";
+    }).join("");
+    show(ventana, true);
+    setTimeout(function () { try { $("btnAvisoBiometrico").focus(); } catch (_) {} }, 50);
+  }
+
+  function confirmarAvisoBiometrico() {
+    try {
+      var lista = avisosBiometricoConfirmados();
+      if (state.dni && lista.indexOf(state.dni) < 0) lista.push(state.dni);
+      localStorage.setItem(LS_AVISO_BIOMETRICO, JSON.stringify(lista.slice(-10)));
+    } catch (_) { /* sin espacio: vuelve a salir la próxima vez */ }
+    show($("avisoBiometrico"), false);
+    presentarNoticia();
   }
 
   function pintarTurno(turno) {
@@ -1991,8 +2029,7 @@
           ? " Vehículo indicado: <strong>" + escapeHtml(state.vehiculo) + "</strong>."
           : "") +
         "</p>" +
-        botonMarcar(null);
-      enlazarBotonMarcar(box);
+        avisoMarcar(null);
       return;
     }
 
@@ -2023,8 +2060,7 @@
             '<span class="turno-relevo-hora">Relevo programado a las ' + escapeHtml(relevo.hora) + "</span>" +
           "</div>"
         : "") +
-      botonMarcar(turno);
-    enlazarBotonMarcar(box);
+      avisoMarcar(turno);
   }
 
   // Con quién se cruza el conductor en el vehículo. La hora de INICIA 2 es un
@@ -2283,9 +2319,6 @@
     registros: null,
     corr: null,          // la corrección abierta: { clave, campos, valores, motivo, otra, avisos, confirmando, guardando }
     conCorreccion: null, // la base ya deja corregir al conductor (sql v14); null: no se sabe todavía
-    // v1.22.0: { clave: { mio, turno, nombre, entrada, segun } } de quién es cada viaje (sql v15); null: sin la función
-    duenos: null,
-    otroAbierto: false,  // la lista de los viajes del otro conductor quedó abierta
   };
 
   // Corregir lo guardado (v1.21.0, pedido del usuario: "poner corrección en la app del conductor en la tarjeta").
@@ -2365,21 +2398,6 @@
     return regs;
   }
 
-  // De quién es cada viaje (sql v15 tarjeta_viajes_conductor): el último conductor del bus que marcó entrada en el
-  // biométrico antes de que el bus saliera; si nadie había marcado, el del turno programado. En el celular no se
-  // guarda la cédula: solo si el viaje es suyo.
-  function duenosDeTarjeta(r) {
-    if (!r || r.error || !Array.isArray(r.data)) return null;
-    var yo = String(state.dni || "").replace(/\D/g, "");
-    var d = {};
-    r.data.forEach(function (x) {
-      if (!x.dni) return;
-      d[x.clave] = { mio: !!yo && String(x.dni).replace(/\D/g, "") === yo, turno: x.turno, nombre: x.nombre || null,
-                     entrada: x.entrada || null, segun: x.segun };
-    });
-    return d;
-  }
-
   async function consultarTarjeta(vehiculo, dia) {
     var internos = variantesInterno(vehiculo);
     var escritos = Promise.all(CORREGIBLES.map(function (campo) {
@@ -2413,9 +2431,6 @@
       // v1.21.0: quién escribió cada número (para "Corregir"). También son un extra.
       escritos,
       baseDejaCorregir(),
-      // v1.22.0: de quién es cada viaje (sql v15). Sin la función, la tarjeta sale entera, como antes.
-      conTiempoLimite(client.rpc("tarjeta_viajes_conductor", { p_dia: dia, p_interno: String(vehiculo).trim() }))
-        .catch(function () { return { error: true }; }),
     ]);
     if (res[0].error && tarjetaConPersonal && /personal/.test(res[0].error.message || "")) {
       tarjetaConPersonal = false;            // la base todavía no tiene la v10
@@ -2424,8 +2439,7 @@
     if (res[0].error) throw res[0].error;
     // Los daños son un extra: si esa consulta falla, la tarjeta sirve igual.
     return { filas: res[0].data || [], danos: res[1].error ? [] : (res[1].data || []),
-      novedades: res[2] && !res[2].error ? (res[2].data || []) : [], registros: registrosDeTarjeta(res[3]),
-      duenos: duenosDeTarjeta(res[5]) };
+      novedades: res[2] && !res[2].error ? (res[2].data || []) : [], registros: registrosDeTarjeta(res[3]) };
   }
 
   function cargarTarjeta() {
@@ -2444,7 +2458,7 @@
       return;
     }
     show(btn, true);
-    $("tarjetaTitulo").textContent = "Mi tarjeta · bus " + vehiculo;
+    $("tarjetaTitulo").textContent = "Tarjeta del bus " + vehiculo;
 
     var clave = normalizarInterno(vehiculo) + "_" + dia;
     if (tarj.clave !== clave) {
@@ -2456,8 +2470,6 @@
       tarj.danos = cache && cache.datos ? cache.datos.danos || [] : [];
       tarj.novedades = cache && cache.datos ? cache.datos.novedades || [] : [];
       tarj.registros = cache && cache.datos ? cache.datos.registros || null : null;
-      tarj.duenos = cache && cache.datos ? cache.datos.duenos || null : null;
-      tarj.otroAbierto = false;
       tarj.guardadoEn = tarj.filas ? cache.guardadoEn : null;
       tarj.error = null;
       tarj.borrador = {};
@@ -2488,7 +2500,6 @@
         tarj.danos = datos.danos;
         tarj.novedades = datos.novedades;
         tarj.registros = datos.registros;
-        tarj.duenos = datos.duenos;
         tarj.guardadoEn = Date.now();
         tarj.error = null;
         guardarCache("tarjeta_" + clave, datos);
@@ -2688,49 +2699,9 @@
     return f.civica_lectura == null || f.pasajeros_conductor == null || f.tiquetes_escaneados == null;
   }
 
-  // v1.22.0 (pedido del usuario: "separar por conductor la liquidación del carro"): arriba los viajes del conductor
-  // y su liquidación; los del otro conductor del bus, aparte. Ej. bus 722: el del turno 2 entró a las 12:40 y ve sus
-  // 5 viajes desde esa hora; los 6 del turno 1 quedan en "Viajes del otro conductor". Sin la función de la base, o si
-  // él no es de este bus hoy (no está programado en él ni tiene viajes), la tarjeta es la del bus entera, como antes.
-  function partirTarjeta(filas) {
-    var d = tarj.duenos;
-    var esDelBus = !!(state.turno && tarj.vehiculo &&
-      normalizarInterno(state.turno.vehiculo) === normalizarInterno(tarj.vehiculo));
-    if (!d || !(esDelBus || filas.some(function (f) { return d[f.clave] && d[f.clave].mio; }))) {
-      return { mias: filas, otras: [], partida: false };
-    }
-    return {
-      // Un viaje sin dueño (no había nadie programado a esa hora) se queda con él, para que lo pueda llenar.
-      mias: filas.filter(function (f) { return !d[f.clave] || d[f.clave].mio; }),
-      otras: filas.filter(function (f) { return d[f.clave] && !d[f.clave].mio; }),
-      partida: true,
-    };
-  }
-
-  // "turno 2 · entraste a las 12:40"
-  function textoDeMiTurno(mias) {
-    var d = tarj.duenos || {};
-    var mio = mias.map(function (f) { return d[f.clave]; }).find(function (x) { return x && x.mio; });
-    var turno = mio ? mio.turno : state.turno ? state.turno.turno : null;
-    var entrada = mio && mio.entrada ? horaCorta(String(mio.entrada).slice(11, 16)) : null;
-    return (turno != null ? "turno " + turno : "tu turno") + (entrada ? " · entraste a las " + entrada : "");
-  }
-
-  // "Viajes del otro conductor · turno 1 · [su nombre programado]" (uno o dos, si el bus tuvo más)
-  function textoDelOtro(otras) {
-    var d = tarj.duenos || {};
-    var vistos = {};
-    var quienes = [];
-    otras.forEach(function (f) {
-      var x = d[f.clave];
-      var k = x ? x.turno + "|" + x.nombre : "?";
-      if (vistos[k] || !x) return;
-      vistos[k] = true;
-      quienes.push("turno " + x.turno + (x.nombre ? " · " + x.nombre : ""));
-    });
-    return (quienes.length > 1 ? "Viajes de los otros conductores" : "Viajes del otro conductor") +
-      (quienes.length ? " · " + quienes.join(" y ") : "");
-  }
+  // v1.27.0 (pedido del usuario, 19-nov-2026: "que no le salga la tarjeta por conductor sino la de todo el día del
+  // vehículo"): la tarjeta vuelve a ser la del bus entera, con los viajes de todos los conductores que lo manejaron.
+  // La v1.22.0 la partía por conductor (sus viajes arriba y los del otro aparte); eso queda solo en Control.
 
   // Lo que le falta a la tarjeta, en palabras: "la cívica en 2 viajes, los
   // pasajeros en 2 viajes y los tiquetes en 1 viaje".
@@ -2763,25 +2734,21 @@
         : '<div class="skeleton skeleton-linea"></div>';
       return;
     }
-    var partes = partirTarjeta(filas);
-    var mias = partes.mias;
-    var faltan = faltanEnTarjeta(mias);
-    var suyo = totalesDelConductor(mias);
+    var faltan = faltanEnTarjeta(filas);
+    var total = totalesDelConductor(filas);
     var texto, nivel;
-    if (!mias.length) {
+    if (!filas.length) {
       nivel = "falta";
-      texto = partes.partida
-        ? "Todavía no tienes viajes hoy en el bus " + tarj.vehiculo + "."
-        : "Todavía no hay viajes hoy en el bus " + tarj.vehiculo + ".";
+      texto = "Todavía no hay viajes hoy en el bus " + tarj.vehiculo + ".";
     } else if (faltan) {
       nivel = "pronto";
       texto = "Falta " + faltan + ".";
     } else {
       nivel = "ok";
-      texto = "Tarjeta al día: " + enViajes(mias.length) + ", " + suyo.pasajeros + " pasajeros" +
-        (suyo.conPlata ? ", " + pesos(suyo.plata) +
-          (suyo.conReparto ? " (tiquetes " + pesos(suyo.enTiquetes) + ", cívica " + pesos(suyo.enCivica) + ", efectivo " +
-            pesos(suyo.enEfectivo) + (suyo.porSeparar ? "; " + pesos(suyo.porSeparar) + " entre cívica y efectivo, sin separar" : "") +
+      texto = "Tarjeta al día: " + enViajes(filas.length) + ", " + total.pasajeros + " pasajeros" +
+        (total.conPlata ? ", " + pesos(total.plata) +
+          (total.conReparto ? " (tiquetes " + pesos(total.enTiquetes) + ", cívica " + pesos(total.enCivica) + ", efectivo " +
+            pesos(total.enEfectivo) + (total.porSeparar ? "; " + pesos(total.porSeparar) + " entre cívica y efectivo, sin separar" : "") +
             ")" : "")
           : "") + ".";
     }
@@ -2806,42 +2773,29 @@
           otra: activo.hasAttribute("data-corr-otra"), campo: activo.getAttribute("data-campo") }
       : null;
 
-    // v1.22.0: arriba lo suyo y su liquidación; lo del otro conductor del bus, aparte (partirTarjeta). Cada viaje se
-    // pinta con su posición en la lista entera del bus: con ella se busca la cívica del viaje anterior.
-    var partes = partirTarjeta(filas);
-    var mias = partes.mias;
-    var n = mias.length;
-    // Los totales son los del conductor: el del sensor dejaría sacar, por resta,
-    // el número de un viaje que todavía no ha escrito.
-    var suyo = totalesDelConductor(mias);
-    var tiquetes = mias.reduce(function (s, f) { return s + Number(f.tiquetes_escaneados || 0); }, 0);
-    var primera = mias.find(faltaAlgo);
+    // v1.27.0: todos los viajes del bus en el día, de todos sus conductores. Cada viaje se pinta con su posición en la
+    // lista del bus: con ella se busca la cívica del viaje anterior.
+    var n = filas.length;
+    // Los totales son los de lo que escribieron los conductores: el del sensor dejaría sacar, por resta,
+    // el número de un viaje que todavía no se ha escrito.
+    var total = totalesDelConductor(filas);
+    var tiquetes = filas.reduce(function (s, f) { return s + Number(f.tiquetes_escaneados || 0); }, 0);
+    var primera = filas.find(faltaAlgo);
     var primeraFalta = primera ? filas.indexOf(primera) : -1;
-    var faltan = faltanEnTarjeta(mias);
+    var faltan = faltanEnTarjeta(filas);
 
     var html =
-      (partes.partida
-        ? '<p class="tarj-dueno">Tus viajes · ' + escapeHtml(textoDeMiTurno(mias)) + "</p>"
-        : "") +
+      '<p class="tarj-dueno">Todo el día del bus · todos sus conductores</p>' +
       '<div class="viajes-hero">' +
         '<div class="viajes-total"><strong>' + n + "</strong><span>" + (n === 1 ? "viaje" : "viajes") + "</span></div>" +
         '<div class="viajes-info">' +
-          "<strong>" + suyo.pasajeros + (suyo.pasajeros === 1 ? " pasajero" : " pasajeros") +
-            (suyo.conPlata ? " · " + pesos(suyo.plata) : "") +
+          "<strong>" + total.pasajeros + (total.pasajeros === 1 ? " pasajero" : " pasajeros") +
+            (total.conPlata ? " · " + pesos(total.plata) : "") +
             (n ? " · " + tiquetes + (tiquetes === 1 ? " tiquete" : " tiquetes") : "") + "</strong>" +
-          repartoDelDia(suyo) +
-          "<span>" +
-            (!n ? (partes.partida ? "Todavía no tienes viajes hoy" : "Todavía no hay viajes hoy")
-              : faltan ? "Falta " + faltan : "Tarjeta completa") +
-          "</span>" +
+          repartoDelDia(total) +
+          "<span>" + (!n ? "Todavía no hay viajes hoy" : faltan ? "Falta " + faltan : "Tarjeta completa") + "</span>" +
         "</div>" +
-      "</div>" +
-      // La liquidación: lo que entrega en efectivo de sus viajes (lo de tiquete y cívica no pasa por su mano).
-      (partes.partida && suyo.conReparto
-        ? '<p class="tarj-entrega">Efectivo que entregas <strong>' + pesos(suyo.enEfectivo) + "</strong>" +
-          (suyo.porSeparar || suyo.sinRepartir ? '<span>Puede cambiar: falta separar ' +
-            pesos(suyo.porSeparar + suyo.sinRepartir) + "</span>" : "") + "</p>"
-        : "");
+      "</div>";
 
     if (tarj.guardadoEn && (tarj.error || !navigator.onLine)) {
       html += '<p class="viajes-aviso">' + (navigator.onLine ? "No se pudo actualizar" : "Sin conexión") +
@@ -2850,23 +2804,10 @@
 
     if (n) {
       html += '<ol class="tarj-lista">' +
-        mias.map(function (f) { var i = filas.indexOf(f); return renglonTarjeta(f, i, i === primeraFalta); }).join("") +
+        filas.map(function (f, i) { return renglonTarjeta(f, i, i === primeraFalta); }).join("") +
         "</ol>";
     } else {
       html += '<p class="viajes-nota">Cada viaje aparece aquí un par de minutos después del despacho.</p>';
-    }
-
-    if (partes.otras.length) {
-      var delOtro = totalesDelConductor(partes.otras);
-      html += '<details class="tarj-otro"' + (tarj.otroAbierto ? " open" : "") + ">" +
-        "<summary><span>" + escapeHtml(textoDelOtro(partes.otras)) + "</span>" +
-          "<small>" + enViajes(partes.otras.length) + " · " + delOtro.pasajeros + " pasajeros" +
-            (delOtro.conPlata ? " · " + pesos(delOtro.plata) : "") + " · no van en tu liquidación</small>" +
-        "</summary>" +
-        '<ol class="tarj-lista">' +
-          partes.otras.map(function (f) { return renglonTarjeta(f, filas.indexOf(f), false); }).join("") +
-        "</ol>" +
-      "</details>";
     }
 
     var sueltas = novedadesSinViaje(filas);
@@ -3706,11 +3647,6 @@
     });
 
     var box = $("tarjetaBody");
-    // v1.22.0: la lista del otro conductor sigue abierta (o cerrada) cuando la tarjeta se vuelve a pintar.
-    // "toggle" no sube por el árbol: se escucha en la captura.
-    box.addEventListener("toggle", function (ev) {
-      if (ev.target.classList && ev.target.classList.contains("tarj-otro")) tarj.otroAbierto = ev.target.open;
-    }, true);
     box.addEventListener("input", function (ev) {
       // v1.21.0: lo que escribe en la corrección
       var corr = tarj.corr;
@@ -3891,12 +3827,8 @@
     var box = $("jornadaBody");
 
     if (!marcas || !marcas.length) {
-      box.innerHTML =
-        '<p class="placeholder">Todavía no has marcado hoy.</p>' +
-        '<button class="btn btn-primary btn-sm" type="button" data-ir-asistencia ' +
-        'style="margin-top:11px">Marcar ahora</button>';
-      var btn = box.querySelector("[data-ir-asistencia]");
-      if (btn) btn.addEventListener("click", function () { irA("asistencia"); });
+      box.innerHTML = '<p class="placeholder">Todavía no has marcado hoy. Marcar en el portal está deshabilitado: ' +
+        "el ingreso y la salida se registran en el biométrico de " + LUGARES_BIOMETRICO + ".</p>";
       return;
     }
 
@@ -6245,7 +6177,8 @@
   // asistencia o validar tiquetes).
   function pedirInstalacion() {
     if (instalarYaPedido || instalacionPospuesta() || !modoInstalacion()) return;
-    var ocupado = ["bootOverlay", "perfilSheet", "tiquetesSheet", "sinInternet", "sinUbicacion", "instalarSheet", "noticiasSheet", "noticiaVentana"]
+    var ocupado = ["bootOverlay", "perfilSheet", "tiquetesSheet", "sinInternet", "sinUbicacion", "instalarSheet", "noticiasSheet", "noticiaVentana",
+      "avisoBiometrico"]
       .some(function (id) { return $(id) && !$(id).hidden; });
     if (ocupado) return;
     if (!$("appView").hidden && state.vista !== "inicio") return;
@@ -6409,7 +6342,7 @@
   function momentoSeguroParaActualizar() {
     // Recargar sin red dejaría el portal a medio cargar.
     if (!internet.ok || !navigator.onLine) return false;
-    var hojaAbierta = ["perfilSheet", "tiquetesSheet", "instalarSheet", "noticiasSheet", "noticiaVentana"].some(function (id) {
+    var hojaAbierta = ["perfilSheet", "tiquetesSheet", "instalarSheet", "noticiasSheet", "noticiaVentana", "avisoBiometrico"].some(function (id) {
       return $(id) && !$(id).hidden;
     });
     if (hojaAbierta) return false;
